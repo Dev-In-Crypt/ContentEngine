@@ -25,7 +25,7 @@ slowapi>=0.1.9      # per-IP / per-user rate limiting
 sentry-sdk[fastapi]>=2  # optional error monitoring (gated by SENTRY_DSN)
 python-telegram-bot==21.9
 aiofiles==24.1.0
-pywebview>=5.0
+pywebview>=6.2.1
 apscheduler>=3.10,<4
 imageio>=2.37.3
 imageio-ffmpeg>=0.6.0
