@@ -67,6 +67,51 @@ def test_has_ungrounded_claim_grounded_vs_not():
 
 
 @pytest.mark.asyncio
+async def test_draft_drops_a_url_the_source_never_mentions():
+    """A model that helpfully invents a "Learn more" link must not get it published.
+
+    Observed for real: a draft ended with `Learn more: (https://example.com/bgp-report)`,
+    a URL that exists nowhere. Grounding is the product's whole claim, so a fabricated
+    link is worse than a clumsy sentence. Mutation target: drop the strip and the fake
+    URL ships.
+    """
+    prov = StubProvider([
+        _ANALYSIS,
+        _caption("v2 is here and builds are faster. Learn more: (https://example.com/v2-report)"),
+    ])
+    lead = await build_lead(prov, _item())
+    caption = lead["drafts"][0]["caption"]
+    assert "example.com" not in caption
+    assert "Learn more" not in caption          # the dangling label goes with the link
+    assert "v2 is here and builds are faster." in caption
+
+
+@pytest.mark.asyncio
+async def test_draft_keeps_the_source_url_and_urls_quoted_in_the_source():
+    """Stripping must not be indiscriminate: the item's own URL, and any link the
+    source itself contains, are grounded and stay."""
+    item = _item(body="We shipped v2. Full notes at https://ex.com/notes/v2.")
+    prov = StubProvider([
+        _ANALYSIS,
+        _caption("v2 is here: https://ex.com/v2 — details at https://ex.com/notes/v2"),
+    ])
+    lead = await build_lead(prov, item)
+    caption = lead["drafts"][0]["caption"]
+    assert "https://ex.com/v2" in caption        # the item's own URL
+    assert "https://ex.com/notes/v2" in caption  # quoted by the source
+
+
+def test_strip_ungrounded_urls_unit():
+    from services.lead_builder import _strip_ungrounded_urls
+    src = "We shipped v2. See https://ex.com/notes."
+    assert _strip_ungrounded_urls("Read https://evil.example/x now", src) == "Read now"
+    assert "https://ex.com/notes" in _strip_ungrounded_urls("See https://ex.com/notes", src)
+    # trailing punctuation on the URL must not defeat the match
+    assert "https://ex.com/notes" in _strip_ungrounded_urls("See https://ex.com/notes.", src)
+    assert _strip_ungrounded_urls("", src) == ""
+
+
+@pytest.mark.asyncio
 async def test_build_lead_retries_once_on_unparseable_analysis():
     # First analysis reply is junk (repair yields no dict); retry succeeds.
     prov = StubProvider(["not json at all", _ANALYSIS, _caption("ok")])

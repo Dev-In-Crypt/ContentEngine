@@ -83,6 +83,43 @@ async def _analyse(text_provider, item: FetchedItem, text_model: str) -> dict:
     }
 
 
+#: A URL, optionally wrapped in brackets and introduced by a "Learn more:"-style label.
+#: The label is consumed with the link so removing an invented URL doesn't strand a
+#: dangling "Learn more:" at the end of the post.
+_LINK_PHRASE = re.compile(
+    r"""\s*
+    (?:[-–—]\s*)?                                                   # dash connector
+    (?:\b(?:learn|read|see|find|more|details?|info|link|check)\b[^:\n]{0,24}:)?
+    \s*[(\[]?\s*
+    (?P<url>https?://[^\s)\]]+)
+    (?:\s*[)\]])?          # only eat trailing space when a bracket actually closes it
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _strip_ungrounded_urls(text: str, source_text: str) -> str:
+    """Remove any URL the source doesn't actually contain.
+
+    Models like to close a post with a helpful "Learn more: https://…" — and when the
+    source gave them no link, they invent one (observed live: `example.com/bgp-report`).
+    Grounding is this product's entire claim, so a fabricated link is a worse failure
+    than a clumsy sentence. A link the source itself quotes, or the item's own URL, is
+    grounded and stays. Prompts alone can't guarantee this; the filter can.
+    """
+    src = source_text or ""
+
+    def _keep_or_drop(m: re.Match) -> str:
+        url = m.group("url").rstrip(".,;:!?)»\"'")
+        return m.group(0) if url and url in src else ""
+
+    out = _LINK_PHRASE.sub(_keep_or_drop, text or "")
+    out = re.sub(r"[(\[]\s*[)\]]", "", out)        # "Learn more: ()" leftovers
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"[ \t]+([.,;:!?])", r"\1", out)
+    return out.strip()
+
+
 def _has_ungrounded_claim(caption_text: str, source_text: str) -> bool:
     """True if the draft asserts a statistic/figure that isn't in the source.
 
@@ -106,7 +143,9 @@ async def _draft(
     instructions = (
         f"{analysis['why_interesting']} "
         "Write ONLY from the facts in the SOURCE below. Do not invent numbers, "
-        "names, dates, or claims; if a detail isn't in the source, leave it out.\n\n"
+        "names, dates, or claims; if a detail isn't in the source, leave it out. "
+        "Do NOT write any link the SOURCE does not contain — no placeholder or "
+        "example URLs, and no 'Learn more' link you made up.\n\n"
         f"SOURCE:\n{item.title}\n{item.body}"
     )
     caption = await CaptionGenerator(text_provider).generate(
@@ -121,13 +160,16 @@ async def _draft(
         web_grounded=False,          # stay grounded in the source, don't pull the web
     )
     source_text = f"{item.title}\n{item.body}"
+    # The item's own URL counts as grounded even when the body never spells it out.
+    link_ground = f"{source_text}\n{item.url}"
+    caption_text = _strip_ungrounded_urls(caption.caption, link_ground)
     return {
         "platform": platform.value if hasattr(platform, "value") else str(platform),
-        "hook": caption.hook,
-        "caption": caption.caption,
-        "cta": caption.cta,
+        "hook": _strip_ungrounded_urls(caption.hook, link_ground),
+        "caption": caption_text,
+        "cta": _strip_ungrounded_urls(caption.cta, link_ground),
         "hashtags": caption.hashtags,
-        "unverified": _has_ungrounded_claim(caption.caption, source_text),
+        "unverified": _has_ungrounded_claim(caption_text, source_text),
     }
 
 
