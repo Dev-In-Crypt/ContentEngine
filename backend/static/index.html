@@ -325,6 +325,15 @@
   <button onclick="resendVerification()" class="underline font-semibold hover:text-white shrink-0">Resend email</button>
 </div>
 
+<!-- ===== FAILED-PUBLISH BANNER ===== -->
+<!-- A failed immediate publish has no scheduled_at/published_at, so it never shows
+     on the Calendar, and its toast is gone in 4 seconds. This is the one durable
+     place a user finds out that a post never went out. -->
+<div id="failed-banner" class="hidden fixed inset-x-0 z-40 bg-red-900/90 border-b border-red-700 text-red-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
+  <span id="failed-banner-text">Some posts failed to publish.</span>
+  <button onclick="showFailedPosts()" class="underline font-semibold hover:text-white shrink-0">Show them</button>
+</div>
+
 <!-- ===== MISSING-KEY ONBOARDING MODAL ===== -->
 <div id="need-key-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
   <div class="ce-card p-6 max-w-sm w-full space-y-3 shadow-2xl">
@@ -1320,6 +1329,7 @@ async function initAuth() {
     hideLanding();
     renderUserChrome();
     startApp();
+    refreshFailedBanner();   // a publish may have failed while the tab was closed
   } catch {
     showLanding();   // guests see the marketing page first, not the form
   }
@@ -1611,6 +1621,11 @@ const DRAFT_STATUS = {
   approved: { label: 'Approved', color: '#5aa17c' },
   rejected: { label: 'Rejected', color: '#c2704e' },
   preview: { label: 'Draft', color: '#8a8a8a' },
+  // Without these a published or failed post fell through to the grey "Draft"
+  // badge — the most misleading state of all for something that never went out.
+  published: { label: 'Published', color: '#5aa17c' },
+  scheduled: { label: 'Scheduled', color: '#7c6ad1' },
+  failed: { label: 'Failed', color: '#c2704e' },
 };
 
 function renderVerifyBlock(p) {
@@ -1664,6 +1679,7 @@ function renderDraftRow(p) {
       ? `<textarea class="ce-input w-full px-3 py-2 text-sm mt-1" rows="4" data-role="caption">${esc(p.caption || p.topic || '')}</textarea>`
       : `<div class="text-sm mt-1 whitespace-pre-line">${esc(p.caption || p.topic || '')}</div>`}
     ${tags ? `<div class="text-xs text-gray-400 mt-1">${tags}</div>` : ''}
+    ${p.schedule_error ? `<div class="text-xs mt-2 px-2 py-1 rounded" style="background:var(--accent-dim);color:#f0a2a2">⚠️ Publish failed: ${esc(p.schedule_error)}</div>` : ''}
     ${renderVerifyBlock(p)}
     <div class="flex gap-2 mt-3 flex-wrap">
       ${editable ? `<button class="ce-btn-ghost px-3 py-1.5 text-xs" data-act="save">Save edits</button>` : ''}
@@ -2217,10 +2233,9 @@ function renderUserChrome() {
   const showBanner = cloud && S.user.email_verified === false;
   if (banner) {
     banner.classList.toggle('hidden', !showBanner);
-    // The banner is fixed at top-0 over the sticky header; offset the page so it
-    // doesn't cover the logo / Log out while shown.
-    document.body.style.paddingTop = showBanner ? (banner.offsetHeight + 'px') : '';
+    banner.style.top = '0px';
   }
+  layoutBanners();
   renderAcctSwitcher();   // agency brand switcher: shown for creator + cloud only
 }
 
@@ -3536,6 +3551,13 @@ async function publishPost() {
     toast(`✅ Published to ${label}!${link}`, 'success');
   } catch(e) {
     toast('❌ ' + e.message, 'error');
+    // The toast is gone in 4 seconds; keep the reason on screen so the user can
+    // still act on it after switching tabs or looking away.
+    if (S.currentPost) {
+      S.currentPost.schedule_error = e.message;
+      applyScheduleState(S.currentPost);
+    }
+    refreshFailedBanner();
   } finally {
     S.publishing = false;
     if (btn) { btn.disabled = false; btn.textContent = prev; }
@@ -3575,6 +3597,46 @@ async function unschedulePost() {
   } catch(e) { toast('❌ ' + e.message, 'error'); }
 }
 
+/** Stack whichever banners are visible and push the page down by their total
+ *  height. Both are fixed at the top over the sticky header, so hardcoding one
+ *  banner's height would let the second one cover the logo / Log out. */
+function layoutBanners() {
+  let top = 0;
+  for (const id of ['verify-banner', 'failed-banner']) {
+    const el = document.getElementById(id);
+    if (!el || el.classList.contains('hidden')) continue;
+    el.style.top = top + 'px';
+    top += el.offsetHeight;
+  }
+  document.body.style.paddingTop = top ? top + 'px' : '';
+}
+
+/** Count posts that failed to publish and show the banner while any exist. */
+async function refreshFailedBanner() {
+  const banner = document.getElementById('failed-banner');
+  if (!banner || !S.user || S.user.is_local) return;
+  let failed = [];
+  try {
+    const res = await apiFetch(`${API}/api/posts?status=failed&limit=100`);
+    if (res.ok) failed = await res.json();
+  } catch { /* 401 handled by apiFetch */ }
+  S.failedPosts = failed;
+  const n = failed.length;
+  banner.classList.toggle('hidden', n === 0);
+  if (n) {
+    document.getElementById('failed-banner-text').textContent =
+      n === 1 ? '⚠️ 1 post failed to publish.' : `⚠️ ${n} posts failed to publish.`;
+  }
+  layoutBanners();
+}
+
+/** Open the most recent failure so the reason and a retry are one click away. */
+function showFailedPosts() {
+  const first = (S.failedPosts || [])[0];
+  if (!first) return;
+  openPost(first.id);
+}
+
 function applyScheduleState(post) {
   const status = document.getElementById('schedule-status');
   const cancelBtn = document.getElementById('unschedule-btn');
@@ -3585,6 +3647,12 @@ function applyScheduleState(post) {
   } else if (post.published_at) {
     status.textContent = 'Published: ' + new Date(post.published_at).toLocaleString();
     status.className = 'text-xs text-green-400';
+    cancelBtn.classList.add('hidden');
+  } else if (post.schedule_error) {
+    // The reason was already served by the API and simply never rendered — a
+    // failed publish left nothing on screen once its 4-second toast had gone.
+    status.textContent = '⚠️ Publish failed: ' + post.schedule_error;
+    status.className = 'text-xs text-red-400';
     cancelBtn.classList.add('hidden');
   } else {
     status.textContent = '';

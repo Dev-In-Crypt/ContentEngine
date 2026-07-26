@@ -591,3 +591,49 @@ def test_generate_without_plan_date_leaves_scheduled_at_null(client, generated_i
     client.fake_engine.generate_post.side_effect = lambda **k: _generated(post_id)
     client.post("/api/posts/generate", json={"topic": "AI trends", "format": "single"})
     assert client.get(f"/api/posts/{post_id}").json()["scheduled_at"] is None
+
+
+# ── GET / — status filter + failure reason ──────────────────────────────────
+# A failed publish writes Post.schedule_error, and GET /{id} has always returned
+# it — but the list payload omitted it and there was no way to ask for just the
+# failures, so the SPA never showed a user why anything failed.
+
+def _seed_status(client, status, error=None, topic="t"):
+    import asyncio
+    pid = str(uuid.uuid4())
+
+    async def _s():
+        async with client.app.state.sessionmaker() as db:
+            db.add(PostModel(id=pid, topic=topic, format="single", status=status,
+                             schedule_error=error))
+            await db.commit()
+    asyncio.run(_s())
+    return pid
+
+
+def test_list_posts_carries_the_failure_reason(client):
+    """Without this the UI must fetch every post one by one just to learn why."""
+    _seed_status(client, "failed", error="X rejected the media")
+    body = client.get("/api/posts").json()
+    assert [p["schedule_error"] for p in body] == ["X rejected the media"]
+
+
+def test_list_posts_filters_by_status(client):
+    _seed_status(client, "draft")
+    failed = _seed_status(client, "failed", error="boom")
+    body = client.get("/api/posts?status=failed").json()
+    assert [p["id"] for p in body] == [failed]      # mutation guard: drop the where
+
+
+def test_list_posts_rejects_an_unknown_status(client):
+    """A typo must not silently look like "you have no failures"."""
+    assert client.get("/api/posts?status=fialed").status_code == 400
+
+
+def test_list_posts_survives_a_business_status(client):
+    """The Business workflow writes in_review/approved/rejected straight into
+    Post.status; PostStatus(p.status) must not blow up on them."""
+    _seed_status(client, "in_review")
+    res = client.get("/api/posts")
+    assert res.status_code == 200, res.text
+    assert res.json()[0]["status"] == "in_review"

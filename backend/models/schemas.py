@@ -311,6 +311,9 @@ class PostSummary(BaseModel):
     scheduled_at: Optional[datetime] = None
     published_at: Optional[datetime] = None
     created_at: datetime
+    # Why the last publish failed. Carried in the LIST so a failures view can show
+    # the reason without fetching every post individually.
+    schedule_error: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

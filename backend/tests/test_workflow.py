@@ -137,3 +137,42 @@ def test_workflow_isolation(client):
     hb = _register(c, "f@ex.com")
     pid = _make_draft(c, ha)
     assert c.post(f"/api/business/posts/{pid}/submit", headers=hb).status_code == 404
+
+
+def test_a_failed_business_post_can_be_published_again(client):
+    """A workspace post that was approved and then failed to publish used to be a
+    dead end: publish demands "approved", and neither submit nor approve accepts
+    "failed". The human sign-off already happened, so retrying must be allowed.
+
+    Mutation guard: restore `!= "approved"` and the retry 409s forever.
+    """
+    import asyncio
+    from models.database import Post as PostModel
+
+    c, SM, monkeypatch = client
+    h = _register(c, "retry@ex.com")
+    pid = _make_draft(c, h)
+    c.post(f"/api/business/posts/{pid}/submit", headers=h)
+    c.post(f"/api/business/posts/{pid}/approve", headers=h)
+
+    async def _fail(sessionmaker, post_id):
+        async with SM() as db:
+            post = await db.get(PostModel, post_id)
+            post.status, post.schedule_error = "failed", "X rejected the media"
+            await db.commit()
+        raise publisher_flow.PublishError("X rejected the media")
+    monkeypatch.setattr(publisher_flow, "publish_now", _fail)
+    assert c.post(f"/api/posts/{pid}/publish", headers=h).status_code == 502
+
+    async def _ok(sessionmaker, post_id):
+        return "mid-456"
+    monkeypatch.setattr(publisher_flow, "publish_now", _ok)
+    assert c.post(f"/api/posts/{pid}/publish", headers=h).status_code == 200
+
+
+def test_a_draft_business_post_still_cannot_publish(client):
+    """The retry path must not become a way around human sign-off."""
+    c, _, _ = client
+    h = _register(c, "nodraft@ex.com")
+    pid = _make_draft(c, h)
+    assert c.post(f"/api/posts/{pid}/publish", headers=h).status_code == 409

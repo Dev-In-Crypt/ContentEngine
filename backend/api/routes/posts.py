@@ -373,12 +373,21 @@ async def list_posts(
     user: Annotated[UserModel, Depends(get_current_user)],
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    status: Optional[str] = Query(None, description="filter by post status, e.g. 'failed'"),
 ) -> list[PostSummary]:
     # Paginated newest-first. Default 100 is generous enough that the SPA's
     # calendar/grid (which fetch without paging) keep working at small scale;
     # callers can page with ?limit=&offset= as volume grows.
     stmt = (select(PostModel).order_by(PostModel.created_at.desc())
             .options(selectinload(PostModel.slides)).limit(limit).offset(offset))
+    if status is not None:
+        # Reject an unknown value rather than returning []: a typo would otherwise
+        # read as "you have no failed posts", which is the opposite of the truth.
+        try:
+            wanted = PostStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown status: {status!r}") from None
+        stmt = stmt.where(PostModel.status == wanted.value)
     if not user.is_local:
         stmt = stmt.where(PostModel.user_id == user.id)
         # Agency multi-account (Phase 7): scope the view to the active brand. NULL =
@@ -401,6 +410,7 @@ async def list_posts(
             scheduled_at=p.scheduled_at,
             published_at=p.published_at,
             created_at=p.created_at or datetime.now(timezone.utc),
+            schedule_error=p.schedule_error,
         ))
     return out
 
@@ -491,7 +501,10 @@ async def publish_post(
             detail=f"Publishing to {post.platform} isn't available yet — export or copy the post.")
     # Business posts require a human sign-off: only an approved workspace post may publish
     # (no auto-publish without a person — doc §8/§13).
-    if post.workspace_id and post.status != "approved":
+    # "failed" is allowed too: reaching it means the post was already approved and
+    # the publish attempt itself broke. Without this a workspace post that hits a
+    # transient network error is stuck forever — nothing transitions it back.
+    if post.workspace_id and post.status not in ("approved", "failed"):
         raise HTTPException(status_code=409,
                             detail="This post must be approved before it can be published.")
     # Business publishing-frequency cap (doc §9): don't flood a channel.

@@ -525,6 +525,9 @@ async def list_drafts(
             "hashtags": p.hashtags or [], "source_kind": p.source_kind,
             "source_url": src.get("url") if isinstance(src, dict) else None,
             "platform": p.platform, "status": p.status,
+            # Why the last publish failed — a "failed" badge with no reason sends
+            # the user hunting through the single-post view.
+            "schedule_error": p.schedule_error,
             "checked_claims": cc.get("claims") or [],
             "brand_flags": cc.get("brand") or {},
             "created_at": p.created_at.isoformat() if p.created_at else None,
