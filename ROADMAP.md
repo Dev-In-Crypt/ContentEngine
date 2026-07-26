@@ -1,7 +1,7 @@
 # Content Engine — Roadmap
 
 > Single living source for where the product is and where it's going.
-> Last updated: **2026-07-24** · Baseline commit: `c61a427`
+> Last updated: **2026-07-26** · Baseline commit: `de536dd`
 
 **Vision.** A multi-tenant, bring-your-own-keys SaaS that lets creators and companies
 generate and publish social content (Instagram + X today, more later) under their own
@@ -31,7 +31,7 @@ Two products share one engine, split only by `account_type`:
 
 ## Current baseline — what's already shipped & live
 
-Running on Hetzner (`https://167.233.156.202.sslip.io`), ~796 tests green, ruff clean.
+Running on Hetzner (`https://167.233.156.202.sslip.io`), 882 tests green, ruff clean.
 
 - **Platform/tenancy** — argon2 + JWT auth, Fernet per-user key vault, `user_id` data
   isolation, email verify/reset flow (code-ready), JWT revocation (`token_version`),
@@ -57,7 +57,7 @@ Running on Hetzner (`https://167.233.156.202.sslip.io`), ~796 tests green, ruff 
 ## Horizons at a glance
 
 **Now (in flight / do next)** — IG live-publish verification · Resend email domain ·
-finalize legal · Sentry on.
+finalize legal · Sentry on. *All four are owner/external gates; no engineering blocker remains.*
 **Next** — LinkedIn publisher · X insights · billing decision · agency roles.
 **Later** — more networks · CDN/media hosting · scale/perf · deeper analytics.
 **Someday** — OAuth account connect · white-label · mobile app.
@@ -71,7 +71,8 @@ finalize legal · Sentry on.
 | **Instagram live-publish verification** | P0 | S | next | 🟡 Owner | Code done (Graph v25 + imgbb). Needs a real IG Business token + user id + imgbb key, then one live post to confirm the happy path. |
 | **X insights** | P1 | M | deferred | 🟢/🔴 | X has no `get_insights` today; needs the X metrics endpoints (paid tier dependent). Panel is hidden until then. |
 | **LinkedIn publisher** | P1 | L | deferred | 🟢/🔴 | Generates but can't publish (`factory.py` only wires instagram+x). Needs `linkedin.py` adapter + creds + rail enable. |
-| **Scheduler hardening** | P1 | M | idea | 🟢 | Retry/backoff on transient publish failures; per-network quota awareness (X 1500/mo). |
+| **Scheduler hardening** | P1 | M | shipped | 🟢 | Transient-only retry with 5/15/60-min backoff + email once the attempts are spent; a failed publish is visible in-app. Per-network quota awareness (X 1500/mo) still open. |
+| **Credential health + token expiry** | P1 | S | shipped | 🟢 | Daily `verify_credentials()` sweep, email on the working→broken transition, Instagram expiry estimate + "Renew". Meta has no read-only introspection, so the date is an estimate unless renewed. |
 | **TikTok / Facebook / YouTube** | P2 | L | idea | 🔴 | Currently "coming soon" rail buttons, not in the `Platform` enum. Each needs an API + review. |
 | **Cross-posting** | P2 | M | idea | 🟢 | One draft → adapt & publish to multiple networks in one action. |
 
@@ -82,7 +83,7 @@ finalize legal · Sentry on.
 | **Real email delivery** | P0 | S | next | 🟡 Owner | `RESEND_API_KEY` empty → emails are log-only, `require_verified_email` stays off. Needs a verified Resend sending domain. |
 | **Turn on email verification** | P1 | S | next | 🟡 Owner | Flip `require_verified_email=true` once email delivery is real. |
 | **OAuth "Connect account" flow** | P2 | L | idea | 🔴 | Alternative to raw keys (much easier onboarding) but triggers Meta App Review — deliberately deferred. |
-| **Onboarding wizard** | P2 | M | idea | 🟢 | Guided first-run: pick product → add keys → first post. |
+| **Onboarding wizard** | P2 | M | shipped | 🟢 | Stepped first-run per product (brand → AI key → publishing → done; Business: AI key → first source → done), each step tested against the live API before advancing. Re-openable from Connections. |
 
 ## C. Monetization
 

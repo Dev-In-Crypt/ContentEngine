@@ -356,29 +356,28 @@
 </div>
 
 <!-- ===== BRAND PROFILE ONBOARDING MODAL (first login, skippable) ===== -->
+<!-- ===== FIRST-RUN SETUP WIZARD =====
+     Bring-your-own-keys is our cheapest path to market and the user's steepest
+     first step: without an AI key nothing in the app does anything. This walks
+     that step instead of dropping the user in front of a wall of key fields. -->
 <div id="onboarding-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
-  <div class="ce-card p-6 max-w-md w-full space-y-3 shadow-2xl">
-    <div class="text-lg font-semibold">👋 Tell us about your brand</div>
-    <div class="text-sm text-gray-400">Takes 20 seconds and every post you generate is tailored to you. You can change it anytime in Account, or skip for now.</div>
-    <div>
-      <label class="block text-xs text-gray-400 mb-1">Niche / industry</label>
-      <input id="onb-niche" type="text" maxlength="120" placeholder="e.g. Artisan bakery, SaaS marketing, Travel"
-        class="ce-input w-full px-3 py-2 text-sm" />
+  <div class="ce-card p-6 max-w-lg w-full space-y-4 shadow-2xl" style="max-height:90vh;overflow-y:auto">
+    <div class="flex items-start justify-between gap-3">
+      <div class="text-lg font-semibold" id="onb-title"></div>
+      <div class="text-xs text-gray-500 shrink-0 pt-1" id="onb-progress"></div>
     </div>
-    <div>
-      <label class="block text-xs text-gray-400 mb-1">Target audience <span class="text-gray-600">(optional)</span></label>
-      <input id="onb-audience" type="text" maxlength="120" placeholder="e.g. Home bakers, Startup founders"
-        class="ce-input w-full px-3 py-2 text-sm" />
+    <div class="h-1 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.1)">
+      <div id="onb-bar" class="h-full bg-purple-500 transition-all" style="width:0%"></div>
     </div>
-    <div>
-      <label class="block text-xs text-gray-400 mb-1">Brand name <span class="text-gray-600">(optional)</span></label>
-      <input id="onb-brand" type="text" maxlength="120" placeholder="e.g. Crumb & Co"
-        class="ce-input w-full px-3 py-2 text-sm" />
-    </div>
+    <div class="text-sm text-gray-400" id="onb-sub"></div>
+    <div id="onb-body" class="space-y-3"></div>
+    <div id="onb-result" class="text-xs"></div>
     <div class="flex gap-2 pt-1">
-      <button id="onb-save-btn" onclick="saveOnboarding()" class="ce-btn flex-1 py-2 text-sm">Save</button>
-      <button onclick="skipOnboarding()" class="ce-btn-ghost flex-1 py-2 text-sm">Skip for now</button>
+      <button id="onb-back" onclick="wizBack()" class="ce-btn-ghost px-3 py-2 text-sm hidden">← Back</button>
+      <button id="onb-primary" onclick="wizPrimary()" class="ce-btn flex-1 py-2 text-sm">Continue</button>
+      <button id="onb-skip" onclick="wizSkipStep()" class="ce-btn-ghost px-3 py-2 text-sm">Skip</button>
     </div>
+    <button onclick="wizClose()" class="w-full text-xs text-gray-500 hover:text-gray-300">Close setup — I'll finish later</button>
   </div>
 </div>
 
@@ -937,7 +936,10 @@
   <div id="view-admin" class="hidden space-y-4">
     <!-- Personal API keys (cloud accounts only) -->
     <section id="keys-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 id="keys-title" class="text-lg font-semibold text-purple-300">🔑 Your API keys</h2>
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <h2 id="keys-title" class="text-lg font-semibold text-purple-300">🔑 Your API keys</h2>
+        <button onclick="startSetupWizard()" class="ce-btn-ghost px-3 py-1.5 text-xs whitespace-nowrap">🧭 Setup guide</button>
+      </div>
       <p class="text-xs text-gray-500">Stored encrypted and used only for your posts. Leave a field blank to keep the current value; the placeholder shows what's set.</p>
       <div id="conn-health" class="hidden space-y-2"></div>
       <div id="keys-form" class="space-y-4"></div>
@@ -1932,6 +1934,7 @@ async function startApp() {
   // loaders entirely. The creator experience below is untouched.
   if (S.user && S.user.account_type === 'business' && !S.user.is_local) {
     setSection('biz-sources');
+    maybeShowOnboarding();   // an empty workspace needs a key and a source, same as a creator
     return;
   }
   setNetwork('instagram');   // default network tab → drives sections + platform
@@ -3203,6 +3206,7 @@ document.addEventListener('keydown', e => {
 // ===== MODAL ACCESSIBILITY (focus trap + Esc-to-close + restore focus) =====
 const _MODAL_CLOSERS = {
   'need-key-modal': () => closeNeedKey(),
+  'onboarding-modal': () => wizClose(),
   'variations-modal': () => closeVariations(),
   'edit-slide-modal': () => closeEditSlide(),
 };
@@ -5026,33 +5030,318 @@ function prefillComposerFromProfile() {
 }
 
 // ===== ONBOARDING (first login, skippable) =====
-function maybeShowOnboarding() {
+// ===== FIRST-RUN SETUP WIZARD =====
+// The steps differ per product because the first useful action does: a creator
+// needs a brand and a composer, a Business workspace needs a source to watch.
+// Everything here drives the same endpoints as the settings screens — the wizard
+// is an order to do things in, not a second way to store them.
+S.wiz = { ids: [], step: 0, publishNet: 'x' };
+
+function wizStepIds() {
+  return (S.user && S.user.account_type === 'business')
+    ? ['ai', 'source', 'done']
+    : ['brand', 'ai', 'publish', 'done'];
+}
+
+/** True once any AI provider key is stored — the real "can this account do
+ *  anything at all" test, and the reason the wizard exists. */
+function wizHasAIKey() {
+  const keys = (S.ai && S.ai.keys) || {};
+  return Object.values(keys).some(k => k && k.set);
+}
+
+async function maybeShowOnboarding() {
   if (!S.user || S.user.is_local) return;          // cloud accounts only
   if (localStorage.getItem('onboarding_done')) return;
-  if (S.profile && S.profile.niche) return;         // already has a profile
+  await loadAISettings();                          // populates S.ai / S.aiCatalog
+  const needsBrand = S.user.account_type !== 'business' && !(S.profile && S.profile.niche);
+  if (wizHasAIKey() && !needsBrand) return;        // nothing left to walk them through
+  await startSetupWizard();
+}
+
+/** Also reachable from Connections, so dismissing it isn't a one-way door. */
+async function startSetupWizard() {
+  if (!S.aiCatalog || !S.ai) await loadAISettings();
+  await ensureCreds(true);
+  if (S.user.account_type === 'business') await wizLoadSources();
+  S.wiz.ids = wizStepIds();
+  S.wiz.step = 0;
   document.getElementById('onboarding-modal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('onb-niche').focus(), 50);
+  onModalOpen('onboarding-modal');
+  wizRender();
 }
 
-async function saveOnboarding() {
-  const niche = document.getElementById('onb-niche').value.trim();
-  if (!niche) { toast('Add your niche, or Skip for now', 'warn'); return; }
-  const ok = await _putProfile(
-    niche,
-    document.getElementById('onb-audience').value.trim(),
-    document.getElementById('onb-brand').value.trim(),
-    document.getElementById('onb-save-btn'),
-  );
-  if (ok) {
-    localStorage.setItem('onboarding_done', '1');
-    document.getElementById('onboarding-modal').classList.add('hidden');
-    toast('✅ You\'re all set', 'success');
-  }
-}
-
-function skipOnboarding() {
+function wizClose() {
   localStorage.setItem('onboarding_done', '1');
   document.getElementById('onboarding-modal').classList.add('hidden');
+  onModalClose();
+}
+
+function wizCurrent() { return WIZ[S.wiz.ids[S.wiz.step]] || WIZ.done; }
+
+function wizRender() {
+  const step = wizCurrent();
+  const n = S.wiz.step + 1, total = S.wiz.ids.length;
+  document.getElementById('onb-title').textContent = step.title();
+  document.getElementById('onb-sub').textContent = step.sub();
+  document.getElementById('onb-progress').textContent = `Step ${n} of ${total}`;
+  document.getElementById('onb-bar').style.width = Math.round((n / total) * 100) + '%';
+  document.getElementById('onb-body').innerHTML = step.body();
+  document.getElementById('onb-result').textContent = '';
+  document.getElementById('onb-primary').textContent = step.primary;
+  document.getElementById('onb-back').classList.toggle('hidden', S.wiz.step === 0);
+  document.getElementById('onb-skip').classList.toggle('hidden', !step.skippable);
+  if (step.focus) setTimeout(() => { const el = document.getElementById(step.focus); if (el) el.focus(); }, 50);
+}
+
+function wizSay(msg, ok) {
+  const el = document.getElementById('onb-result');
+  el.textContent = msg || '';
+  el.className = 'text-xs ' + (ok ? 'text-green-400' : 'text-red-400');
+}
+
+function wizBack() { if (S.wiz.step > 0) { S.wiz.step--; wizRender(); } }
+
+function wizNext() {
+  if (S.wiz.step < S.wiz.ids.length - 1) { S.wiz.step++; wizRender(); }
+  else wizClose();
+}
+
+function wizSkipStep() { wizSay(''); wizNext(); }
+
+async function wizPrimary() {
+  const btn = document.getElementById('onb-primary');
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Working…';
+  try {
+    if (await wizCurrent().run()) wizNext();
+  } catch (e) {
+    wizSay('❌ ' + e.message, false);
+  } finally { btn.disabled = false; btn.textContent = prev; }
+}
+
+const WIZ = {
+  // ---- 1. Brand (creators) -------------------------------------------------
+  brand: {
+    primary: 'Continue', skippable: true, focus: 'onb-niche',
+    title: () => '👋 Tell us about your brand',
+    sub: () => 'Twenty seconds, and every post you generate is written for your audience instead of nobody in particular. Changeable later under Account.',
+    body: () => `
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Niche / industry</label>
+        <input id="onb-niche" type="text" maxlength="120" placeholder="e.g. Artisan bakery, SaaS marketing, Travel"
+          value="${esc((S.profile && S.profile.niche) || '')}" class="ce-input w-full px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Target audience <span class="text-gray-600">(optional)</span></label>
+        <input id="onb-audience" type="text" maxlength="120" placeholder="e.g. Home bakers, Startup founders"
+          value="${esc((S.profile && S.profile.target_audience) || '')}" class="ce-input w-full px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-gray-400 mb-1">Brand name <span class="text-gray-600">(optional)</span></label>
+        <input id="onb-brand" type="text" maxlength="120" placeholder="e.g. Crumb &amp; Co"
+          value="${esc((S.profile && S.profile.brand_name) || '')}" class="ce-input w-full px-3 py-2 text-sm" />
+      </div>`,
+    run: async () => {
+      const niche = document.getElementById('onb-niche').value.trim();
+      if (!niche) { wizSay('Add your niche, or press Skip.', false); return false; }
+      return await _putProfile(niche,
+        document.getElementById('onb-audience').value.trim(),
+        document.getElementById('onb-brand').value.trim(),
+        null);
+    },
+  },
+
+  // ---- 2. AI key (both) — the step that actually unblocks the product ------
+  ai: {
+    primary: 'Save and test', skippable: true, focus: 'wiz-ai-key',
+    title: () => '🤖 Connect an AI model',
+    sub: () => 'You bring your own key, so you pay the model vendor directly and we never mark it up. Nothing in the app can generate until one is set.',
+    body: () => {
+      const provs = (S.aiCatalog && S.aiCatalog.text) || [];
+      const cur = wizAIProvider();
+      const meta = provs.find(p => p.key === cur);
+      const models = meta ? meta.models : [];
+      const model = wizAIModel(cur);
+      const keyInfo = (S.ai.keys && S.ai.keys[cur]) || {};
+      const opts = provs.map(p =>
+        `<option value="${esc(p.key)}"${p.key === cur ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
+      const modelOpts = models.map(m =>
+        `<option value="${esc(m.id)}"${m.id === model ? ' selected' : ''}>${esc(m.label)} — $${m.price_in}/$${m.price_out} per M</option>`).join('');
+      return `
+        <select id="wiz-ai-provider" onchange="wizRender()" class="ce-input w-full px-3 py-2 text-sm">${opts}</select>
+        <select id="wiz-ai-model" class="ce-input w-full px-3 py-2 text-sm">${modelOpts}</select>
+        <input id="wiz-ai-key" type="password" autocomplete="off"
+          placeholder="${esc((meta && meta.label) || '')} API key — ${keyInfo.set ? 'set: ' + esc(keyInfo.masked || '••••') : 'not set'}"
+          class="ce-input w-full px-3 py-2 text-sm" />
+        ${meta ? `<div class="text-xs text-gray-500">${esc(meta.hint)}
+          <a href="${esc(safeUrl(meta.key_url))}" target="_blank" rel="noopener" class="underline">Get a key ↗</a></div>` : ''}
+        ${wizImageModelFor(cur) ? '<div class="text-xs text-gray-500">This key covers AI slide images too — we\'ll set that up for you.</div>' : ''}`;
+    },
+    run: async () => {
+      const provider = document.getElementById('wiz-ai-provider').value;
+      const model = document.getElementById('wiz-ai-model').value;
+      const key = document.getElementById('wiz-ai-key').value.trim();
+      if (!provider || !model) { wizSay('Pick a provider and a model.', false); return false; }
+      const meta = ((S.aiCatalog && S.aiCatalog.text) || []).find(p => p.key === provider);
+      const keyInfo = (S.ai.keys && S.ai.keys[provider]) || {};
+      if (!key && !keyInfo.set) { wizSay('Paste your API key — the link above opens the page that issues it.', false); return false; }
+      if (key && meta) {
+        const r = await apiFetch(`${API}/api/settings/credentials`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [meta.key_field]: key }),
+        });
+        if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || 'Saving the key failed'); }
+      }
+      // One key per provider serves text and images, so wire images too when the
+      // provider can do them — otherwise AI slides would fail for no visible reason.
+      const img = wizImageModelFor(provider);
+      const body = { text_provider: provider, text_model: model };
+      if (img) { body.image_provider = provider; body.image_model = img; }
+      const r2 = await apiFetch(`${API}/api/settings/ai`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!r2.ok) { const e = await r2.json().catch(()=>({})); throw new Error(e.detail || 'Save failed'); }
+
+      const r3 = await apiFetch(`${API}/api/settings/ai/test`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'text' }),
+      });
+      const d = await r3.json().catch(() => ({}));
+      await loadAISettings();
+      await ensureCreds(true);
+      if (!d.ok) { wizSay('❌ ' + (d.message || 'The key did not work.'), false); return false; }
+      wizSay('✅ ' + (d.message || 'Works.'), true);
+      return true;
+    },
+  },
+
+  // ---- 3a. Publishing (creators, optional) --------------------------------
+  publish: {
+    primary: 'Save and test', skippable: true,
+    title: () => '📣 Connect a place to post',
+    sub: () => 'Optional. Without it you can still generate posts and export them — you just publish by hand.',
+    body: () => {
+      const net = S.wiz.publishNet;
+      const tab = (id, label) => `<button type="button" onclick="wizSetNet('${id}')"
+        class="flex-1 px-3 py-2 text-sm rounded-lg ${net === id ? 'bg-purple-600' : 'bg-gray-800 hover:bg-gray-700'}">${label}</button>`;
+      const fields = CRED_FIELDS.filter(f => f.scope === net).map(f => {
+        const info = (S.creds && S.creds[f.key]) || {};
+        return `<input data-wiz-cred="${esc(f.key)}" type="password" autocomplete="off" aria-label="${esc(f.label)}"
+            placeholder="${esc(f.label)} — ${info.set ? 'set: ' + esc(info.masked || '••••') : 'not set'}"
+            class="ce-input w-full px-3 py-2 text-sm" />
+          ${f.hint ? `<div class="text-xs text-gray-500 -mt-1 pl-1">${esc(f.hint)}</div>` : ''}`;
+      }).join('');
+      return `<div class="flex gap-2">${tab('x', '𝕏 / Twitter')}${tab('instagram', 'Instagram')}</div>
+        <div class="space-y-2">${fields}</div>`;
+    },
+    run: async () => {
+      const net = S.wiz.publishNet;
+      const body = {};
+      document.querySelectorAll('#onb-body input[data-wiz-cred]').forEach(el => {
+        const v = el.value.trim();
+        if (v) body[el.dataset.wizCred] = v;
+      });
+      if (Object.keys(body).length) {
+        const r = await apiFetch(`${API}/api/settings/credentials`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || 'Saving failed'); }
+        await ensureCreds(true);
+      }
+      const r2 = await apiFetch(`${API}/api/settings/publish/test`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: net }),
+      });
+      const d = await r2.json().catch(() => ({}));
+      if (!d.ok) { wizSay('❌ ' + (d.message || 'Could not connect.'), false); return false; }
+      wizSay('✅ ' + (d.message || 'Connected.'), true);
+      return true;
+    },
+  },
+
+  // ---- 3b. First source (business) ----------------------------------------
+  source: {
+    primary: 'Add source', skippable: true, focus: 'wiz-source-url',
+    title: () => '🔭 Add a source to watch',
+    sub: () => 'A changelog, blog or releases page. We check it on a schedule and turn real published news into drafts — nothing is invented.',
+    body: () => `<input id="wiz-source-url" type="url" placeholder="https://example.com/changelog"
+        class="ce-input w-full px-3 py-2 text-sm" />
+      <div class="text-xs text-gray-500">Works with GitHub releases, RSS/Atom feeds, and ordinary changelog pages.</div>`,
+    run: async () => {
+      const url = document.getElementById('wiz-source-url').value.trim();
+      if (!/^https?:\/\//i.test(url)) { wizSay('Enter a public http(s) URL.', false); return false; }
+      const r = await apiFetch(`${API}/api/business/sources`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+      });
+      if (!r.ok) { wizSay('❌ Could not read that source. Check the URL is public.', false); return false; }
+      const d = await r.json();
+      await wizLoadSources();
+      wizSay(`✅ Added — ${d.leads_found} lead${d.leads_found === 1 ? '' : 's'} in the last 90 days.`, true);
+      return true;
+    },
+  },
+
+  // ---- 4. Done -------------------------------------------------------------
+  done: {
+    primary: 'Finish', skippable: false,
+    title: () => '🎉 You\'re set up',
+    sub: () => 'Here\'s where you stand. Anything still missing is in Connections whenever you want it.',
+    body: () => {
+      const business = S.user && S.user.account_type === 'business';
+      const row = (ok, label) =>
+        `<div class="text-sm ${ok ? 'text-green-400' : 'text-gray-400'}">${ok ? '✅' : '○'} ${esc(label)}</div>`;
+      const publishOk = ['x', 'instagram'].some(n =>
+        CRED_FIELDS.filter(f => f.scope === n).every(f => hasKey(f.key)));
+      return `<div class="space-y-1">
+        ${business ? '' : row(!!(S.profile && S.profile.niche), 'Brand profile')}
+        ${row(wizHasAIKey(), 'AI model connected')}
+        ${business ? row((S.sources || []).length > 0, 'A source to watch')
+                   : row(publishOk, 'A network to publish to (optional)')}
+      </div>`;
+    },
+    run: async () => {
+      wizClose();
+      if (S.user && S.user.account_type === 'business') setSection('biz-sources');
+      else { setSection('create'); }
+      return false;   // wizClose already dismissed it
+    },
+  },
+};
+
+function wizSetNet(net) { S.wiz.publishNet = net; wizRender(); }
+
+/** The Sources screen renders straight into the DOM without keeping the list, so
+ *  the wizard's checklist fetches its own copy. */
+async function wizLoadSources() {
+  try {
+    const r = await apiFetch(`${API}/api/business/sources`);
+    S.sources = r.ok ? await r.json() : [];
+  } catch { S.sources = []; }
+}
+
+/** Default to OpenRouter: one key reaches every vendor, so it is the single
+ *  cheapest decision a new user can make. Their existing choice always wins. */
+function wizAIProvider() {
+  const sel = document.getElementById('wiz-ai-provider');
+  if (sel && sel.value) return sel.value;
+  const provs = (S.aiCatalog && S.aiCatalog.text) || [];
+  const cur = (S.ai && S.ai.text_provider) || '';
+  if (cur && provs.some(p => p.key === cur)) return cur;
+  return provs.some(p => p.key === 'openrouter') ? 'openrouter' : (provs[0] ? provs[0].key : '');
+}
+
+function wizAIModel(provider) {
+  const meta = ((S.aiCatalog && S.aiCatalog.text) || []).find(p => p.key === provider);
+  const models = meta ? meta.models : [];
+  const cur = (S.ai && S.ai.text_model) || '';
+  if (cur && models.some(m => m.id === cur)) return cur;
+  return models[0] ? models[0].id : '';
+}
+
+function wizImageModelFor(provider) {
+  const meta = ((S.aiCatalog && S.aiCatalog.image) || []).find(p => p.key === provider);
+  return meta && meta.models[0] ? meta.models[0].id : '';
 }
 
 async function downloadBackup() {
