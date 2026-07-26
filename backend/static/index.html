@@ -1086,7 +1086,41 @@
       </div>
       <p class="text-xs text-gray-500">Backup contains the database + generated slides/videos. Restore replaces current data (a restart may be required locally).</p>
     </section>
+
+    <!-- Your data: export + erasure (cloud accounts only) -->
+    <section id="mydata-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-purple-300">🗄 Your data</h2>
+      <div class="space-y-2">
+        <button onclick="exportMyData()" id="export-data-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download my data</button>
+        <p class="text-xs text-gray-500">A ZIP with everything we hold about your account — profile, posts, captions, generated images, Business sources and leads. API keys are listed as set or not set only: we never write a usable key into a file you might forward.</p>
+      </div>
+      <div class="border-t border-gray-800 pt-4 space-y-2">
+        <button onclick="openDeleteAccount()" class="bg-red-800 hover:bg-red-700 transition rounded-lg px-4 py-2 text-sm font-semibold">🗑 Delete my account</button>
+        <p class="text-xs text-gray-500">Erases your account, posts, images and keys from our servers. This cannot be undone — download your data first if you want to keep it.</p>
+      </div>
+    </section>
   </div><!-- /#view-admin -->
+
+<!-- ===== DELETE-ACCOUNT CONFIRMATION ===== -->
+<!-- The password is asked for again on purpose: the request is already
+     authenticated, but a token lifted from a shared machine must not be enough
+     to destroy someone's work. -->
+<div id="delete-account-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
+  <div class="ce-card p-6 max-w-sm w-full space-y-3 shadow-2xl">
+    <div class="text-lg font-semibold text-red-300">🗑 Delete your account</div>
+    <div class="text-sm text-gray-400">This erases your posts, images, Business workspace and stored keys. It cannot be undone.</div>
+    <div>
+      <label class="block text-xs text-gray-400 mb-1">Type your password to confirm</label>
+      <input id="del-acct-password" type="password" autocomplete="current-password"
+        class="ce-input w-full px-3 py-2 text-sm" />
+    </div>
+    <div id="del-acct-error" class="text-xs text-red-400"></div>
+    <div class="flex gap-2 pt-1">
+      <button id="del-acct-btn" onclick="confirmDeleteAccount()" class="bg-red-800 hover:bg-red-700 transition rounded-lg flex-1 py-2 text-sm font-semibold">Delete permanently</button>
+      <button onclick="closeDeleteAccount()" class="ce-btn-ghost flex-1 py-2 text-sm">Cancel</button>
+    </div>
+  </div>
+</div>
 
   <!-- ===== ANALYTICS VIEW ===== -->
   <div id="view-analytics" class="hidden space-y-4">
@@ -3207,6 +3241,7 @@ document.addEventListener('keydown', e => {
 const _MODAL_CLOSERS = {
   'need-key-modal': () => closeNeedKey(),
   'onboarding-modal': () => wizClose(),
+  'delete-account-modal': () => closeDeleteAccount(),
   'variations-modal': () => closeVariations(),
   'edit-slide-modal': () => closeEditSlide(),
 };
@@ -4386,6 +4421,9 @@ async function loadAdmin() {
     : (business ? '🔑 Connections' : ('🔑 ' + (S.network === 'x' ? 'X' : 'Instagram') + ' keys'));
   document.getElementById('usage-section').classList.toggle('hidden', !account);
   document.getElementById('backup-section').classList.toggle('hidden', !(account && S.user && (S.user.is_admin || S.user.is_local)));
+  // Export and erasure are about a cloud tenancy; local mode's data is already
+  // on the user's own disk and has no account to delete.
+  document.getElementById('mydata-section').classList.toggle('hidden', !(account && S.user && !S.user.is_local));
   if (account) {
     await refreshCost();
     const d = S.usage || {today:{},month:{}};
@@ -5349,6 +5387,74 @@ function wizAIModel(provider) {
 function wizImageModelFor(provider) {
   const meta = ((S.aiCatalog && S.aiCatalog.image) || []).find(p => p.key === provider);
   return meta && meta.models[0] ? meta.models[0].id : '';
+}
+
+// ===== YOUR DATA: export + erasure =====
+
+/** Download everything we hold about this account as a ZIP. */
+async function exportMyData() {
+  const btn = document.getElementById('export-data-btn');
+  const prev = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Building your archive…'; }
+  try {
+    const res = await apiFetch(`${API}/api/auth/export`);
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'Export failed'); }
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = m ? m[1] : 'content-engine-export.zip'; a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ Your data is downloading', 'success');
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = prev; } }
+}
+
+function openDeleteAccount() {
+  document.getElementById('del-acct-password').value = '';
+  document.getElementById('del-acct-error').textContent = '';
+  document.getElementById('delete-account-modal').classList.remove('hidden');
+  onModalOpen('delete-account-modal');
+  setTimeout(() => document.getElementById('del-acct-password').focus(), 50);
+}
+
+function closeDeleteAccount() {
+  document.getElementById('del-acct-password').value = '';   // don't leave it in the DOM
+  document.getElementById('delete-account-modal').classList.add('hidden');
+  onModalClose();
+}
+
+async function confirmDeleteAccount() {
+  const input = document.getElementById('del-acct-password');
+  const err = document.getElementById('del-acct-error');
+  const btn = document.getElementById('del-acct-btn');
+  const password = input.value;
+  if (!password) { err.textContent = 'Enter your password to confirm.'; return; }
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Deleting…';
+  err.textContent = '';
+  try {
+    const res = await apiFetch(`${API}/api/auth/delete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(()=>({}));
+      throw new Error(e.detail || 'Could not delete the account.');
+    }
+    input.value = '';
+    // Nothing left to be signed in to — drop the session before anything can
+    // fire another request against an account that no longer exists.
+    localStorage.removeItem('api_token');
+    localStorage.removeItem('onboarding_done');
+    document.getElementById('delete-account-modal').classList.add('hidden');
+    onModalClose();
+    alert('Your account and its data have been deleted.');
+    location.reload();
+  } catch (e) {
+    err.textContent = e.message;
+  } finally { btn.disabled = false; btn.textContent = prev; }
 }
 
 async function downloadBackup() {

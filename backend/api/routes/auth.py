@@ -3,13 +3,19 @@
 Local (desktop) mode never uses these — get_current_user returns the implicit
 local owner. Cloud mode: register/login → JWT; verify/reset via emailed tokens.
 """
-from datetime import timedelta
+import logging
+import shutil
+import tempfile
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
 
 from api.deps import get_current_user, get_db
 from api.ratelimit import limiter
@@ -19,7 +25,9 @@ from services.auth import (
     hash_password, verify_password,
 )
 from services.email import send_reset_email, send_verify_email
+from services.gdpr import UPLOADS_ROOT
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _VERIFY_TTL = timedelta(hours=24)
@@ -222,3 +230,69 @@ async def set_account_type(
     await db.commit()
     await db.refresh(user)
     return _me_payload(user)
+
+
+# ===== GDPR: take your data with you, or take it off our servers =====
+
+class DeleteAccountRequest(BaseModel):
+    # The current password, re-entered. See the endpoint docstring.
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+@router.get("/export")
+async def export_account(
+    user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> FileResponse:
+    """Download everything we hold about this account as a ZIP.
+
+    Built to a temp file rather than memory: a busy account's slides and reels
+    run to hundreds of megabytes, and buffering that per request is how one
+    export takes the process down. The file is deleted after the response is
+    sent, whether or not the client finished reading it.
+    """
+    from services import gdpr
+
+    data = await gdpr.collect_user_data(db, user)
+    raw_paths = await gdpr.user_media_paths(db, user)
+    files = gdpr.safe_media_files(raw_paths, UPLOADS_ROOT)
+
+    tmp = Path(tempfile.mkdtemp(prefix="ce-export-")) / "content-engine-export.zip"
+    gdpr.write_export_zip(tmp, data, files, UPLOADS_ROOT)
+    stamp = datetime.now().strftime("%Y%m%d")
+    return FileResponse(
+        tmp, media_type="application/zip",
+        filename=f"content-engine-export-{stamp}.zip",
+        background=BackgroundTask(shutil.rmtree, tmp.parent, ignore_errors=True),
+    )
+
+
+@router.post("/delete")
+@limiter.limit("5/hour")
+async def delete_account(
+    request: Request,
+    body: DeleteAccountRequest,
+    user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Erase the account and everything attached to it. Irreversible.
+
+    The current password is required even though the request is already
+    authenticated: a token lifted from a shared machine should not be able to
+    destroy someone's work. Local (desktop) mode has no account to erase — the
+    data is on the user's own disk.
+    """
+    from services import gdpr
+
+    if getattr(user, "is_local", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Local mode has no cloud account — delete the app's data folder.")
+    if not verify_password(body.password, user.password_hash or ""):
+        raise HTTPException(status_code=403, detail="That password is not correct.")
+
+    email = user.email
+    counts = await gdpr.delete_user_data(db, user, root=UPLOADS_ROOT)
+    await db.commit()
+    log.info("Account erased: %s (%s)", email, counts)
+    return {"status": "deleted", "deleted": counts}
