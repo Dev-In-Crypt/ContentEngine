@@ -21,6 +21,15 @@ class SourceFetchError(Exception):
     """A source couldn't be reached or parsed into items."""
 
 
+class SourceRateLimited(SourceFetchError):
+    """The source is fine, we're just over its request quota — try again later.
+
+    A subclass so every existing `except SourceFetchError` keeps working; callers
+    that care can tell "come back in an hour" apart from "this URL is dead", which
+    otherwise both surface as an unreachable source the user is invited to delete.
+    """
+
+
 @dataclass
 class FetchedItem:
     """One thing that happened at a source (a release, a post, a section)."""

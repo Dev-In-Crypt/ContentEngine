@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     # Image hosting (public URLs for Instagram publishing)
     imgbb_api_key: str = ""
 
+    # Business sources. Empty → GitHub is read anonymously, which is capped at 60
+    # requests/hour PER IP — and on a server that IP is shared by every tenant, so
+    # the poller starts failing once a handful of sources exist. Any classic PAT
+    # (no scopes needed for public repos) raises the cap to 5,000/hour.
+    github_token: str = ""
+
     # Deployment mode: "local" (desktop, scheduler runs only while app open) or
     # "cloud" (24/7 backend, scheduled posts publish even when user's PC is off)
     app_mode: str = "local"

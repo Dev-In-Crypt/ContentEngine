@@ -23,6 +23,7 @@ from models.database import Source as SourceModel
 from models.database import SourceSnapshot as SnapshotModel
 from services.event_selector import detect_bad_news, score_item
 from services.sources import SourceFetchError, get_source_fetcher
+from services.sources.base import SourceRateLimited
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +101,13 @@ async def poll_all(sessionmaker, ssl_verify: bool = True) -> dict:
             try:
                 leads_created += await poll_source(db, source, ssl_verify)
                 sources_polled += 1
+            except SourceRateLimited as e:
+                # Must precede SourceFetchError (its parent): being over quota is
+                # temporary, and reporting it as "unreachable" invites the user to
+                # delete a source that works.
+                log.warning("Rate limited on source %s (%s): %s", source.id, source.url, e)
+                source.status = "rate_limited"
+                source.last_checked_at = now
             except SourceFetchError as e:
                 log.warning("Poll failed for source %s (%s): %s", source.id, source.url, e)
                 source.status = "unreachable"

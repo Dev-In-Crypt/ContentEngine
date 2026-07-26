@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import services.source_poller as poller
 from models.database import Base, Lead, Source, SourceSnapshot, Workspace
-from services.sources.base import FetchedItem
+from services.sources.base import FetchedItem, SourceRateLimited
 
 
 class _FakeFetcher:
@@ -97,3 +97,21 @@ def test_weak_kept_duplicate_skipped(db_setup):
     titles = asyncio.run(_titles())
     assert titles.count("New pricing tier") == 1          # not duplicated
     assert "chore: bump deps" in titles                   # weak still written
+
+
+def test_rate_limited_source_is_not_marked_unreachable(db_setup, monkeypatch):
+    """"Try again in an hour" must not look like "this URL is dead" — a user shown
+    "Unreachable" deletes a source that was working fine. Mutation guard: catch
+    SourceFetchError first and the rate-limit branch becomes unreachable code."""
+    class _Limited:
+        async def fetch(self, url, since=None):
+            raise SourceRateLimited("GitHub: rate limit reached — resets at 08:35 UTC.")
+
+    SM, src_id = db_setup
+    monkeypatch.setattr(poller, "get_source_fetcher", lambda kind, ssl_verify=True: _Limited())
+    asyncio.run(poller.poll_all(SM))
+
+    async def _status():
+        async with SM() as db:
+            return (await db.get(Source, src_id)).status
+    assert asyncio.run(_status()) == "rate_limited"

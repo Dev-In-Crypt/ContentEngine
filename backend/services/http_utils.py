@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
+from typing import Optional
 
 import httpx
 import truststore
@@ -66,3 +68,25 @@ def describe_request_error(exc: Exception, service: str) -> str:
     if is_ssl_error(exc):
         return f"{service}: {SSL_HINT} (original error: {exc})"
     return f"{service} network error: {exc}"
+
+
+def describe_rate_limit(response: httpx.Response) -> Optional[str]:
+    """Describe a rate-limited response, or None if it isn't one.
+
+    GitHub and X both answer an exhausted quota with a plain 403/429 that looks
+    exactly like a permissions failure; only the headers tell them apart. Reading
+    them here keeps "wait an hour" from being reported as "this source is dead".
+    """
+    if response.status_code not in (403, 429):
+        return None
+    retry_after = (response.headers.get("Retry-After") or "").strip()
+    if retry_after:
+        return f"rate limit reached — retry in {retry_after}s."
+    if (response.headers.get("X-RateLimit-Remaining") or "").strip() != "0":
+        return None
+    reset = (response.headers.get("X-RateLimit-Reset") or "").strip()
+    when = ""
+    if reset.isdigit():
+        at = datetime.fromtimestamp(int(reset), timezone.utc)
+        when = f" — resets at {at.strftime('%H:%M')} UTC"
+    return f"rate limit reached{when}."

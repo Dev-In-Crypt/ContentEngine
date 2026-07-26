@@ -8,7 +8,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from services.sources import SourceFetchError, detect_source_type, get_source_fetcher
-from services.sources.base import parse_iso, strip_html
+from services.sources.base import SourceRateLimited, parse_iso, strip_html
 from services.sources.github import GitHubReleasesFetcher
 from services.sources.feed import FeedFetcher
 from services.sources.page import GenericPageFetcher
@@ -97,6 +97,62 @@ async def test_github_http_error_becomes_source_error(httpx_mock: HTTPXMock):
     httpx_mock.add_response(status_code=404)
     with pytest.raises(SourceFetchError):
         await GitHubReleasesFetcher().fetch("https://github.com/o/r")
+
+
+# ── GitHub: token + rate limit ───────────────────────────────────────────────
+# Anonymous calls are capped at 60/hour PER IP, and on a server that IP is shared
+# by every tenant — so the poller starts failing as soon as a few sources exist.
+# A token raises it to 5,000. Tokens are injected directly here: get_settings is
+# lru_cached, so patching the env without cache_clear() is a silent no-op.
+
+@pytest.mark.asyncio
+async def test_github_sends_authorization_when_token_set(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(json=[])
+    await GitHubReleasesFetcher(token="ghp_secret").fetch("https://github.com/o/r")
+    sent = httpx_mock.get_requests()[0]
+    assert sent.headers.get("Authorization") == "Bearer ghp_secret"
+
+
+@pytest.mark.asyncio
+async def test_github_sends_no_authorization_when_token_empty(httpx_mock: HTTPXMock):
+    """A blank credential is worse than none — GitHub 401s on `Bearer `."""
+    httpx_mock.add_response(json=[])
+    await GitHubReleasesFetcher(token="").fetch("https://github.com/o/r")
+    assert "Authorization" not in httpx_mock.get_requests()[0].headers
+
+
+@pytest.mark.asyncio
+async def test_github_rate_limit_403_is_distinct_from_a_private_repo_403(httpx_mock: HTTPXMock):
+    """Both are 403. "Try again in an hour" and "this repo is private" must not
+    look identical, or a working source gets marked dead and deleted."""
+    httpx_mock.add_response(status_code=403,
+                            headers={"X-RateLimit-Remaining": "0",
+                                     "X-RateLimit-Reset": "1785054916"})
+    with pytest.raises(SourceRateLimited):
+        await GitHubReleasesFetcher(token="").fetch("https://github.com/o/r")
+
+
+@pytest.mark.asyncio
+async def test_github_forbidden_403_is_not_called_a_rate_limit(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(status_code=403, headers={"X-RateLimit-Remaining": "57"})
+    with pytest.raises(SourceFetchError) as err:
+        await GitHubReleasesFetcher(token="").fetch("https://github.com/o/r")
+    assert not isinstance(err.value, SourceRateLimited)
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_message_suggests_a_token_only_when_missing(httpx_mock: HTTPXMock):
+    """Show the remedy to someone who can act on it; don't nag someone who already did."""
+    headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1785054916"}
+    httpx_mock.add_response(status_code=403, headers=headers)
+    with pytest.raises(SourceRateLimited) as anon:
+        await GitHubReleasesFetcher(token="").fetch("https://github.com/o/r")
+    assert "GITHUB_TOKEN" in str(anon.value)
+
+    httpx_mock.add_response(status_code=403, headers=headers)
+    with pytest.raises(SourceRateLimited) as with_token:
+        await GitHubReleasesFetcher(token="ghp_x").fetch("https://github.com/o/r")
+    assert "GITHUB_TOKEN" not in str(with_token.value)
 
 
 # ── RSS/Atom feed ────────────────────────────────────────────────────────────
