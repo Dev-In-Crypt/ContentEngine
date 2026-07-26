@@ -5103,8 +5103,15 @@ function wizSay(msg, ok) {
 function wizBack() { if (S.wiz.step > 0) { S.wiz.step--; wizRender(); } }
 
 function wizNext() {
-  if (S.wiz.step < S.wiz.ids.length - 1) { S.wiz.step++; wizRender(); }
-  else wizClose();
+  if (S.wiz.step >= S.wiz.ids.length - 1) { wizClose(); return; }
+  // Carry the outcome across the step change. Advancing re-renders, which used to
+  // wipe the line that says what just happened — so "Added — 11 leads" was set and
+  // erased in the same tick and the user never saw their step succeed.
+  const el = document.getElementById('onb-result');
+  const carry = { text: el.textContent, cls: el.className };
+  S.wiz.step++;
+  wizRender();
+  if (carry.text) { el.textContent = carry.text; el.className = carry.cls; }
 }
 
 function wizSkipStep() { wizSay(''); wizNext(); }
@@ -5295,7 +5302,7 @@ const WIZ = {
         CRED_FIELDS.filter(f => f.scope === n).every(f => hasKey(f.key)));
       return `<div class="space-y-1">
         ${business ? '' : row(!!(S.profile && S.profile.niche), 'Brand profile')}
-        ${row(wizHasAIKey(), 'AI model connected')}
+        ${row(wizHasAIKey(), 'AI key saved')}
         ${business ? row((S.sources || []).length > 0, 'A source to watch')
                    : row(publishOk, 'A network to publish to (optional)')}
       </div>`;
