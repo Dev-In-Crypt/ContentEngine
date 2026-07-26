@@ -10,11 +10,13 @@ process restart — on startup APScheduler re-loads any pending jobs.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+
+from services.publish_retry import MAX_RETRIES, is_retryable, next_delay_minutes
 
 log = logging.getLogger(__name__)
 
@@ -115,13 +117,101 @@ async def _run_publish_job(post_id: str) -> None:
     """
     from services.publisher_flow import publish_now
 
+    failure: Optional[Exception] = None
     try:
         media_id = await publish_now(_sessionmaker, post_id)
         log.info("Scheduled publish OK: post=%s media=%s", post_id, media_id)
+        await _clear_attempts(post_id)
+        return
     except Exception as e:
         # publish_now already marked the post failed with the error; don't let the
         # exception escape into APScheduler, where the outcome would be invisible.
+        # Held in `failure` because Python unbinds `e` at the end of the block.
+        failure = e
         log.error("Scheduled publish FAILED: post=%s error=%s", post_id, e)
+
+    try:
+        await _handle_failure(post_id, failure)
+    except Exception:
+        # Retry bookkeeping must never take the job down with it.
+        log.exception("Retry handling failed for post=%s", post_id)
+
+
+async def _clear_attempts(post_id: str) -> None:
+    """A published post starts its next slot with a full retry budget."""
+    loaded = await _load_post_for_retry(_sessionmaker, post_id)
+    if not loaded:
+        return
+    post, _email = loaded
+    if post.publish_attempts:
+        post.publish_attempts = 0
+        await _save_retry_state(_sessionmaker, post)
+
+
+async def _handle_failure(post_id: str, exc: Exception) -> None:
+    """Re-arm a transient failure, or tell the owner it's over.
+
+    Nobody is watching a scheduled publish, so the two outcomes that matter are
+    "we'll try again" and "it did not go out". Permanent failures skip straight to
+    the second: a bad token fails identically in an hour, and on X every attempt
+    costs money.
+    """
+    loaded = await _load_post_for_retry(_sessionmaker, post_id)
+    if not loaded:
+        return
+    post, owner_email = loaded
+
+    delay = next_delay_minutes(post.publish_attempts or 0) if is_retryable(exc) else None
+    if delay is None:
+        if owner_email:
+            await _notify_publish_failed(owner_email, post.topic or "your post", str(exc))
+        return
+
+    attempt = (post.publish_attempts or 0) + 1
+    post.publish_attempts = attempt
+    when = datetime.now(timezone.utc) + timedelta(minutes=delay)
+    # Say so on the post itself: "failed" with a retry pending is a different
+    # state from "failed, that's the end of it".
+    post.schedule_error = (f"{exc} — retrying in {delay} min "
+                           f"(attempt {attempt} of {MAX_RETRIES})")
+    await _save_retry_state(_sessionmaker, post)
+    schedule_publish(post_id, when)
+    log.info("Scheduled publish retry %d/%d for post=%s in %d min",
+             attempt, MAX_RETRIES, post_id, delay)
+
+
+async def _load_post_for_retry(sessionmaker, post_id: str):
+    """(post, owner_email) or None. Separate so tests can stub the DB away."""
+    from models.database import Post as PostModel, User as UserModel
+
+    async with sessionmaker() as db:
+        post = await db.get(PostModel, post_id)
+        if post is None:
+            return None
+        email = None
+        if post.user_id:
+            owner = await db.get(UserModel, post.user_id)
+            email = getattr(owner, "email", None)
+        db.expunge(post)
+        return post, email
+
+
+async def _save_retry_state(sessionmaker, post) -> None:
+    from models.database import Post as PostModel
+
+    async with sessionmaker() as db:
+        row = await db.get(PostModel, post.id)
+        if row is None:
+            return
+        row.publish_attempts = post.publish_attempts
+        row.schedule_error = post.schedule_error
+        await db.commit()
+
+
+async def _notify_publish_failed(to: str, topic: str, reason: str) -> None:
+    from services.email import send_publish_failed_email
+
+    await send_publish_failed_email(to, topic, reason)
 
 
 async def _run_cleanup_job() -> None:

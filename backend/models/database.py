@@ -134,6 +134,9 @@ class Post(Base):
     published_at = Column(DateTime(timezone=True))
     published_image_urls = Column(JSON)   # imgbb public URLs used for publishing
     schedule_error = Column(Text)          # last publish failure (status=failed)
+    # Retries the scheduled-publish job has already spent. Reset on success and on
+    # every (re)schedule, so a fresh slot always starts with the full budget.
+    publish_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     pillar = Column(String(30))            # content pillar (educational/inspirational/...)
     video_path = Column(Text)              # generated Reel MP4 on disk
     # Business origin (Phase 3): a post drafted from a source lead. All nullable —

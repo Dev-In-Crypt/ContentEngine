@@ -570,6 +570,9 @@ async def schedule_post_endpoint(
     post.status = "scheduled"
     post.scheduled_at = when
     post.schedule_error = None
+    # A newly-chosen slot deserves a full retry budget; otherwise a post that
+    # blipped once would give up early the next time it runs.
+    post.publish_attempts = 0
     await db.commit()
     post = await owned_post(db, post_id, user, options=_preview_opts())
     return _to_preview(post)

@@ -7,6 +7,7 @@ logged URL. Wire a real key in cloud for actual delivery.
 from __future__ import annotations
 
 import logging
+from html import escape as html_escape
 
 import httpx
 
@@ -52,6 +53,25 @@ async def send_verify_email(to: str, token: str) -> bool:
         f"<p>If you didn't sign up, ignore this message.</p>"
     )
     return await send_email(to, "Verify your email · Content Engine", html)
+
+
+async def send_publish_failed_email(to: str, topic: str, reason: str) -> bool:
+    """Tell the owner a scheduled post never went out.
+
+    Only sent once the retries are spent: nobody is watching a scheduled publish,
+    so without this the post is silently absent until someone happens to look.
+    Intermediate retries stay quiet — three emails about one post is spam.
+    """
+    base = (get_settings().public_base_url or "").rstrip("/")
+    where = f'<p><a href="{base}/">Open Content Engine</a></p>' if base else ""
+    html = (
+        f"<p>A scheduled post did not publish.</p>"
+        f"<p><b>{html_escape(topic)}</b></p>"
+        f"<p>Reason: {html_escape(reason)}</p>"
+        f"<p>It's marked failed in the app, where you can fix and republish it.</p>"
+        f"{where}"
+    )
+    return await send_email(to, "A scheduled post failed to publish · Content Engine", html)
 
 
 async def send_reset_email(to: str, token: str) -> bool:
