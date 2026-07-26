@@ -116,7 +116,7 @@ finalize legal · Sentry on. *All four are owner/external gates; no engineering 
 | Item | P | Effort | Status | Gate | Notes |
 |---|---|---|---|---|---|
 | **Finalize ToS / Privacy** | P0 | S | next | 🔴 Lawyer | Templates served at `/terms` `/privacy`; need real legal review before public launch. |
-| **GDPR: data export & delete** | P1 | M | idea | 🟢 | Account deletion + "download my data" for a public SaaS holding others' tokens. |
+| **GDPR: data export & delete** | P1 | M | shipped | 🟢 | `GET /api/auth/export` (ZIP: data.json + generated media, keys listed set/not-set only) and `POST /api/auth/delete` (password-confirmed, immediate, explicit graph walk + disk + scheduler jobs). Verified against prod Postgres. |
 | **Secret-custody review** | P1 | S | idea | 🟢 | We hold others' IG tokens + paid X keys — audit encryption, logging, access. |
 | **Pen-test / dependency audit** | P2 | M | idea | 🟡 Owner | Before a wide launch. |
 | **Abuse / anti-spam controls** | P2 | M | idea | 🟢 | Publish-rate abuse, content limits, per-tenant throttles. |
