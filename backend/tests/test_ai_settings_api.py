@@ -251,3 +251,58 @@ def test_publish_test_instagram_reports_bad_token(cloud_client):
         body = cloud_client.post("/api/settings/publish/test", headers=h,
                                  json={"platform": "instagram"}).json()
     assert body["ok"] is False and "401" in body["message"]
+
+
+# ── Connection health + Instagram token renewal ─────────────────────────────
+
+def test_saving_an_instagram_token_records_an_estimated_expiry(cloud_client):
+    """Meta has no read-only introspection, so 60 days from now is the best we
+    can do — and it MUST be flagged as an estimate: a pasted token may already be
+    weeks old. Mutation guard: set estimated=False and this passes a guess off as
+    a fact."""
+    c = cloud_client
+    h = _auth(c, "exp@ex.com")
+    c.put("/api/settings/credentials", headers=h,
+          json={"instagram_access_token": "IGtok"})
+
+    body = c.get("/api/settings/connections", headers=h).json()["connections"]
+    ig = body["instagram"]
+    assert ig["expires_estimated"] is True
+    assert 55 <= ig["days_left"] <= 60
+
+
+def test_connections_is_empty_before_anything_is_saved(cloud_client):
+    c = cloud_client
+    h = _auth(c, "empty-conn@ex.com")
+    assert c.get("/api/settings/connections", headers=h).json() == {"connections": {}}
+
+
+def test_refresh_without_a_token_is_a_clean_no(cloud_client):
+    c = cloud_client
+    h = _auth(c, "noref@ex.com")
+    res = c.post("/api/settings/instagram/refresh-token", headers=h)
+    assert res.status_code == 200          # always 200; `ok` carries the verdict
+    assert res.json()["ok"] is False
+
+
+def test_refresh_stores_the_new_token_and_a_real_expiry(cloud_client, monkeypatch):
+    """Refreshing ROTATES the token — losing the new one locks the account out.
+    The expiry it returns is real, so the estimate flag must clear."""
+    import services.instagram as ig_mod
+
+    c = cloud_client
+    h = _auth(c, "ref@ex.com")
+    c.put("/api/settings/credentials", headers=h,
+          json={"instagram_access_token": "old-token", "instagram_user_id": "42"})
+
+    async def _fake_refresh(self):
+        return {"access_token": "brand-new-token", "expires_in": 60 * 60 * 24 * 60}
+    monkeypatch.setattr(ig_mod.InstagramPublisher, "refresh_token", _fake_refresh)
+
+    assert c.post("/api/settings/instagram/refresh-token", headers=h).json()["ok"] is True
+
+    creds = c.get("/api/settings/credentials", headers=h).json()
+    assert creds["instagram_access_token"]["masked"].endswith("oken")   # the NEW one
+    ig = c.get("/api/settings/connections", headers=h).json()["connections"]["instagram"]
+    assert ig["expires_estimated"] is False        # no longer a guess
+    assert ig["days_left"] >= 59

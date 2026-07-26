@@ -51,6 +51,13 @@ def init_scheduler(database_url: str, sessionmaker, poll_sources: bool = False) 
         id="upload_cleanup", replace_existing=True,
         misfire_grace_time=3600,
     )
+    # Daily credential health sweep: catches a dead token while there's still time
+    # to fix it, instead of at the moment a scheduled post fails to appear.
+    _scheduler.add_job(
+        _run_connection_check_job, trigger="interval", hours=24,
+        id="connection_check", replace_existing=True,
+        misfire_grace_time=3600,
+    )
     # Business source polling (cloud only): rules-only, no LLM, once an hour.
     if poll_sources:
         _scheduler.add_job(
@@ -212,6 +219,16 @@ async def _notify_publish_failed(to: str, topic: str, reason: str) -> None:
     from services.email import send_publish_failed_email
 
     await send_publish_failed_email(to, topic, reason)
+
+
+async def _run_connection_check_job() -> None:
+    """Daily publishing-credential sweep. Never lets an error escape into APScheduler."""
+    from services.connection_check import run_connection_check
+
+    try:
+        await run_connection_check(_sessionmaker)
+    except Exception as e:
+        log.error("Connection check FAILED: %s", e)
 
 
 async def _run_cleanup_job() -> None:

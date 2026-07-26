@@ -148,6 +148,34 @@ class InstagramPublisher:
         return {"username": data.get("username"),
                 "account_type": data.get("account_type")}
 
+    async def refresh_token(self) -> dict:
+        """Extend a long-lived token by 60 days, returning {'access_token','expires_in'}.
+
+        NOT read-only: Meta returns a NEW token and the old one is replaced, so the
+        caller must persist the result or the account loses access. There is no
+        introspection endpoint for these tokens — this is the only way to learn the
+        remaining lifetime, which is why expiry is otherwise only an estimate.
+        The token must be at least 24h old and not yet expired.
+        https://developers.facebook.com/docs/instagram-platform/reference/refresh_access_token/
+        """
+        url = f"{self.BASE_URL}/refresh_access_token"
+        try:
+            resp = await self._client.get(url, params={
+                "grant_type": "ig_refresh_token",
+                "access_token": self.token,
+            })
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise InstagramError(
+                f"{e.response.status_code} {e.response.text[:200]}") from e
+        except httpx.RequestError as e:
+            raise InstagramError(f"Network error: {e}") from e
+        data = resp.json()
+        token = str(data.get("access_token") or "").strip()
+        if not token:
+            raise InstagramError("Refresh returned no access_token")
+        return {"access_token": token, "expires_in": int(data.get("expires_in") or 0)}
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

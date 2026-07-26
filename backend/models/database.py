@@ -97,6 +97,10 @@ class UserCredentials(Base):
     unsplash_access_key_enc = Column(Text)
     pexels_api_key_enc = Column(Text)
     elevenlabs_api_key_enc = Column(Text)   # TTS for voiceover Reels (R1)
+    # Per-network health + token expiry, e.g.
+    # {"instagram": {"ok": true, "checked_at": ..., "expires_at": ..., "expires_estimated": true}}
+    # JSON rather than a column per network so adding LinkedIn needs no migration.
+    connection_health = Column(JSON)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(),
                         onupdate=func.now())
 

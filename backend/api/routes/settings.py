@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import _CRED_FIELDS, get_current_user, get_db
+from datetime import datetime, timedelta, timezone
+
 from models.database import User as UserModel, UserCredentials as UserCredentialsModel
 from models.schemas import (
     NICHE_BOX_PALETTE, AISettingsResponse, AISettingsUpdate, AITestRequest, AITestResponse,
@@ -21,6 +23,7 @@ from models.schemas import (
 from services import logo_store, music_store
 from services.ai.catalog import IMAGE, PROVIDERS, TEXT, is_valid_provider
 from services.brand_engine import BrandConfig
+from services.connection_health import days_left, estimate_expiry
 from services.brand_voice import DEFAULT_PRESET, is_valid_preset, list_presets
 from services.secrets import decrypt, encrypt
 
@@ -89,8 +92,25 @@ async def put_credentials(
         if value is None:              # omitted → leave unchanged
             continue
         setattr(creds, _CRED_FIELDS[field], encrypt(value))   # "" clears it
+        if field == "instagram_access_token" and value:
+            # Meta offers no way to read a token's remaining life without rotating
+            # it, so the best we can do is assume the full 60 days from now. Flagged
+            # as an estimate — a pasted token may already be weeks old.
+            _set_health(creds, "instagram",
+                        expires_at=estimate_expiry(datetime.now(timezone.utc)),
+                        expires_estimated=True)
     await db.commit()
     return {"status": "ok"}
+
+
+def _set_health(creds, platform: str, **fields) -> None:
+    """Merge fields into one network's health record (JSON column, replace whole)."""
+    health = dict(creds.connection_health or {})
+    record = dict(health.get(platform) or {})
+    for key, value in fields.items():
+        record[key] = value.isoformat() if isinstance(value, datetime) else value
+    health[platform] = record
+    creds.connection_health = health          # reassign: SQLAlchemy JSON is not tracked
 
 
 # ── Brand voice (generation style preference — NOT a secret, stored plain) ──
@@ -473,3 +493,71 @@ async def test_publish_connection(
                 await client.close()
             except Exception:
                 pass
+
+
+# ── Connection health + Instagram token renewal ─────────────────────────────
+
+@router.get("/connections")
+async def connection_status(
+    user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Last known health per network, plus how close the Instagram token is to
+    expiring. `expires_estimated` says whether that date is a guess — the UI must
+    not present an estimate as a fact."""
+    creds = await db.get(UserCredentialsModel, user.id)
+    health = dict((creds.connection_health if creds else None) or {})
+    for record in health.values():
+        raw = record.get("expires_at")
+        record["days_left"] = days_left(_parse_iso(raw)) if raw else None
+    return {"connections": health}
+
+
+def _parse_iso(value: str):
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post("/instagram/refresh-token", response_model=PublishTestResponse)
+async def refresh_instagram_token(
+    user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PublishTestResponse:
+    """Extend the Instagram token by 60 days and store the new one.
+
+    Explicitly user-triggered: refreshing ROTATES the token, so the background
+    health sweep must never do it — a half-finished rotation would leave the
+    account with a token nobody has. Doing it here also gives us the real expiry
+    date instead of the 60-days-from-saving estimate.
+    """
+    from services.instagram import InstagramError, InstagramPublisher
+    from services.user_settings import build_settings_for_user
+
+    creds = await db.get(UserCredentialsModel, user.id)
+    settings = await build_settings_for_user(db, user)
+    if creds is None or not settings.instagram_access_token:
+        return PublishTestResponse(ok=False, message="Add your Instagram access token first.")
+
+    client = InstagramPublisher(settings.instagram_access_token,
+                                settings.instagram_user_id or "")
+    try:
+        result = await client.refresh_token()
+    except InstagramError as exc:
+        return PublishTestResponse(ok=False, message=str(exc)[:400])
+    except Exception as exc:
+        return PublishTestResponse(ok=False, message=f"Refresh failed: {type(exc).__name__}")
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            pass
+
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=result["expires_in"])
+    creds.instagram_access_token_enc = encrypt(result["access_token"])
+    _set_health(creds, "instagram", expires_at=expires_at,
+                expires_estimated=False, ok=True, error="")
+    await db.commit()
+    return PublishTestResponse(
+        ok=True, message=f"Token renewed — valid until {expires_at:%Y-%m-%d}.")

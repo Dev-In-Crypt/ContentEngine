@@ -334,6 +334,15 @@
   <button onclick="showFailedPosts()" class="underline font-semibold hover:text-white shrink-0">Show them</button>
 </div>
 
+<!-- ===== TOKEN-EXPIRY BANNER ===== -->
+<!-- An Instagram token dies after 60 days and takes scheduled publishing with it,
+     silently. Warning ahead of time is the whole point; the wording stays hedged
+     because unless the user pressed Renew, the date is an estimate. -->
+<div id="expiry-banner" class="hidden fixed inset-x-0 z-40 bg-yellow-900/90 border-b border-yellow-700 text-yellow-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
+  <span id="expiry-banner-text"></span>
+  <button onclick="setSection('keys')" class="underline font-semibold hover:text-white shrink-0">Open Connections</button>
+</div>
+
 <!-- ===== MISSING-KEY ONBOARDING MODAL ===== -->
 <div id="need-key-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
   <div class="ce-card p-6 max-w-sm w-full space-y-3 shadow-2xl">
@@ -930,9 +939,11 @@
     <section id="keys-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 id="keys-title" class="text-lg font-semibold text-purple-300">🔑 Your API keys</h2>
       <p class="text-xs text-gray-500">Stored encrypted and used only for your posts. Leave a field blank to keep the current value; the placeholder shows what's set.</p>
+      <div id="conn-health" class="hidden space-y-2"></div>
       <div id="keys-form" class="space-y-4"></div>
       <div class="flex items-center gap-3 flex-wrap">
         <button id="save-keys-btn" onclick="saveCredentials()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save keys</button>
+        <button id="renew-ig-btn" onclick="renewInstagramToken()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">♻️ Renew Instagram token</button>
         <button id="test-conn-btn" onclick="testPublishConnection()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">🔌 Test connection</button>
         <button id="test-x-btn" onclick="testPublishConnection('x')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">🔌 Test 𝕏</button>
         <button id="test-ig-btn" onclick="testPublishConnection('instagram')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">🔌 Test Instagram</button>
@@ -1330,6 +1341,7 @@ async function initAuth() {
     renderUserChrome();
     startApp();
     refreshFailedBanner();   // a publish may have failed while the tab was closed
+    loadConnections([]);     // banner only — the page itself renders on demand
   } catch {
     showLanding();   // guests see the marketing page first, not the form
   }
@@ -3602,7 +3614,7 @@ async function unschedulePost() {
  *  banner's height would let the second one cover the logo / Log out. */
 function layoutBanners() {
   let top = 0;
-  for (const id of ['verify-banner', 'failed-banner']) {
+  for (const id of ['verify-banner', 'failed-banner', 'expiry-banner']) {
     const el = document.getElementById(id);
     if (!el || el.classList.contains('hidden')) continue;
     el.style.top = top + 'px';
@@ -4377,7 +4389,14 @@ async function loadAdmin() {
       `💰 LLM spend — today <b>$${(d.today?.cost||0).toFixed(4)}</b>, this month <b>$${(d.month?.cost||0).toFixed(4)}</b> (${d.month?.calls||0} calls)`;
   }
   const keysSec = document.getElementById('keys-section');
-  if (S.user && !S.user.is_local) { keysSec.classList.remove('hidden'); await loadCredentials(account ? 'account' : (business ? 'all' : S.network)); }
+  if (S.user && !S.user.is_local) {
+    keysSec.classList.remove('hidden');
+    const scope = account ? 'account' : (business ? 'all' : S.network);
+    await loadCredentials(scope);
+    // Health is about publishing, so the account-only page has nothing to show.
+    await loadConnections(scope === 'account' ? []
+      : scope === 'all' ? ['instagram', 'x'] : [scope]);
+  }
   else keysSec.classList.add('hidden');
   // "Test connection" only makes sense on a publishing keys page. Creator's page is
   // network-scoped → one button for the active network; Business shows all creds →
@@ -4452,6 +4471,102 @@ async function loadCredentials(scope) {
     if (f.hint) html += `<div class="text-xs text-gray-500 -mt-2 pl-1">${esc(f.hint)}</div>`;
   }
   form.innerHTML = html;
+}
+
+// ===== CONNECTION HEALTH + TOKEN EXPIRY =====
+const NETWORK_LABEL = { instagram: 'Instagram', x: '𝕏' };
+
+/** Render last-known health per network on the Connections page.
+ *  `scopes` mirrors the keys form, so a network-scoped page shows only its own. */
+async function loadConnections(scopes) {
+  const box = document.getElementById('conn-health');
+  const renewBtn = document.getElementById('renew-ig-btn');
+  if (!box || !S.user || S.user.is_local) return;
+  let conns = {};
+  try {
+    const res = await apiFetch(`${API}/api/settings/connections`);
+    if (res.ok) conns = (await res.json()).connections || {};
+  } catch { /* 401 handled by apiFetch */ }
+  S.connections = conns;
+
+  const shown = Object.keys(conns).filter(p => scopes.includes(p)).sort();
+  box.classList.toggle('hidden', shown.length === 0);
+  box.innerHTML = shown.map(p => {
+    const c = conns[p] || {};
+    const label = esc(NETWORK_LABEL[p] || p);
+    const head = c.ok
+      ? `<span class="text-green-400">✅ ${label} connected</span>` +
+        (c.handle ? ` <span class="text-gray-400">— ${esc(c.handle)}</span>` : '')
+      : `<span class="text-red-400">❌ ${label} not working</span>` +
+        (c.error ? `<div class="text-xs text-gray-400 mt-0.5">${esc(c.error)}</div>` : '');
+    return `<div class="text-sm bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+      ${head}${expiryLine(c)}
+      <div class="text-xs text-gray-500 mt-0.5">Checked ${c.checked_at ? new Date(c.checked_at).toLocaleString() : 'never'}</div>
+    </div>`;
+  }).join('');
+
+  // Renewing is Instagram-only, and only worth offering once a token exists.
+  if (renewBtn) {
+    const igSet = !!(S.creds && S.creds.instagram_access_token && S.creds.instagram_access_token.set);
+    renewBtn.classList.toggle('hidden', !(scopes.includes('instagram') && igSet));
+  }
+  refreshExpiryBanner();
+}
+
+/** One line about the token's remaining life — hedged when the date is a guess. */
+function expiryLine(c) {
+  const d = c.days_left;
+  if (d === null || d === undefined) return '';
+  const est = c.expires_estimated !== false;   // absent flag ⇒ assume estimate
+  const when = d < 0 ? 'expired'
+    : d === 0 ? 'expires today'
+    : `expires in ${d} day${d === 1 ? '' : 's'}`;
+  const tone = d <= 7 ? 'text-yellow-300' : 'text-gray-400';
+  const hedge = est ? ' (estimated — press Renew for the exact date)' : '';
+  return `<div class="text-xs mt-0.5 ${tone}">🔑 Token ${when}${esc(hedge)}</div>`;
+}
+
+/** Warn about a token that is about to take scheduled publishing down with it. */
+function refreshExpiryBanner() {
+  const banner = document.getElementById('expiry-banner');
+  if (!banner) return;
+  let worst = null;
+  for (const [p, c] of Object.entries(S.connections || {})) {
+    const d = c && c.days_left;
+    if (d === null || d === undefined || d > 7) continue;
+    if (!worst || d < worst.days) worst = { platform: p, days: d, est: c.expires_estimated !== false };
+  }
+  banner.classList.toggle('hidden', !worst);
+  if (worst) {
+    const label = NETWORK_LABEL[worst.platform] || worst.platform;
+    const when = worst.days < 0 ? 'has expired' :
+      worst.days === 0 ? 'expires today' : `expires in ${worst.days} days`;
+    document.getElementById('expiry-banner-text').textContent =
+      `🔑 Your ${label} token ${when}${worst.est ? ' (estimated)' : ''} — scheduled posts will stop going out.`;
+  }
+  layoutBanners();
+}
+
+/** Extend the Instagram token. Rotates it, so it stays an explicit user action. */
+async function renewInstagramToken() {
+  const btn = document.getElementById('renew-ig-btn');
+  const out = document.getElementById('test-conn-result');
+  const prev = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Renewing…'; }
+  if (out) { out.textContent = ''; out.className = 'text-sm'; }
+  try {
+    const res = await apiFetch(`${API}/api/settings/instagram/refresh-token`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (out) {
+      out.textContent = (data.ok ? '✅ ' : '❌ ') + (data.message || (data.ok ? 'Renewed.' : 'Failed.'));
+      out.className = 'text-sm ' + (data.ok ? 'text-green-400' : 'text-red-400');
+    }
+    if (data.ok) await loadConnections(['instagram', 'x']);
+  } catch (e) {
+    if (out) { out.textContent = '❌ ' + e.message; out.className = 'text-sm text-red-400'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
+  }
 }
 
 async function testPublishConnection(network) {

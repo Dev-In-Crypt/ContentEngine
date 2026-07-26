@@ -74,6 +74,26 @@ async def send_publish_failed_email(to: str, topic: str, reason: str) -> bool:
     return await send_email(to, "A scheduled post failed to publish · Content Engine", html)
 
 
+async def send_connection_broken_email(to: str, platform: str, reason: str) -> bool:
+    """Tell the owner a publishing connection stopped working.
+
+    Sent once, on the transition from working to broken — a token that has been
+    dead for a week is not news, and a daily reminder just trains the spam filter.
+    """
+    base = (get_settings().public_base_url or "").rstrip("/")
+    where = f'<p><a href="{base}/">Open Connections</a></p>' if base else ""
+    label = "Instagram" if platform == "instagram" else platform.upper()
+    html = (
+        f"<p>Your {html_escape(label)} connection stopped working, so scheduled "
+        f"posts to it will fail until it's fixed.</p>"
+        f"<p>Reason: {html_escape(reason)}</p>"
+        f"<p>Re-check the keys under Connections and use “Test connection”.</p>"
+        f"{where}"
+    )
+    return await send_email(
+        to, f"{label} connection needs attention · Content Engine", html)
+
+
 async def send_reset_email(to: str, token: str) -> bool:
     url = _link("/reset", token)
     html = (
