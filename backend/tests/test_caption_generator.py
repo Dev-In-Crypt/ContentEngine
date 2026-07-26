@@ -780,3 +780,25 @@ async def test_generate_repairs_broken_json_without_a_retry():
 
     assert result.caption == GOOD_JSON["caption"]
     assert provider.generate_text.await_count == 1     # repaired in place, no retry
+
+
+def test_x_short_states_one_length_and_it_is_the_real_limit():
+    """The truncated drafts users saw were a prompt conflict, not a bad cutter:
+    X_SYSTEM_PROMPT asked for ~200 characters while the injected length tier asked
+    for "~150-400 characters total", so the model followed the looser number and
+    overshot into the trimmer. A single X post must state exactly one budget.
+
+    Mutation guard: hand the generic tier back to X/SHORT and "150-400" reappears.
+    """
+    from models.schemas import TWEET_CHAR_LIMIT, LengthTier, XPostMode
+    from services.caption_generator import _length_instruction
+
+    x_short = _length_instruction(Platform.X, XPostMode.SHORT, LengthTier.SWEET_SPOT)
+    assert str(TWEET_CHAR_LIMIT) in x_short
+    assert "150-400" not in x_short
+
+    # Other platforms, and X threads/long posts, keep the tier guidance.
+    for platform, mode in ((Platform.INSTAGRAM, XPostMode.SHORT),
+                           (Platform.X, XPostMode.THREAD),
+                           (Platform.X, XPostMode.LONG)):
+        assert "150-400" in _length_instruction(platform, mode, LengthTier.SWEET_SPOT)

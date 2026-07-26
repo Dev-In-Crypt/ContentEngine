@@ -7,6 +7,7 @@ target: removing it lets a hallucinated statistic ship as fact.
 import pytest
 
 from services.lead_builder import build_lead, _has_ungrounded_claim
+from models.schemas import Platform
 from services.sources.base import FetchedItem
 
 
@@ -99,6 +100,34 @@ async def test_draft_keeps_the_source_url_and_urls_quoted_in_the_source():
     caption = lead["drafts"][0]["caption"]
     assert "https://ex.com/v2" in caption        # the item's own URL
     assert "https://ex.com/notes/v2" in caption  # quoted by the source
+
+
+@pytest.mark.asyncio
+async def test_urls_are_stripped_before_the_length_budget():
+    """An invented link must be gone BEFORE the X budget is measured.
+
+    Sized so the order decides: the prose alone fits, but "Learn more: " plus a link
+    (23 characters as X counts it) pushes it over. Strip first and the post is simply
+    within budget; strip last and the generator spends a round trip shortening text
+    to make room for something it is about to delete.
+
+    Asserted on the provider call count because that is the observable difference —
+    the sentence-boundary cutter happens to land cleanly here, so the caption itself
+    looks the same either way. Mutation guard: move post_process below the budget
+    block and a third call appears.
+    """
+    from models.schemas import TWEET_CHAR_LIMIT
+    url = "https://example.com/" + "z" * 90
+    body = "We shipped faster builds and background exports. " * 5
+    assert len(body) < TWEET_CHAR_LIMIT
+    prov = StubProvider([_ANALYSIS, _caption(f"{body}Learn more: {url}")])
+
+    lead = await build_lead(prov, _item(), platform=Platform.X)
+    caption = lead["drafts"][0]["caption"]
+    assert prov.calls == 2                         # analysis + caption, no shortening
+    assert "example.com" not in caption
+    assert "…" not in caption
+    assert len(caption) <= TWEET_CHAR_LIMIT
 
 
 def test_strip_ungrounded_urls_unit():

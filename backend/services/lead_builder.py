@@ -148,6 +148,9 @@ async def _draft(
         "example URLs, and no 'Learn more' link you made up.\n\n"
         f"SOURCE:\n{item.title}\n{item.body}"
     )
+    source_text = f"{item.title}\n{item.body}"
+    # The item's own URL counts as grounded even when the body never spells it out.
+    link_ground = f"{source_text}\n{item.url}"
     caption = await CaptionGenerator(text_provider).generate(
         topic=analysis["what_happened"] or item.title,
         format="single",
@@ -158,18 +161,18 @@ async def _draft(
         niche=niche,
         target_audience=target_audience,
         web_grounded=False,          # stay grounded in the source, don't pull the web
+        # Runs inside generate(), before the platform length budget: stripping an
+        # invented link afterwards would leave the post trimmed to make room for
+        # something no longer there.
+        post_process=lambda text: _strip_ungrounded_urls(text, link_ground),
     )
-    source_text = f"{item.title}\n{item.body}"
-    # The item's own URL counts as grounded even when the body never spells it out.
-    link_ground = f"{source_text}\n{item.url}"
-    caption_text = _strip_ungrounded_urls(caption.caption, link_ground)
     return {
         "platform": platform.value if hasattr(platform, "value") else str(platform),
-        "hook": _strip_ungrounded_urls(caption.hook, link_ground),
-        "caption": caption_text,
-        "cta": _strip_ungrounded_urls(caption.cta, link_ground),
+        "hook": caption.hook,
+        "caption": caption.caption,
+        "cta": caption.cta,
         "hashtags": caption.hashtags,
-        "unverified": _has_ungrounded_claim(caption_text, source_text),
+        "unverified": _has_ungrounded_claim(caption.caption, source_text),
     }
 
 

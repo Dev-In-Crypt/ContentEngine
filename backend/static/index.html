@@ -3315,9 +3315,10 @@ function renderThread(parts) {
     ta.value = text;
     const sync = () => {
       S.threadParts[i] = ta.value;
-      const n = ta.value.length;
-      counter.textContent = `${n}/250`;
-      counter.className = 'tweet-count font-mono ' + (n > 250 ? 'text-red-400' : 'text-gray-500');
+      const n = tweetLength(ta.value);
+      counter.textContent = `${n}/${X_TWEET_LIMIT}`;
+      counter.className = 'tweet-count font-mono '
+        + (n > X_TWEET_LIMIT ? 'text-red-400' : 'text-gray-500');
     };
     ta.addEventListener('input', () => { sync(); scheduleDraftSave(); });
     sync();
@@ -3329,7 +3330,15 @@ function renderThread(parts) {
 
 // X posts trim to this at publish (fit_tweet, below X's 280 on purpose) — the
 // single-post counter and the thread splitter both target it so preview == posted.
-const X_TWEET_LIMIT = 250;
+// Seeded from the server (XSettingsResponse.tweet_char_limit) so the two can't drift.
+let X_TWEET_LIMIT = 250;
+
+// X rewrites every link to a t.co of exactly this length, so a 120-character URL
+// costs 23. Counting the raw string told users "340/250" on a post X accepts.
+const X_URL_WEIGHT = 23;
+function tweetLength(text) {
+  return String(text || '').replace(/https?:\/\/\S+/g, '#'.repeat(X_URL_WEIGHT)).length;
+}
 
 /** Label + counter + split button reflect the network and whether it's a thread.
  *  For X the single-post box is the TWEET (not an Instagram "Caption"). */
@@ -3351,7 +3360,7 @@ function updateCaptionCount() {
   const ta = document.getElementById('caption-edit');
   const count = document.getElementById('caption-count');
   if (!ta || !count || count.classList.contains('hidden')) return;
-  const n = ta.value.length;
+  const n = tweetLength(ta.value);
   const over = n > X_TWEET_LIMIT;
   count.textContent = over ? `${n}/${X_TWEET_LIMIT} — will be trimmed`
                            : `${n}/${X_TWEET_LIMIT}`;
@@ -3361,13 +3370,15 @@ function updateCaptionCount() {
 /** Break the single post text into <=X_TWEET_LIMIT tweet cells — no regenerate.
  *  Packs on paragraph, then sentence, then word boundaries. */
 function splitTextIntoTweets(text, limit) {
+  // Every budget check is weighted (a link costs 23), so a post carrying a long URL
+  // isn't split into more tweets than X would actually require.
   const units = [];
   for (const para of text.split(/\n\n+/)) {
-    if (para.length <= limit) { units.push(para); continue; }
+    if (tweetLength(para) <= limit) { units.push(para); continue; }
     const sentences = para.match(/[^.!?]+[.!?]*\s*/g) || [para];
     let buf = '';
     for (const s of sentences) {
-      if ((buf + s).length > limit && buf) { units.push(buf.trim()); buf = s; }
+      if (tweetLength(buf + s) > limit && buf) { units.push(buf.trim()); buf = s; }
       else buf += s;
     }
     if (buf.trim()) units.push(buf.trim());
@@ -3376,14 +3387,14 @@ function splitTextIntoTweets(text, limit) {
   let cur = '';
   for (const u of units) {
     const cand = cur ? cur + '\n\n' + u : u;
-    if (cand.length > limit && cur) { tweets.push(cur); cur = u; }
+    if (tweetLength(cand) > limit && cur) { tweets.push(cur); cur = u; }
     else cur = cand;
   }
   if (cur) tweets.push(cur);
   // Last resort: a single unit still over the limit → slice on spaces.
   const out = [];
   for (let t of tweets) {
-    while (t.length > limit) {
+    while (tweetLength(t) > limit) {
       let cut = t.lastIndexOf(' ', limit);
       if (cut <= 0) cut = limit;
       out.push(t.slice(0, cut).trim());
@@ -3409,8 +3420,8 @@ function splitIntoThread() {
 async function saveCaption() {
   if (!S.postId) return;
   const thread = S.threadParts || [];
-  if (thread.some(t => t.length > 250)) {
-    toast('⚠️ A tweet is over 250 characters — shorten it first', 'warn');
+  if (thread.some(t => tweetLength(t) > X_TWEET_LIMIT)) {
+    toast(`⚠️ A tweet is over ${X_TWEET_LIMIT} characters — shorten it first`, 'warn');
     return;   // before the snapshot: a rejected save must not enter the undo stack
   }
   snapshotEdits();   // push current state so Undo can revert this save
@@ -4068,7 +4079,13 @@ function onXModeChange(mode) {
 async function loadXSettings() {
   try {
     const res = await apiFetch(`${API}/api/settings/x`);
-    if (res.ok) S.xPremium = !!(await res.json()).x_premium;
+    if (res.ok) {
+      const data = await res.json();
+      S.xPremium = !!data.x_premium;
+      // Take the limit from the server so the counter can't drift from what the
+      // publisher actually enforces.
+      if (data.tweet_char_limit > 0) X_TWEET_LIMIT = data.tweet_char_limit;
+    }
   } catch { /* 401 handled by apiFetch */ }
   const cb = document.getElementById('x-premium');
   if (cb) cb.checked = !!S.xPremium;

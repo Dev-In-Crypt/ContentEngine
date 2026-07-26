@@ -12,6 +12,7 @@ functions here so the rules are testable without touching a provider.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from typing import Optional
 
@@ -22,23 +23,55 @@ Shortener = Callable[[str, int], Awaitable[str]]
 
 _ELLIPSIS = "…"
 
+#: X wraps every link in a t.co of exactly this length, however long the original.
+URL_WEIGHT = 23
+_URL_RE = re.compile(r"https?://\S+")
+#: End of a sentence: terminator followed by whitespace or the end of the text.
+_SENTENCE_END = re.compile(r"[.!?…](?=\s|$)")
+#: A sentence cut must keep at least this share of the budget, or "Hi. " + 240
+#: characters would collapse to "Hi." — a finished sentence and a deleted post.
+_MIN_SENTENCE_KEEP = 0.6
+
+
+def tweet_length(text: str) -> int:
+    """Length as X counts it: every URL costs 23 characters, not its real length.
+
+    Counting the raw string made a post carrying a long source link look ~70
+    characters over budget, so it was trimmed when X would have accepted it whole.
+    """
+    return len(_URL_RE.sub("#" * URL_WEIGHT, text or ""))
+
 
 def fit_tweet(text: str, limit: int = TWEET_CHAR_LIMIT) -> str:
-    """Return `text` guaranteed to be <= limit, never splitting a word.
+    """Return `text` guaranteed to fit `limit`, reading as a finished thought.
 
-    Short text is returned untouched. Over-long text is cut back to the last
-    whole word that leaves room for an ellipsis. A single word longer than the
-    limit is the one case we must cut mid-word — there is no boundary to use.
+    Three tiers, best first: end on a complete sentence (returned WITHOUT an
+    ellipsis — it isn't truncated, it's finished); else cut back to the last whole
+    word and mark it with an ellipsis; else, for a single word longer than the
+    limit, cut inside the token because no boundary exists. Length is measured the
+    way X measures it, so a link costs 23 rather than its real size.
     """
     text = (text or "").strip()
-    if len(text) <= limit:
+    if tweet_length(text) <= limit:
         return text
 
-    head = text[: limit - len(_ELLIPSIS)]
-    cut = head.rsplit(" ", 1)[0].rstrip(" ,.;:—-")
-    if not cut:                       # one unbroken token longer than the limit
-        cut = text[: limit - len(_ELLIPSIS)]
-    return cut + _ELLIPSIS
+    for match in reversed(list(_SENTENCE_END.finditer(text))):
+        candidate = text[: match.end()].rstrip()
+        if tweet_length(candidate) <= limit:
+            return candidate if len(candidate) >= limit * _MIN_SENTENCE_KEEP else _fit_word(
+                text, limit)
+    return _fit_word(text, limit)
+
+
+def _fit_word(text: str, limit: int) -> str:
+    """Cut back to the last whole word that fits, and mark it as cut short."""
+    words = text.split(" ")
+    while len(words) > 1:
+        words.pop()
+        candidate = " ".join(words).rstrip(" ,.;:—-")
+        if candidate and tweet_length(candidate + _ELLIPSIS) <= limit:
+            return candidate + _ELLIPSIS
+    return text[: limit - len(_ELLIPSIS)] + _ELLIPSIS   # one unbroken giant token
 
 
 def append_tags(text: str, tags: str, limit: Optional[int] = TWEET_CHAR_LIMIT) -> str:
@@ -55,9 +88,9 @@ def append_tags(text: str, tags: str, limit: Optional[int] = TWEET_CHAR_LIMIT) -
         return text
     if not text:
         return tags
-    if limit is None or len(text) + 2 + len(tags) <= limit:
+    if limit is None or tweet_length(text) + 2 + tweet_length(tags) <= limit:
         return f"{text}\n\n{tags}"
-    return f"{fit_tweet(text, limit - len(tags) - 2)}\n\n{tags}"
+    return f"{fit_tweet(text, limit - tweet_length(tags) - 2)}\n\n{tags}"
 
 
 def clamp_count(parts: list[str], lo: int, hi: int) -> list[str]:
@@ -85,7 +118,7 @@ async def enforce_parts(
     out: list[str] = []
     for part in parts:
         part = (part or "").strip()
-        if len(part) <= limit:
+        if tweet_length(part) <= limit:
             out.append(part)
             continue
         if shorten is not None:

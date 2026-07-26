@@ -3,7 +3,7 @@ import pytest
 
 from models.schemas import TWEET_CHAR_LIMIT
 from services.x_text import (
-    append_tags, clamp_count, enforce_parts, fit_tweet, looks_truncated,
+    append_tags, clamp_count, enforce_parts, fit_tweet, looks_truncated, tweet_length,
 )
 
 
@@ -44,6 +44,59 @@ def test_fit_handles_one_giant_word():
 def test_fit_trims_dangling_punctuation():
     text = "This sentence runs long, " * 20
     assert not fit_tweet(text).rstrip("…").endswith(",")
+
+
+# ── URLs cost 23 characters, whatever their length ───────────────────────────
+# X rewrites every link to a t.co of exactly 23 chars. Counting the real string
+# meant a post carrying a long source URL was trimmed ~70 characters shorter than
+# it needed to be — and then the link was often stripped anyway.
+
+def test_a_url_costs_twenty_three_characters():
+    long_url = "https://example.com/" + "segment/" * 12
+    assert len(long_url) > 90                       # the raw string really is long
+    assert tweet_length(long_url) == 23
+
+
+def test_tweet_length_matches_len_without_urls():
+    assert tweet_length("plain text") == len("plain text")
+
+
+def test_fit_keeps_a_tweet_that_only_overflows_on_raw_length():
+    """200 chars of prose plus a 120-char link is 250 as X counts it — publishing
+    it untouched is correct, trimming it is the bug."""
+    url = "https://example.com/" + "x" * 100
+    text = "w" * 200 + " " + url
+    assert len(text) > TWEET_CHAR_LIMIT             # raw length would reject it
+    assert fit_tweet(text) == text
+
+
+def test_append_tags_counts_urls_the_same_way():
+    url = "https://example.com/" + "y" * 100
+    text = "w" * 180 + " " + url
+    out = append_tags(text, "#dev", limit=TWEET_CHAR_LIMIT)
+    assert "…" not in out                           # body survived intact
+    assert out.endswith("#dev")
+
+
+# ── a cut should read as a finished thought ──────────────────────────────────
+
+def test_fit_prefers_a_finished_sentence_and_drops_the_ellipsis():
+    """A complete sentence is not a truncation, so it must not be advertised as
+    one. Drafts ending "…for a more…" are what prompted this."""
+    text = ("We shipped faster builds. Exports now run in the background. "
+            "The editor gained a command palette. ") * 3
+    out = fit_tweet(text)
+    assert len(out) <= TWEET_CHAR_LIMIT
+    assert not out.endswith("…")
+    assert out.rstrip().endswith(".")
+
+
+def test_fit_does_not_gut_a_tweet_for_an_early_full_stop():
+    """Without a floor, "Hi. " + 240 chars would collapse to "Hi." — technically a
+    finished sentence, practically a deleted post."""
+    text = "Hi. " + "word " * 100
+    out = fit_tweet(text)
+    assert len(out) > TWEET_CHAR_LIMIT * 0.5
 
 
 def test_clamp_trims_above_max():

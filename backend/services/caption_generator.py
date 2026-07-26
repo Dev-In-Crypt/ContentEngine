@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from collections.abc import Callable
 from typing import Optional
 
 from models.schemas import LengthTier, Platform, TWEET_CHAR_LIMIT, XPostMode, XStyle
@@ -203,7 +204,7 @@ Tone: {tone}
 Write for X. HARD RULES:
 - The "caption" field is the tweet text WITHOUT hashtags — they are appended from the
   "hashtags" field when the post goes out, so repeating them here publishes them twice.
-- Caption plus hashtags must fit 250 characters, so keep the caption near 200.
+- End on a finished sentence. Never trail off mid-thought.
 - One sharp hook on the first line, one idea, natural English, no em-dash.
 - Give the post air: use one or two short line breaks between thoughts — never a
   single grey block of text.
@@ -325,6 +326,26 @@ LENGTH_TIER_INSTRUCTIONS: dict[LengthTier, str] = {
     ),
 }
 
+#: A single tweet has a hard budget, so the generic tiers don't apply: SWEET_SPOT
+#: asks for "~150-400 characters total" while the post must fit TWEET_CHAR_LIMIT
+#: including hashtags. The model followed the looser number, overshot, and got cut
+#: mid-sentence — the truncation users saw was a prompt conflict, not a bad cutter.
+X_SHORT_LENGTH_INSTRUCTION = (
+    "LENGTH: The whole post, hashtags included, must fit {limit} characters, so aim for "
+    "about {target}. Finish the thought inside that budget — a post that has to be "
+    "trimmed reads as unfinished."
+)
+
+
+def _length_instruction(platform: Platform, x_mode: XPostMode, length_tier: LengthTier) -> str:
+    """One length statement per request. Two disagreeing budgets is how drafts
+    ended up over the limit and cut."""
+    if platform == Platform.X and x_mode == XPostMode.SHORT:
+        return X_SHORT_LENGTH_INSTRUCTION.format(
+            limit=TWEET_CHAR_LIMIT, target=int(TWEET_CHAR_LIMIT * 0.8))
+    return LENGTH_TIER_INSTRUCTIONS[length_tier]
+
+
 # The framing ANGLE of an X post (ported from the user's thread bot). Composes with
 # the brand voice — voice is WHO speaks, this is how the post is framed.
 X_STYLE_INSTRUCTIONS: dict[XStyle, str] = {
@@ -383,6 +404,7 @@ class CaptionGenerator:
         x_style: XStyle = XStyle.STANDARD,
         thread_min: int = 3,
         thread_max: int = 7,
+        post_process: Optional[Callable[[str], str]] = None,
     ) -> GeneratedCaption:
         if platform == Platform.X:
             template = {
@@ -397,7 +419,7 @@ class CaptionGenerator:
         fields = dict(
             brand_voice=_frame_brand_voice(brand_voice),
             tone=tone,
-            length_instruction=LENGTH_TIER_INSTRUCTIONS[length_tier],
+            length_instruction=_length_instruction(platform, x_mode, length_tier),
             json_format=_JSON_FORMAT,
             # X-only placeholder; harmless to include for other platforms since
             # their templates don't reference {x_style}.
@@ -455,6 +477,16 @@ class CaptionGenerator:
         result.thread_parts = [polish(p, keep_urls) for p in result.thread_parts]
         # Overlays are printed onto the image, where stray "**" is most visible.
         result.slide_overlays = [polish(s, keep_urls) for s in result.slide_overlays]
+
+        # A caller-supplied cleanup (lead_builder strips links the source never
+        # contained) has to run HERE — before the budget below. Doing it afterwards
+        # means the text was trimmed to make room for a URL that then gets deleted,
+        # leaving a post cut short for no reason.
+        if post_process is not None:
+            result.caption = post_process(result.caption)
+            result.hook = post_process(result.hook)
+            result.cta = post_process(result.cta)
+            result.thread_parts = [post_process(p) for p in result.thread_parts]
 
         if platform == Platform.X and x_mode == XPostMode.THREAD and result.thread_parts:
             # Models overshoot the per-tweet budget and the requested count; fix both
