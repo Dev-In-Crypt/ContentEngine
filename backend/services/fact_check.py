@@ -104,6 +104,13 @@ async def verify_post(
         return {"status": "no_source", "claims": [], "sources_used": used,
                 "checked_at": stamp}
 
+    # Checked in this order on purpose: "there is nothing to check against" is a
+    # useful answer that costs no model call, so an account without a key still
+    # gets it. Only once we would actually call the model does a missing key matter.
+    if text_provider is None:
+        return {"status": "no_key", "claims": [], "sources_used": used,
+                "checked_at": stamp}
+
     try:
         claims = await verify_claims(
             text_provider, draft_text=draft_text, source_text=source_text,

@@ -3210,6 +3210,9 @@ function renderFactCheck(post) {
   if (fc.status === 'no_source') {
     html += `<div class="text-yellow-200">Nothing to check against yet — paste the source
       above, or generate with web sources on. We won't ask the AI to confirm its own numbers.</div>`;
+  } else if (fc.status === 'no_key') {
+    html += `<div class="text-yellow-200">Add an AI key under Connections to run the
+      check — we read your source, but the check itself needs a model.</div>`;
   } else if (fc.status === 'error') {
     html += `<div class="text-red-400">The check could not finish${fc.error ? ': ' + esc(fc.error) : '.'}
       Nothing was verified.</div>`;

@@ -192,7 +192,7 @@ def test_an_over_long_paste_is_rejected_not_truncated_silently(ctx):
     assert r.status_code == 422
 
 
-def test_no_ai_key_is_a_clear_message_not_a_stack_trace(ctx):
+def test_no_ai_key_is_named_as_such_not_a_stack_trace(ctx):
     """Reachable in one click before setup is finished. The reason must be about
     the missing key, not an AttributeError that reads like the post's fault."""
     c, SM, fake = ctx
@@ -202,6 +202,19 @@ def test_no_ai_key_is_a_clear_message_not_a_stack_trace(ctx):
     fake.text_provider = None
 
     r = c.post(f"/api/posts/{pid}/verify", json={"source_text": SOURCE}, headers=h)
-    assert r.status_code == 400
-    assert "AI key" in r.json()["detail"]
-    assert _stored(SM, pid) in (None, {})       # nothing recorded on the post
+    assert r.status_code == 200
+    assert r.json()["fact_check"]["status"] == "no_key"
+    assert r.json()["checked_claims"] == []
+
+
+def test_without_a_key_you_still_learn_there_was_no_source(ctx):
+    """The no-source answer needs no model, so a half-configured account still
+    gets the more useful of the two messages."""
+    c, SM, fake = ctx
+    h = _register(c)
+    uid = c.get("/api/auth/me", headers=h).json()["id"]
+    pid = _seed(SM, uid)
+    fake.text_provider = None
+
+    r = c.post(f"/api/posts/{pid}/verify", json={}, headers=h)
+    assert r.json()["fact_check"]["status"] == "no_source"

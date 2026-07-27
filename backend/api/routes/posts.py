@@ -1481,17 +1481,8 @@ async def verify_post_claims(
     urls = [s.get("url") for s in (post.sources or []) if isinstance(s, dict)]
     _p, text_model, _k = resolve_ai_choice(user, settings, "text")
 
-    provider = getattr(engine.caption_gen, "text_provider", None)
-    if provider is None:
-        # Reachable in one click by anyone who hasn't finished setup. Without this
-        # they got an AttributeError rendered as the reason their post failed
-        # verification, which reads like the post is at fault.
-        raise HTTPException(
-            status_code=400,
-            detail="Add an AI key under Connections before running a check.")
-
     result = await verify_post(
-        provider, draft_text=draft_text,
+        getattr(engine.caption_gen, "text_provider", None), draft_text=draft_text,
         source_urls=urls, pasted=body.source_text, text_model=text_model,
         ssl_verify=settings.ssl_verify)
 
