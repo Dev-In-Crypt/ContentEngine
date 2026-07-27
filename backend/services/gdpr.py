@@ -27,8 +27,8 @@ from typing import Optional
 from sqlalchemy import select
 
 from models.database import (
-    AuditEntry, BrandRules, Lead, LLMUsage, ManagedAccount, Post, PostInsight,
-    Slide, Source, SourceSnapshot, User, UserCredentials, Workspace,
+    AuditEntry, BrandRules, Lead, LLMUsage, ManagedAccount, MediaAsset, Post,
+    PostInsight, Slide, Source, SourceSnapshot, User, UserCredentials, Workspace,
 )
 from services.scheduler import cancel_publish
 
@@ -37,8 +37,11 @@ log = logging.getLogger(__name__)
 # backend/services/gdpr.py -> backend/uploads
 UPLOADS_ROOT = Path(__file__).resolve().parent.parent / "uploads"
 
-# Per-user directories, as laid out by logo_store / music_store / staging.
-_USER_DIRS = ("logos", "music", "staging")
+# Per-user directories, as laid out by logo_store / music_store / staging /
+# media_store. A new per-user store must be added here in the same change that
+# creates it — a directory that exists before erasure knows about it is a
+# directory we cannot honour a deletion request for.
+_USER_DIRS = ("logos", "music", "staging", "media")
 
 # Columns we never put in an export, whatever table they turn up in.
 _NEVER_EXPORT = {"password_hash"}
@@ -116,6 +119,12 @@ async def collect_user_data(db, user: User) -> dict:
         "llm_usage": [_row(u) for u in (await db.execute(
             select(LLMUsage).where(LLMUsage.user_id == user.id)
         )).scalars().all()],
+        # The prompt is the part of a generated asset the user cannot recover
+        # from the file itself, so the rows matter as much as the bytes.
+        "media_assets": [_row(a) for a in (await db.execute(
+            select(MediaAsset).where(MediaAsset.user_id == user.id)
+            .order_by(MediaAsset.created_at)
+        )).scalars().all()],
         "workspace": await _collect_workspace(db, user),
     }
 
@@ -186,6 +195,10 @@ async def user_media_paths(db, user: User) -> list[str]:
         for slide in (await db.execute(
             select(Slide).where(Slide.post_id.in_(post_ids)))).scalars().all():
             paths += [slide.image_path, slide.raw_image_path]
+    # Library assets are not reachable through any post — that is the whole
+    # point of them — so they have to be walked on their own.
+    paths += [a.file_path for a in (await db.execute(
+        select(MediaAsset).where(MediaAsset.user_id == user.id))).scalars().all()]
     return [p for p in paths if p]
 
 
@@ -291,6 +304,9 @@ async def delete_user_data(db, user: User, *, root: Path = UPLOADS_ROOT) -> dict
     counts["posts"] = len(posts)
 
     await _delete(LLMUsage, LLMUsage.user_id == user.id, "llm_usage")
+    # Before managed_accounts: an asset carries a nullable FK to one, and the
+    # rule in this function is children first, never leaning on a cascade.
+    await _delete(MediaAsset, MediaAsset.user_id == user.id, "media_assets")
     await _delete(ManagedAccount, ManagedAccount.owner_user_id == user.id,
                   "managed_accounts")
     await _delete(UserCredentials, UserCredentials.user_id == user.id, "credentials")

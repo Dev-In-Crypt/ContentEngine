@@ -15,8 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from models.database import (
-    AuditEntry, Base, Lead, LLMUsage, Post, Slide, Source, User, UserCredentials,
-    Workspace,
+    AuditEntry, Base, Lead, LLMUsage, MediaAsset, Post, Slide, Source, User,
+    UserCredentials, Workspace,
 )
 from services import gdpr
 from services.auth import hash_password
@@ -61,8 +61,12 @@ async def _seed(db, email):
     db.add(Lead(workspace_id=ws.id, source_id=src.id, what_happened="Shipped v2",
                 strength="worthy", status="new"))
     db.add(AuditEntry(workspace_id=ws.id, post_id=post.id, ai_draft="first draft"))
+    asset = MediaAsset(user_id=user.id, kind="video", source="ai_gen", status="ready",
+                       provider="kling", prompt="a loaf cooling on a rack",
+                       file_path="/tmp/nope.mp4", mime="video/mp4", duration_sec=5.0)
+    db.add(asset)
     await db.commit()
-    return {"user": user, "post": post, "ws": ws}
+    return {"user": user, "post": post, "ws": ws, "asset": asset}
 
 
 @pytest.fixture
@@ -149,6 +153,38 @@ def test_export_of_a_bare_account_still_produces_a_document(sm):
     assert data["account"]["email"] == "empty@example.com"
     assert data["posts"] == []
     assert data["workspace"] is None
+
+
+def test_export_carries_the_media_library(sm, two):
+    """A generated clip the user paid their own provider for is theirs, and the
+    prompt that produced it is the part they cannot reconstruct from the file."""
+    data = _collect(sm, two["mine"]["user"])
+    assert [a["prompt"] for a in data["media_assets"]] == ["a loaf cooling on a rack"]
+    assert data["media_assets"][0]["kind"] == "video"
+
+
+def test_export_never_contains_another_tenants_asset(sm, two):
+    data = _collect(sm, two["mine"]["user"])
+    mine = {a["id"] for a in data["media_assets"]}
+    assert two["theirs"]["asset"].id not in mine
+
+
+def test_erase_removes_the_media_library(sm, two):
+    _erase(sm, two["mine"]["user"])
+    assert _rows(sm, MediaAsset, MediaAsset.user_id == two["mine"]["user"].id) == []
+    # ...and leaves the bystander's library standing.
+    assert len(_rows(sm, MediaAsset,
+                     MediaAsset.user_id == two["theirs"]["user"].id)) == 1
+
+
+def test_media_paths_include_library_files(sm, two):
+    """The export walks file_path to decide what goes in the ZIP; miss it and
+    the archive quietly ships a manifest with no media behind it."""
+    async def _go():
+        async with sm() as db:
+            user = await db.get(User, two["mine"]["user"].id)
+            return await gdpr.user_media_paths(db, user)
+    assert "/tmp/nope.mp4" in asyncio.run(_go())
 
 
 def test_export_does_not_leak_the_password_hash(sm, two):
@@ -284,7 +320,7 @@ def test_erase_removes_the_accounts_directories(tmp_path):
     for d in (mine, theirs):
         d.mkdir(parents=True)
         (d / "slide_1.jpg").write_bytes(b"x")
-    for name in ("logos", "music", "staging"):
+    for name in ("logos", "music", "staging", "media"):
         (uploads / name / "u1").mkdir(parents=True)
         (uploads / name / "u1" / "f.bin").write_bytes(b"x")
         (uploads / name / "u2").mkdir(parents=True)
@@ -293,10 +329,10 @@ def test_erase_removes_the_accounts_directories(tmp_path):
 
     assert not mine.exists()
     assert theirs.exists()                       # another tenant's post survives
-    for name in ("logos", "music", "staging"):
+    for name in ("logos", "music", "staging", "media"):
         assert not (uploads / name / "u1").exists()
         assert (uploads / name / "u2").exists()
-    assert removed == 4
+    assert removed == 5
 
 
 def test_erase_of_files_tolerates_an_account_that_uploaded_nothing(tmp_path):

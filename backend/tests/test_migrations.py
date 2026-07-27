@@ -41,6 +41,18 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     cred_cols = {r[1] for r in sqlite3.connect(db).execute(
         "PRAGMA table_info(user_credentials)")}
     assert "elevenlabs_api_key_enc" in cred_cols                    # Reels R1 (voiceover)
+    # Media library: standalone assets, plus the links from the two places that
+    # can consume one. The links are nullable and SET NULL on delete — a post
+    # keeps its own copy of the bytes when the library asset goes away.
+    assert "media_assets" in tables
+    asset_cols = {r[1] for r in sqlite3.connect(db).execute(
+        "PRAGMA table_info(media_assets)")}
+    assert {"kind", "status", "source", "provider", "model", "prompt",
+            "file_path", "mime", "duration_sec", "provider_task_id",
+            "parent_asset_id", "cost_usd"} <= asset_cols
+    slide_cols = {r[1] for r in sqlite3.connect(db).execute("PRAGMA table_info(slides)")}
+    assert "media_asset_id" in slide_cols
+    assert "video_asset_id" in post_cols
 
 
 def test_migrations_autostamp_preexisting_db(tmp_path):

@@ -18,7 +18,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from services import staging
+from services import media_store, staging
 
 log = logging.getLogger(__name__)
 
@@ -59,13 +59,16 @@ def cleanup_orphaned_uploads(posts_root: Path, known_ids: Iterable[str]) -> dict
     return {"removed": removed, "freed_bytes": freed}
 
 
-async def run_upload_cleanup(sessionmaker, posts_root: Path | None = None) -> dict:
+async def run_upload_cleanup(sessionmaker, posts_root: Path | None = None,
+                             media_root: Path | None = None) -> dict:
     """Load live post ids from the DB and reconcile the uploads dir against them."""
-    from models.database import Post
+    from models.database import MediaAsset, Post
 
     root = posts_root or _POSTS_ROOT
     async with sessionmaker() as session:
         ids = (await session.execute(select(Post.id))).scalars().all()
+        asset_ids = set(
+            (await session.execute(select(MediaAsset.id))).scalars().all())
     result = cleanup_orphaned_uploads(root, ids)
     if result["removed"]:
         log.info("Upload cleanup removed %d orphaned dir(s), freed %d bytes",
@@ -78,4 +81,15 @@ async def run_upload_cleanup(sessionmaker, posts_root: Path | None = None) -> di
         log.info("Staging sweep removed %d file(s), freed %d bytes",
                  staged["files"], staged["bytes"])
     result["staged_removed"] = staged["files"]
+
+    # Library files whose row has gone: unreachable, and video is big enough
+    # that leaving them is the difference between a tidy disk and a full one.
+    # Deliberately one-directional — a row with no file yet is a video the
+    # provider is still rendering, and removing rows here would throw away work
+    # the user has already been billed for.
+    media = media_store.sweep(asset_ids, root=media_root)
+    if media["files"]:
+        log.info("Media sweep removed %d orphaned file(s), freed %d bytes",
+                 media["files"], media["bytes"])
+    result["media_removed"] = media["files"]
     return result

@@ -160,6 +160,11 @@ class Post(Base):
     # the owner's Personal account. Additive to user_id (which stays the security gate).
     managed_account_id = Column(String(36), ForeignKey("managed_accounts.id", ondelete="SET NULL"),
                                 index=True)
+    # Which library asset video_path was copied from, when it came from one.
+    # SET NULL for the same reason as Slide.media_asset_id: the post keeps its
+    # own reel.mp4 even after the asset it came from is deleted.
+    video_asset_id = Column(String(36),
+                            ForeignKey("media_assets.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -186,9 +191,73 @@ class Slide(Base):
     original_niche_text = Column(Text)     # LLM-generated niche text (slide 1), for Reset
     gen_model = Column(String(100))
     canva_template_id = Column(String(100))
+    # Which library asset these bytes were copied from, when they came from one.
+    # SET NULL, not CASCADE: deleting the asset must not delete the slide — the
+    # post owns its own copy of the file.
+    media_asset_id = Column(String(36),
+                            ForeignKey("media_assets.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     post = relationship("Post", back_populates="slides")
+
+
+class MediaAsset(Base):
+    """An image or video the tenant owns, independent of any post.
+
+    Everything else in this schema ties media to a post: a Slide needs a
+    post_id, a reel is a single column on Post. That makes "generate something
+    now, decide where it goes later" impossible, which is what this table is
+    for.
+
+    The row IS the job. A generated video exists from the moment it is asked
+    for and its bytes land minutes later, once the provider finishes and the
+    poller downloads them — so `status`, `error` and `provider_task_id` live
+    here rather than in a second table that would be a second source of truth
+    about one thing.
+
+    Nothing points from here to a post. The links run the other way
+    (Slide.media_asset_id, Post.video_asset_id) and inserting an asset into a
+    post *copies* the bytes, because both the orphan-uploads sweep and GDPR
+    erasure rmtree uploads/posts/<post_id> — a post that merely referenced a
+    library file would let post cleanup delete the library.
+    """
+    __tablename__ = "media_assets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Which brand it was made under, for a badge and for scoping later. Stored,
+    # deliberately not filtered on: media is reusable across brands in a way a
+    # post is not, so narrowing it should be a WHERE clause, not a migration.
+    managed_account_id = Column(String(36),
+                                ForeignKey("managed_accounts.id", ondelete="SET NULL"),
+                                index=True)
+    kind = Column(String(10), nullable=False)      # image | video
+    source = Column(String(20), nullable=False)    # ai_gen | upload | edited
+    status = Column(String(20), nullable=False, default="ready")  # pending|running|ready|failed
+    error = Column(Text)
+    provider = Column(String(30))
+    model = Column(String(120))
+    provider_task_id = Column(String(200))         # the vendor's async job id
+    prompt = Column(Text)
+    title = Column(String(200))
+    # An edit never mutates its source: a generated clip cost the user real
+    # money at their own provider, so montage produces a new row pointing back.
+    parent_asset_id = Column(String(36),
+                             ForeignKey("media_assets.id", ondelete="SET NULL"))
+    file_path = Column(Text)         # absolute path on disk; null until the bytes arrive
+    mime = Column(String(60))
+    width = Column(Integer)
+    height = Column(Integer)
+    duration_sec = Column(Float)     # video only
+    bytes = Column(Integer, nullable=False, default=0)
+    # Priced per second for video, so it cannot ride estimate_cost()'s token maths.
+    cost_usd = Column(Float, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_media_assets_user_kind_created", "user_id", "kind", "created_at"),
+    )
 
 
 class BrandConfig(Base):
