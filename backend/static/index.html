@@ -2732,77 +2732,82 @@ async function generatePost() {
   const topic = document.getElementById('topic').value.trim();
   if (!topic) { goStep(1); return; }
   if (S.generating) return;          // ignore a second click while one is in flight
-  if (!await guardGenerateKeys()) return;   // cloud: needs an OpenRouter key first
-  if (S.source === 'upload' && S.ownPhotos.length < slidesNeeded()) {
-    toast(`Add ${slidesNeeded() - S.ownPhotos.length} more photo(s) first`, 'warn');
-    return;
-  }
+  // Claimed before the first await, not after it. guardGenerateKeys() fetches the
+  // AI settings, and two clicks inside that round-trip both found the flag still
+  // false — two generations, two provider bills, and whichever reply came back
+  // slower overwriting the other one's preview.
   S.generating = true;
-
-  showStep(3);
-  document.getElementById('loading-spinner').classList.remove('hidden');
-  document.getElementById('loading-msg').textContent = 'Starting…';
-  document.getElementById('progress-list').innerHTML = '';
-  document.getElementById('gen-error').classList.add('hidden');
-
-  const body = {
-    topic,
-    format: S.format,
-    tone: document.getElementById('tone').value,
-    niche: document.getElementById('niche').value || null,
-    target_audience: document.getElementById('audience').value || null,
-    additional_instructions: document.getElementById('instructions').value || null,
-    apply_branding: document.getElementById('apply-brand').checked,
-    // text_only carries no image; send a valid ImageSource enum (ignored server-side).
-    text_only: S.source === 'text_only',
-    default_image_source: S.source === 'text_only' ? 'stock' : S.source,
-    platform: S.platform,
-    length_tier: document.getElementById('length-tier').value,
-    template_style: S.templateStyle,
-    niche_box_color: S.nicheBoxColor,
-    show_logo: document.getElementById('show-logo').checked,
-  };
-  if (S.source === 'upload') {
-    // Files can't ride the SSE JSON body, so they are parked first and the
-    // generation refers to them by id — in the order shown in step 2.
-    try {
-      document.getElementById('loading-msg').textContent = 'Uploading your photos…';
-      body.upload_ids = await stageOwnPhotos();
-    } catch (e) {
-      S.generating = false;
-      showStep(2);
-      toast('❌ ' + e.message, 'error');
+  try {
+    if (!await guardGenerateKeys()) return;   // cloud: needs an OpenRouter key first
+    if (S.source === 'upload' && S.ownPhotos.length < slidesNeeded()) {
+      toast(`Add ${slidesNeeded() - S.ownPhotos.length} more photo(s) first`, 'warn');
       return;
     }
-  }
-  if (S.platform === 'x') {
-    body.x_mode = S.xMode || 'short';
-    body.x_style = S.xStyle || 'standard';
-    if (body.x_mode === 'thread') {
-      // Clamp here as well as server-side: a browser that ignores min/max on a
-      // number input would otherwise turn a typo into a 422 after the user has
-      // already waited through the generation spinner.
-      const lo = Math.min(15, Math.max(2, parseInt(document.getElementById('thread-min').value, 10) || 3));
-      const hi = Math.min(15, Math.max(lo, parseInt(document.getElementById('thread-max').value, 10) || 7));
-      body.thread_min = lo;
-      body.thread_max = hi;
-    }
-  }
 
-  try {
-    const post = await streamGenerate(body, addProgress);
-    S.postId = post.id;
-    // The photos belong to this post now; the next one starts empty rather than
-    // silently reusing them.
-    S.ownPhotos = [];
-    renderOwnPhotos();
-    renderPreview(post);
-    showStep(4);
-  } catch(e) {
-    document.getElementById('loading-spinner').classList.add('hidden');
-    const errEl = document.getElementById('gen-error');
-    document.getElementById('gen-error-msg').textContent = '❌ ' + e.message;
-    errEl.classList.remove('hidden');
+    showStep(3);
+    document.getElementById('loading-spinner').classList.remove('hidden');
+    document.getElementById('loading-msg').textContent = 'Starting…';
+    document.getElementById('progress-list').innerHTML = '';
+    document.getElementById('gen-error').classList.add('hidden');
+
+    const body = {
+      topic,
+      format: S.format,
+      tone: document.getElementById('tone').value,
+      niche: document.getElementById('niche').value || null,
+      target_audience: document.getElementById('audience').value || null,
+      additional_instructions: document.getElementById('instructions').value || null,
+      apply_branding: document.getElementById('apply-brand').checked,
+      // text_only carries no image; send a valid ImageSource enum (ignored server-side).
+      text_only: S.source === 'text_only',
+      default_image_source: S.source === 'text_only' ? 'stock' : S.source,
+      platform: S.platform,
+      length_tier: document.getElementById('length-tier').value,
+      template_style: S.templateStyle,
+      niche_box_color: S.nicheBoxColor,
+      show_logo: document.getElementById('show-logo').checked,
+    };
+    if (S.source === 'upload') {
+      // Files can't ride the SSE JSON body, so they are parked first and the
+      // generation refers to them by id — in the order shown in step 2.
+      try {
+        document.getElementById('loading-msg').textContent = 'Uploading your photos…';
+        body.upload_ids = await stageOwnPhotos();
+      } catch (e) {
+        showStep(2);
+        toast('❌ ' + e.message, 'error');
+        return;
+      }
+    }
+    if (S.platform === 'x') {
+      body.x_mode = S.xMode || 'short';
+      body.x_style = S.xStyle || 'standard';
+      if (body.x_mode === 'thread') {
+        // Clamp here as well as server-side: a browser that ignores min/max on a
+        // number input would otherwise turn a typo into a 422 after the user has
+        // already waited through the generation spinner.
+        const lo = Math.min(15, Math.max(2, parseInt(document.getElementById('thread-min').value, 10) || 3));
+        const hi = Math.min(15, Math.max(lo, parseInt(document.getElementById('thread-max').value, 10) || 7));
+        body.thread_min = lo;
+        body.thread_max = hi;
+      }
+    }
+
+    try {
+      const post = await streamGenerate(body, addProgress);
+      S.postId = post.id;
+      // The photos belong to this post now; the next one starts empty rather than
+      // silently reusing them.
+      S.ownPhotos = [];
+      renderOwnPhotos();
+      renderPreview(post);
+      showStep(4);
+    } catch(e) {
+      document.getElementById('loading-spinner').classList.add('hidden');
+      const errEl = document.getElementById('gen-error');
+      document.getElementById('gen-error-msg').textContent = '❌ ' + e.message;
+      errEl.classList.remove('hidden');
+    }
   } finally {
     S.generating = false;
   }

@@ -130,3 +130,32 @@ def signup(page, live_server):
         page.goto(live_server)
         return addr
     return _go
+
+
+@pytest.fixture
+def signed_in(page, signup):
+    """A fresh account with the first-run wizard already out of the way.
+
+    Every screen except onboarding itself opens *behind* that modal, whose
+    overlay silently eats the first click of any test that forgets it. The
+    modal has to be waited for rather than polled once — it opens a tick after
+    load, so an immediate is_visible() says no and the dismissal never happens.
+    A timeout is not fatal: whether the wizard appears at all is the wizard
+    tests' business, not every other screen's.
+    """
+    # Imported here, not at module scope: the importorskip above is what lets
+    # this package be collected on a machine with no playwright installed, and
+    # a top-level playwright import would run before it and defeat it.
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+    def _go(account_type: str = "creator") -> str:
+        addr = signup(account_type=account_type)
+        modal = page.locator("#onboarding-modal")
+        try:
+            modal.wait_for(state="visible", timeout=5000)
+        except PlaywrightTimeout:
+            return addr
+        page.get_by_text("Close setup").click()
+        modal.wait_for(state="hidden")
+        return addr
+    return _go
