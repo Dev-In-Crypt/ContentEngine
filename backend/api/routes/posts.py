@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -112,6 +113,7 @@ def _to_preview(post: PostModel) -> PostPreview:
     cc = post.claim_check if isinstance(post.claim_check, dict) else {}
     checked_claims = cc.get("claims") or []
     brand_flags = cc.get("brand") or {}
+    fact_check = cc.get("check") or {}
     return PostPreview(
         id=post.id,
         topic=post.topic,
@@ -132,6 +134,7 @@ def _to_preview(post: PostModel) -> PostPreview:
         claims=find_claims(claim_source),
         checked_claims=checked_claims,
         brand_flags=brand_flags,
+        fact_check=fact_check,
         scheduled_at=post.scheduled_at,
         published_at=post.published_at,
         schedule_error=post.schedule_error,
@@ -1446,3 +1449,48 @@ async def publish_reel(
         return PublishResult(success=True, instagram_media_id=media_id)
     except PublishError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+class VerifyPostRequest(BaseModel):
+    # Optional: the author's own source, pasted. Most creator posts cite nothing,
+    # and this is the only way such a post can be checked at all.
+    source_text: str = Field("", max_length=20000)
+
+
+@router.post("/{post_id}/verify", response_model=PostPreview)
+async def verify_post_claims(
+    post_id: str,
+    body: VerifyPostRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+    engine: Annotated[ContentEngine, Depends(get_content_engine)],
+    settings: Annotated[Settings, Depends(get_effective_settings)],
+) -> PostPreview:
+    """Check this post's factual claims against real source material. Opt-in.
+
+    Business drafts are verified automatically because they are written *from* a
+    source. A creator post is written from a topic, so the material has to be
+    assembled here: the pages a web-grounded model cited, plus anything the author
+    pastes. With neither, the result is an honest "nothing to check against" —
+    we do not ask the model to grade its own work from memory.
+    """
+    from services.fact_check import verify_post
+
+    post = await owned_post(db, post_id, user, options=_preview_opts())
+    draft_text = "\n".join([post.caption or "", *(post.thread_parts or [])]).strip()
+    urls = [s.get("url") for s in (post.sources or []) if isinstance(s, dict)]
+    _p, text_model, _k = resolve_ai_choice(user, settings, "text")
+
+    result = await verify_post(
+        engine.caption_gen.text_provider, draft_text=draft_text,
+        source_urls=urls, pasted=body.source_text, text_model=text_model,
+        ssl_verify=settings.ssl_verify)
+
+    # Keep any brand flags a Business draft already carries — this endpoint only
+    # owns the claim side.
+    existing = post.claim_check if isinstance(post.claim_check, dict) else {}
+    post.claim_check = {**existing, "claims": result["claims"],
+                        "check": {k: v for k, v in result.items() if k != "claims"}}
+    await db.commit()
+    await db.refresh(post)
+    return _to_preview(post)

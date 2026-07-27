@@ -125,7 +125,7 @@ finalize legal · Sentry on. *All four are owner/external gates; no engineering 
 
 | Item | P | Effort | Status | Gate | Notes |
 |---|---|---|---|---|---|
-| **Creator-side accuracy gate** | P1 | M | idea | 🟢 | Claim-check runs only for Business; creator posts ship AI figures unverified. Offer an opt-in check. |
+| **Creator-side accuracy gate** | P1 | M | shipped | 🟢 | `POST /api/posts/{id}/verify`: binds a creator post's claims to the pages a grounded model cited plus any source the author pastes. With no source it returns `no_source` and never calls the model — a model grading its own output is not a check. |
 | **Content-safety filter** | P2 | M | idea | 🟢 | Guard against unsafe/off-brand output before publish. |
 | **Brand-rules expansion** | P2 | S | idea | 🟢 | More deterministic rules (banned claims, mandatory disclaimers). |
 

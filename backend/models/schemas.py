@@ -294,6 +294,11 @@ class PostPreview(BaseModel):
     # Business (Phase 4): LLM-verified claims + brand-rule flags, read from Post.claim_check.
     checked_claims: list[VerifiedClaim] = []
     brand_flags: dict = {}             # {"forbidden":[...],"missing_disclaimers":[...]}
+    # Outcome of the opt-in creator fact check: {"status","sources_used","checked_at"}.
+    # Empty until it is run. Without the status the UI cannot tell "we checked and
+    # found nothing to flag" from "there was nothing to check against" — and those
+    # mean opposite things to an author about to publish.
+    fact_check: dict = {}
     scheduled_at: Optional[datetime] = None
     published_at: Optional[datetime] = None
     schedule_error: Optional[str] = None

@@ -744,9 +744,23 @@
 
     <!-- Claims to verify before posting under a brand -->
     <div id="claims-panel" class="hidden bg-yellow-950/40 border border-yellow-800/60 rounded-xl p-4 space-y-2">
-      <h3 class="text-sm font-semibold text-yellow-200 flex items-center gap-2">⚠️ Check before posting</h3>
-      <p class="text-xs text-yellow-200/70">These lines state a number or cite research. Verify them against the sources below before you publish under your brand — AI can round facts in its own favour.</p>
+      <h3 id="claims-title" class="text-sm font-semibold text-yellow-200 flex items-center gap-2">⚠️ Check before posting</h3>
+      <p id="claims-intro" class="text-xs text-yellow-200/70">These lines state a number or cite research. Verify them against the sources below before you publish under your brand — AI can round facts in its own favour.</p>
       <ul id="claims-list" class="space-y-1.5 text-xs"></ul>
+
+      <!-- Opt-in verification. Detection above is regex over your own text; this
+           binds each claim to a real source and costs an LLM call, so it is a
+           deliberate action rather than something we run on every render. -->
+      <div class="border-t border-yellow-800/40 pt-2 space-y-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button id="factcheck-btn" onclick="runFactCheck()" class="bg-yellow-800 hover:bg-yellow-700 transition rounded-lg px-3 py-1.5 text-xs font-semibold">🔍 Check against sources</button>
+          <button onclick="toggleFactSource()" class="text-xs underline text-yellow-200/70 hover:text-yellow-100">Paste a source</button>
+        </div>
+        <textarea id="factcheck-source" rows="4" maxlength="20000"
+          class="hidden ce-input w-full px-3 py-2 text-xs"
+          placeholder="Paste the page, article or release notes these facts come from. Without a source there is nothing to check against — we will not ask the AI to confirm its own numbers."></textarea>
+        <div id="factcheck-result" class="text-xs space-y-1"></div>
+      </div>
     </div>
 
     <!-- References (kept OUT of the post caption — for the author only) -->
@@ -3130,7 +3144,6 @@ function renderClaims(post) {
   const panel = document.getElementById('claims-panel');
   const list = document.getElementById('claims-list');
   const claims = (post && post.claims) || [];
-  if (!claims.length) { panel.classList.add('hidden'); list.innerHTML = ''; return; }
   list.innerHTML = '';
   claims.forEach(c => {
     const li = document.createElement('li');
@@ -3139,7 +3152,87 @@ function renderClaims(post) {
       `<span class="text-yellow-200/50"> — ${esc(c.reason)}</span>`;
     list.appendChild(li);
   });
-  panel.classList.remove('hidden');
+  // The panel also hosts the opt-in source check, so it stays available for a
+  // saved post even when the regex found nothing — plenty of unflagged captions
+  // still assert something. The wording drops the warning tone in that case.
+  const canVerify = !!(post && post.id && S.user && !S.user.is_local);
+  panel.classList.toggle('hidden', !claims.length && !canVerify);
+  document.getElementById('claims-title').textContent =
+    claims.length ? '⚠️ Check before posting' : '🔍 Check before posting';
+  document.getElementById('claims-intro').textContent = claims.length
+    ? 'These lines state a number or cite research. Verify them against a source before you publish under your brand — AI can round facts in its own favour.'
+    : 'Nothing here reads like a hard claim, but you can still check this post against a source.';
+  const box = document.getElementById('factcheck-source');
+  if (box) box.classList.add('hidden');
+  renderFactCheck(post);
+}
+
+// ===== OPT-IN FACT CHECK (creators) =====
+
+function toggleFactSource() {
+  const el = document.getElementById('factcheck-source');
+  el.classList.toggle('hidden');
+  if (!el.classList.contains('hidden')) el.focus();
+}
+
+/** Ask the server to bind this post's claims to real source material. */
+async function runFactCheck() {
+  const post = S.currentPost;
+  if (!post || !post.id) return;
+  const btn = document.getElementById('factcheck-btn');
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Checking…';
+  try {
+    const res = await apiFetch(`${API}/api/posts/${encodeURIComponent(post.id)}/verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_text: document.getElementById('factcheck-source').value || '' }),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'Check failed'); }
+    const updated = await res.json();
+    S.currentPost = { ...post, ...updated };
+    renderFactCheck(S.currentPost);
+  } catch (e) {
+    document.getElementById('factcheck-result').innerHTML =
+      `<div class="text-red-400">❌ ${esc(e.message)}</div>`;
+  } finally { btn.disabled = false; btn.textContent = prev; }
+}
+
+/** Show the verdict. "Nothing to check against" is a first-class outcome here,
+ *  not an empty list — an author reading a blank panel would assume it passed. */
+function renderFactCheck(post) {
+  const host = document.getElementById('factcheck-result');
+  if (!host) return;
+  const fc = (post && post.fact_check) || {};
+  const claims = (post && post.checked_claims) || [];
+  if (!fc.status) { host.innerHTML = ''; return; }
+
+  let html = '';
+  if (fc.status === 'no_source') {
+    html += `<div class="text-yellow-200">Nothing to check against yet — paste the source
+      above, or generate with web sources on. We won't ask the AI to confirm its own numbers.</div>`;
+  } else if (fc.status === 'error') {
+    html += `<div class="text-red-400">The check could not finish${fc.error ? ': ' + esc(fc.error) : '.'}
+      Nothing was verified.</div>`;
+  } else if (!claims.length) {
+    html += `<div class="text-yellow-200">Checked — the model found no factual claims to verify.</div>`;
+  } else {
+    claims.forEach(c => {
+      const ok = c.status === 'confirmed';
+      const tip = ok && c.evidence ? ` title="${esc(c.evidence)}"` : '';
+      html += `<div class="${ok ? 'text-green-400' : 'text-yellow-300'}"${tip}>` +
+        `${ok ? '✓' : '?'} ${esc(c.claim)}${ok ? '' : ' — not found in the source'}</div>`;
+    });
+  }
+  const used = fc.sources_used || [];
+  if (used.length) {
+    html += '<div class="text-gray-400 mt-1">Read: ' + used.map(u =>
+      `<span class="${u.ok ? '' : 'text-red-400'}">${esc(u.url)}${u.ok ? '' : ' (unreachable)'}</span>`
+    ).join(', ') + '</div>';
+  }
+  if (fc.checked_at) {
+    html += `<div class="text-gray-500">Checked ${new Date(fc.checked_at).toLocaleString()}</div>`;
+  }
+  host.innerHTML = html;
 }
 
 function renderReferences(post) {
