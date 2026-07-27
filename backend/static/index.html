@@ -100,18 +100,18 @@
 <header class="border-b sticky top-0 z-30" style="border-color:var(--border);background:var(--bg)">
   <div class="max-w-7xl mx-auto px-5 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
     <div class="flex items-center gap-2 cursor-pointer" onclick="goHome()" title="Home — new post">
-      <span class="text-lg" style="color:var(--accent)">✦</span>
+      <span class="text-lg" style="color:var(--accent)"></span>
       <span class="font-bold tracking-tight">Content Engine</span>
     </div>
     <div class="ml-auto flex items-center gap-2 flex-wrap justify-end">
       <select id="product-switcher" onchange="onProductSwitch()" class="hidden ce-input px-2 py-1 text-xs" title="Switch product: Creators / Business">
-        <option value="creator">🎨 Creators</option>
-        <option value="business">🏢 Business</option>
+        <option value="creator">Creators</option>
+        <option value="business">Business</option>
       </select>
       <select id="acct-switcher" onchange="onAcctSwitch()" class="hidden ce-input px-2 py-1 text-xs" title="Active brand"></select>
       <button id="acct-manage" onclick="openBrandsModal()" class="hidden ce-btn-ghost px-2.5 py-1 text-xs" title="Manage brands">Brands</button>
-      <button onclick="toggleTheme()" id="theme-toggle" class="ce-card px-2.5 py-1 text-xs" title="Toggle light / dark" aria-label="Toggle light or dark theme">☾</button>
-      <button id="cost-badge" onclick="showCostPopover()" class="hidden ce-card px-3 py-1 text-xs" title="LLM spend today (click for details)">💰 $0.00</button>
+      <button onclick="toggleTheme()" id="theme-toggle" class="ce-card px-2.5 py-1 text-xs" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <button id="cost-badge" onclick="showCostPopover()" class="hidden ce-card px-3 py-1 text-xs" title="LLM spend today (click for details)">$0.00</button>
       <span id="user-chip" class="hidden text-xs text-gray-300 ce-card px-3 py-1" title="Signed in"></span>
       <button id="logout-btn" onclick="logout()" class="hidden text-xs ce-btn-ghost px-3 py-1" title="Sign out">Log out</button>
     </div>
@@ -123,7 +123,7 @@
 <!-- ===== LANDING (guests, cloud mode) ===== -->
 <div id="landing-screen" class="hidden fixed inset-0 z-40 overflow-y-auto" style="background:var(--bg)">
   <header class="max-w-6xl mx-auto px-6 py-5 flex items-center gap-2">
-    <span class="text-xl" style="color:var(--accent)">✦</span>
+    <span class="text-xl" style="color:var(--accent)"></span>
     <span class="font-bold tracking-tight text-lg">Content Engine</span>
     <div class="ml-auto flex gap-2">
       <button onclick="showAuthScreen('login')" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-200 hover:bg-white/5 transition">Log in</button>
@@ -169,11 +169,11 @@
   <section class="max-w-5xl mx-auto px-6 py-10">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">EVERYTHING YOU NEED</div>
     <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="ce-card p-5"><div class="text-2xl mb-2">✍</div><div class="font-semibold mb-1">AI copywriting</div><div class="text-sm text-gray-400">Hook, caption, hashtags and SEO keywords, tuned to your tone.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2">🎴</div><div class="font-semibold mb-1">Branded slides</div><div class="text-sm text-gray-400">Carousels in your template — niche plate, title plate, logo.</div></div>
+      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">AI copywriting</div><div class="text-sm text-gray-400">Hook, caption, hashtags and SEO keywords, tuned to your tone.</div></div>
+      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">Branded slides</div><div class="text-sm text-gray-400">Carousels in your template — niche plate, title plate, logo.</div></div>
       <div class="ce-card p-5"><div class="text-2xl mb-2">▶</div><div class="font-semibold mb-1">Reels video</div><div class="text-sm text-gray-400">Turn a topic into a short-form video script and shot list.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2">🗓</div><div class="font-semibold mb-1">24/7 scheduler</div><div class="text-sm text-gray-400">Publishes from the server even when your computer is off.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2">📊</div><div class="font-semibold mb-1">Post analytics</div><div class="text-sm text-gray-400">Reach, saves, shares and comments pulled from the network.</div></div>
+      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">24/7 scheduler</div><div class="text-sm text-gray-400">Publishes from the server even when your computer is off.</div></div>
+      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">Post analytics</div><div class="text-sm text-gray-400">Reach, saves, shares and comments pulled from the network.</div></div>
     </div>
   </section>
 
@@ -261,7 +261,7 @@
 <div id="auth-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:var(--bg)">
   <div class="ce-card p-8 max-w-sm w-full space-y-4 shadow-2xl">
     <div class="flex items-center gap-2">
-      <span class="text-xl" style="color:var(--accent)">✦</span>
+      <span class="text-xl" style="color:var(--accent)"></span>
       <h2 class="text-lg font-bold">Content Engine</h2>
     </div>
     <div>
@@ -321,7 +321,7 @@
 
 <!-- ===== EMAIL-VERIFY BANNER (shown in-app when unverified) ===== -->
 <div id="verify-banner" class="hidden fixed top-0 inset-x-0 z-40 bg-yellow-900/90 border-b border-yellow-700 text-yellow-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
-  <span>📧 Please verify your email to enable publishing.</span>
+  <span>Please verify your email to enable publishing.</span>
   <button onclick="resendVerification()" class="underline font-semibold hover:text-white shrink-0">Resend email</button>
 </div>
 
@@ -346,7 +346,7 @@
 <!-- ===== MISSING-KEY ONBOARDING MODAL ===== -->
 <div id="need-key-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
   <div class="ce-card p-6 max-w-sm w-full space-y-3 shadow-2xl">
-    <div class="text-lg font-semibold" id="need-key-title">🔑 Add your API key</div>
+    <div class="text-lg font-semibold" id="need-key-title">Add your API key</div>
     <div class="text-sm text-gray-400" id="need-key-msg"></div>
     <div class="flex gap-2 pt-1">
       <button onclick="gotoNeedKey()" class="ce-btn flex-1 py-2 text-sm">Open settings</button>
@@ -388,7 +388,7 @@
     <nav class="flex flex-col gap-2 items-center sticky top-20">
       <button id="net-instagram" onclick="setNetwork('instagram')" title="Instagram" aria-label="Instagram" class="rail-net">📸</button>
       <button id="net-x" onclick="setNetwork('x')" title="X" aria-label="X (Twitter)" class="rail-net">𝕏</button>
-      <button disabled onclick="soonNetwork('TikTok')" title="TikTok — coming soon" class="rail-net rail-soon">♪</button>
+      <button disabled onclick="soonNetwork('TikTok')" title="TikTok — coming soon" class="rail-net rail-soon"></button>
       <button disabled onclick="soonNetwork('LinkedIn')" title="LinkedIn — coming soon" class="rail-net rail-soon text-sm font-bold">in</button>
       <button disabled onclick="soonNetwork('Facebook')" title="Facebook — coming soon" class="rail-net rail-soon font-bold">f</button>
       <button disabled onclick="soonNetwork('YouTube')" title="YouTube — coming soon" class="rail-net rail-soon">▶</button>
@@ -401,18 +401,18 @@
 
   <!-- top section nav (scoped to the active network) -->
   <div id="section-nav" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
-    <button data-section="create" onclick="setSection('create')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">✎ Create</button>
+    <button data-section="create" onclick="setSection('create')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
     <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▦ Calendar</button>
     <button data-section="feed" onclick="setSection('feed')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▤ Feed</button>
-    <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">📊 Analytics</button>
-    <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">🔗 Sources</button>
-    <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">📰 Leads</button>
-    <button data-section="biz-drafts" onclick="setSection('biz-drafts')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">✎ Drafts</button>
-    <button data-section="biz-analytics" onclick="setSection('biz-analytics')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">📊 Analytics</button>
-    <button data-section="biz-journal" onclick="setSection('biz-journal')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">📋 Journal</button>
-    <button data-section="biz-rules" onclick="setSection('biz-rules')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">🛡 Rules</button>
-    <button data-section="keys" onclick="setSection('keys')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">🔑 Connections</button>
-    <button data-section="account" onclick="setSection('account')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ml-auto">⚙ Account</button>
+    <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
+    <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
+    <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
+    <button data-section="biz-drafts" onclick="setSection('biz-drafts')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Drafts</button>
+    <button data-section="biz-analytics" onclick="setSection('biz-analytics')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
+    <button data-section="biz-journal" onclick="setSection('biz-journal')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
+    <button data-section="biz-rules" onclick="setSection('biz-rules')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Rules</button>
+    <button data-section="keys" onclick="setSection('keys')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Connections</button>
+    <button data-section="account" onclick="setSection('account')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ml-auto">Account</button>
   </div>
 
   <!-- ===== CREATE VIEW (wizard) ===== -->
@@ -431,7 +431,7 @@
 
   <!-- ===== STEP 1: TOPIC ===== -->
   <section id="step-1" class="step-section bg-gray-900 rounded-2xl p-6 space-y-5">
-    <h2 class="text-lg font-semibold text-purple-300">✏️ What should the post be about?</h2>
+    <h2 class="text-lg font-semibold text-purple-300">What should the post be about?</h2>
 
     <div>
       <label class="block text-sm text-gray-400 mb-1">Post to</label>
@@ -474,7 +474,7 @@
         </select>
       </div>
       <div>
-        <label class="block text-sm text-gray-400 mb-1">Additional instructions</label>
+        <label class="block text-sm text-gray-400 mb-1">Anything else the post should mention</label>
         <input id="instructions" type="text" placeholder="e.g. Include emojis, keep it short"
           class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
       </div>
@@ -490,7 +490,7 @@
         </div>
       </div>
       <div id="length-field">
-        <label class="block text-sm text-gray-400 mb-1">Caption length</label>
+        <label class="block text-sm text-gray-400 mb-1">How long should the caption be?</label>
         <select id="length-tier" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
           <option value="hook_zone">Hook Zone (~125)</option>
           <option value="sweet_spot" selected>Sweet Spot (125–150+)</option>
@@ -503,20 +503,20 @@
          step so the thread/style choice is visible without hunting through Settings. -->
     <div id="xmode-group" class="hidden space-y-4">
       <div>
-        <label class="block text-sm text-gray-400 mb-2">X post type</label>
+        <label class="block text-sm text-gray-400 mb-2">How should this post appear on X?</label>
         <div class="flex flex-wrap gap-2" id="xmode-btns">
-          <button data-val="short"  class="xmode-btn">💬 Short post</button>
-          <button data-val="thread" class="xmode-btn">🧵 Thread</button>
-          <button data-val="long"   class="xmode-btn" id="xmode-long">📜 Long post</button>
+          <button data-val="short"  class="xmode-btn">Short post</button>
+          <button data-val="thread" class="xmode-btn">Thread</button>
+          <button data-val="long"   class="xmode-btn" id="xmode-long">Long post</button>
         </div>
       </div>
       <div>
         <label class="block text-sm text-gray-400 mb-2">Style</label>
         <div class="flex flex-wrap gap-2" id="xstyle-btns">
-          <button data-val="standard"       class="xstyle-btn">📌 Standard</button>
-          <button data-val="educational"    class="xstyle-btn">🎓 Educational</button>
-          <button data-val="hot_take"       class="xstyle-btn">🔥 Hot take</button>
-          <button data-val="news_breakdown" class="xstyle-btn">📰 News</button>
+          <button data-val="standard"       class="xstyle-btn">Standard</button>
+          <button data-val="educational"    class="xstyle-btn">Educational</button>
+          <button data-val="hot_take"       class="xstyle-btn">Hot take</button>
+          <button data-val="news_breakdown" class="xstyle-btn">News</button>
         </div>
       </div>
       <p id="xmode-long-note" class="hidden text-xs text-yellow-300/80 mt-2">
@@ -548,14 +548,14 @@
 
   <!-- ===== STEP 2: FORMAT + SOURCE ===== -->
   <section id="step-2" class="step-section hidden bg-gray-900 rounded-2xl p-6 space-y-5">
-    <h2 class="text-lg font-semibold text-purple-300">⚙️ Format & images</h2>
+    <h2 class="text-lg font-semibold text-purple-300">Format & images</h2>
 
     <!-- Presets: apply a saved bundle of the settings below (cloud accounts only) -->
     <div id="preset-row" class="hidden flex flex-wrap items-center gap-2 bg-gray-800/60 rounded-xl px-3 py-2">
       <span class="text-xs text-gray-400">Preset</span>
       <select id="preset-select" class="ce-input px-2 py-1 text-sm min-w-[10rem]"></select>
       <button onclick="applySelectedPreset()" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
-      <button onclick="saveCurrentPreset()" class="ce-btn-ghost px-3 py-1 text-xs">💾 Save current</button>
+      <button onclick="saveCurrentPreset()" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
       <button onclick="deleteSelectedPreset()" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
       <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
     </div>
@@ -564,30 +564,30 @@
     <div id="format-group">
       <label class="block text-sm text-gray-400 mb-2">Post format</label>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="format-btns">
-        <button data-val="single"       class="fmt-btn">🖼 Single image</button>
-        <button data-val="carousel_3"   class="fmt-btn">🎠 Carousel 3</button>
-        <button data-val="carousel_5"   class="fmt-btn">🎠 Carousel 5</button>
-        <button data-val="carousel_10"  class="fmt-btn">🎠 Carousel 10</button>
-        <button data-val="infographic"  class="fmt-btn">📊 Infographic</button>
+        <button data-val="single"       class="fmt-btn">Single image</button>
+        <button data-val="carousel_3"   class="fmt-btn">Carousel 3</button>
+        <button data-val="carousel_5"   class="fmt-btn">Carousel 5</button>
+        <button data-val="carousel_10"  class="fmt-btn">Carousel 10</button>
+        <button data-val="infographic"  class="fmt-btn">Infographic</button>
       </div>
     </div>
 
     <div>
       <label class="block text-sm text-gray-400 mb-2">Image source</label>
       <div class="flex flex-wrap gap-2" id="source-btns">
-        <button data-val="stock"  class="src-btn">📷 Stock photos</button>
-        <button data-val="ai_gen" class="src-btn">🎨 AI generated</button>
-        <button data-val="upload" class="src-btn">📁 My photos</button>
-        <button data-val="canva"  class="src-btn">🎯 Canva template</button>
+        <button data-val="stock"  class="src-btn">Stock photos</button>
+        <button data-val="ai_gen" class="src-btn">AI generated</button>
+        <button data-val="upload" class="src-btn">My photos</button>
+        <button data-val="canva"  class="src-btn">Canva template</button>
         <!-- Text-only is a pure-text post (no image). X only — shown/hidden in setNetwork. -->
-        <button data-val="text_only" id="src-text-only" class="src-btn hidden">📝 Text only</button>
+        <button data-val="text_only" id="src-text-only" class="src-btn hidden">Text only</button>
       </div>
 
       <!-- Own photos: shown only while "My photos" is the source (see onSourceChange). -->
       <div id="own-photos" class="hidden mt-3 space-y-2">
         <div class="flex flex-wrap items-center gap-3">
           <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
-            📁 Choose photos
+            Choose photos
             <input id="own-photos-input" type="file" multiple
               accept="image/jpeg,image/png,image/webp" class="hidden"
               onchange="addOwnPhotos(event)" />
@@ -602,38 +602,45 @@
       </div>
     </div>
 
-    <div id="template-group">
-      <label class="block text-sm text-gray-400 mb-2">Template style</label>
-      <div class="flex flex-wrap gap-2" id="template-btns">
-        <button data-val="branded_card" class="tpl-btn">🪪 Branded card (portrait)</button>
-        <button data-val="square"       class="tpl-btn">⬜ Square (legacy)</button>
-        <!-- Plain photo = no branding: the clean photo, caption goes to the caption field. -->
-        <button data-val="plain"        class="tpl-btn">🖼 Plain photo (no text)</button>
+    <details id="look-details" class="border border-gray-800 rounded-xl">
+      <summary class="cursor-pointer select-none px-4 py-2.5 text-sm text-gray-300">
+        Look and feel <span class="text-gray-500">— image style, colours, logo</span>
+      </summary>
+      <div class="px-4 pb-4 pt-1 space-y-4">
+      <div id="template-group">
+        <label class="block text-sm text-gray-400 mb-2">How should the image look?</label>
+        <div class="flex flex-wrap gap-2" id="template-btns">
+          <button data-val="branded_card" class="tpl-btn">Branded card (portrait)</button>
+          <button data-val="square"       class="tpl-btn">Square (legacy)</button>
+          <!-- Plain photo = no branding: the clean photo, caption goes to the caption field. -->
+          <button data-val="plain"        class="tpl-btn">Plain photo (no text)</button>
+        </div>
       </div>
-    </div>
 
-    <div id="niche-group">
-      <label class="block text-sm text-gray-400 mb-2">Niche box color</label>
-      <div class="flex flex-wrap gap-2" id="niche-color-swatches"></div>
-    </div>
+      <div id="niche-group">
+        <label class="block text-sm text-gray-400 mb-2">Highlight colour</label>
+        <div class="flex flex-wrap gap-2" id="niche-color-swatches"></div>
+      </div>
 
-    <!-- Hidden: driven by the Template style choice (Plain photo → off). -->
-    <div id="apply-brand-row" class="hidden items-center gap-3">
-      <input type="checkbox" id="apply-brand" checked class="w-4 h-4 accent-purple-500" />
-      <label for="apply-brand" class="text-sm text-gray-300">Apply branding (boxes + text overlay)</label>
-    </div>
+      <!-- Hidden: driven by the Template style choice (Plain photo → off). -->
+      <div id="apply-brand-row" class="hidden items-center gap-3">
+        <input type="checkbox" id="apply-brand" checked class="w-4 h-4 accent-purple-500" />
+        <label for="apply-brand" class="text-sm text-gray-300">Put your text and colours on the image</label>
+      </div>
 
-    <div id="show-logo-row" class="flex items-center gap-3">
-      <input type="checkbox" id="show-logo" checked class="w-4 h-4 accent-purple-500" />
-      <label for="show-logo" class="text-sm text-gray-300">Show logo on slides</label>
-    </div>
+      <div id="show-logo-row" class="flex items-center gap-3">
+        <input type="checkbox" id="show-logo" checked class="w-4 h-4 accent-purple-500" />
+        <label for="show-logo" class="text-sm text-gray-300">Show my logo on the image</label>
+      </div>
+      </div>
+    </details>
 
     <div class="flex gap-3">
       <button onclick="goStep(1)" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-3 font-semibold">
         ← Back
       </button>
       <button id="generate-btn" onclick="generatePost()" class="flex-1 bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
-        ✨ Generate
+        Generate
       </button>
     </div>
   </section>
@@ -655,10 +662,10 @@
   <!-- ===== STEP 4: PREVIEW + EDIT ===== -->
   <section id="step-4" class="step-section hidden bg-gray-900 rounded-2xl p-6 space-y-6">
     <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-purple-300">👀 Preview & Edit</h2>
+      <h2 class="text-lg font-semibold text-purple-300">Preview & Edit</h2>
       <div class="flex items-center gap-2">
         <button onclick="showStep(2)" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">← Back</button>
-        <button onclick="generatePost()" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">🔄 Regenerate</button>
+        <button onclick="generatePost()" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">Regenerate</button>
       </div>
     </div>
 
@@ -673,7 +680,7 @@
     <!-- Thread editor — replaces the single caption box when the post is a thread -->
     <div id="thread-editor" class="hidden">
       <div class="flex items-center justify-between mb-2">
-        <label class="block text-sm text-gray-400">🧵 Thread <span id="thread-count" class="text-gray-600"></span></label>
+        <label class="block text-sm text-gray-400">Thread <span id="thread-count" class="text-gray-600"></span></label>
       </div>
       <div id="thread-parts" class="space-y-2"></div>
     </div>
@@ -684,8 +691,8 @@
         <label id="caption-label" class="block text-sm text-gray-400">Caption</label>
         <div class="flex items-center gap-3">
           <span id="caption-count" class="hidden text-xs font-mono text-gray-500"></span>
-          <button id="split-thread-btn" onclick="splitIntoThread()" class="hidden text-xs text-purple-400 hover:text-purple-300">✂ Split into thread</button>
-          <button onclick="showVariations('caption')" class="text-xs text-purple-400 hover:text-purple-300">↻ Variations</button>
+          <button id="split-thread-btn" onclick="splitIntoThread()" class="hidden text-xs text-purple-400 hover:text-purple-300">Split into thread</button>
+          <button onclick="showVariations('caption')" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
         </div>
       </div>
       <textarea id="caption-edit" rows="5"
@@ -697,7 +704,7 @@
       <div class="flex items-center justify-between mb-2">
         <label class="block text-sm text-gray-400">Hashtags</label>
         <div class="flex gap-3">
-          <button onclick="showVariations('hashtags')" class="text-xs text-purple-400 hover:text-purple-300">↻ Variations</button>
+          <button onclick="showVariations('hashtags')" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
         </div>
       </div>
       <div id="hashtag-container" class="flex flex-wrap gap-2 p-3 bg-gray-800 rounded-xl min-h-[44px]"></div>
@@ -711,8 +718,8 @@
     <!-- SEO keywords (separate from hashtags). Instagram-only — hidden on X. -->
     <div id="seo-group">
       <div class="flex items-center justify-between mb-2">
-        <label class="block text-sm text-gray-400">🔍 SEO keywords <span class="text-gray-600">(Instagram search)</span></label>
-        <button onclick="showVariations('seo_keywords')" class="text-xs text-purple-400 hover:text-purple-300">↻ Variations</button>
+        <label class="block text-sm text-gray-400">SEO keywords <span class="text-gray-600">(Instagram search)</span></label>
+        <button onclick="showVariations('seo_keywords')" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
       </div>
       <div id="seo-container" class="flex flex-wrap gap-2 p-3 bg-gray-800 rounded-xl min-h-[44px]"></div>
     </div>
@@ -720,7 +727,7 @@
     <!-- Variations popover -->
     <div id="variations-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-40 p-4">
       <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl">
-        <h3 id="variations-title" class="text-lg font-semibold text-purple-300">↻ Variations</h3>
+        <h3 id="variations-title" class="text-lg font-semibold text-purple-300">Variations</h3>
         <div id="variations-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
         <button onclick="closeVariations()" class="w-full bg-gray-700 hover:bg-gray-600 rounded-lg py-2 text-sm">Close</button>
       </div>
@@ -737,9 +744,9 @@
 
     <div class="flex gap-2">
       <button id="save-caption-btn" onclick="saveCaption()" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-2.5 text-sm font-semibold">
-        💾 Save edits
+        Save edits
       </button>
-      <button id="undo-btn" onclick="undoEdit()" class="hidden bg-gray-800 hover:bg-gray-700 transition rounded-xl px-4 py-2.5 text-sm" title="Undo last saved edit" aria-label="Undo last saved edit">↶ Undo</button>
+      <button id="undo-btn" onclick="undoEdit()" class="hidden bg-gray-800 hover:bg-gray-700 transition rounded-xl px-4 py-2.5 text-sm" title="Undo last saved edit" aria-label="Undo last saved edit">Undo</button>
     </div>
 
     <!-- Claims to verify before posting under a brand -->
@@ -753,7 +760,7 @@
            deliberate action rather than something we run on every render. -->
       <div class="border-t border-yellow-800/40 pt-2 space-y-2">
         <div class="flex items-center gap-2 flex-wrap">
-          <button id="factcheck-btn" onclick="runFactCheck()" class="bg-yellow-800 hover:bg-yellow-700 transition rounded-lg px-3 py-1.5 text-xs font-semibold">🔍 Check against sources</button>
+          <button id="factcheck-btn" onclick="runFactCheck()" class="bg-yellow-800 hover:bg-yellow-700 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Check against sources</button>
           <button onclick="toggleFactSource()" class="text-xs underline text-yellow-200/70 hover:text-yellow-100">Paste a source</button>
         </div>
         <textarea id="factcheck-source" rows="4" maxlength="20000"
@@ -782,8 +789,8 @@
     <!-- Performance (published posts) -->
     <div id="performance-panel" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
       <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-green-300">📊 Performance</h3>
-        <button onclick="refreshInsights()" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1 text-xs font-semibold">🔄 Refresh</button>
+        <h3 class="text-sm font-semibold text-green-300">Performance</h3>
+        <button onclick="refreshInsights()" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1 text-xs font-semibold">Refresh</button>
       </div>
       <div id="insights-numbers" class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs"></div>
     </div>
@@ -797,7 +804,7 @@
       <div class="flex gap-2">
         <input id="schedule-dt" type="datetime-local" aria-label="Schedule date and time"
           class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
-        <button id="schedule-btn" onclick="schedulePost()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Schedule</button>
+        <button id="schedule-btn" onclick="schedulePost()" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Schedule</button>
         <button onclick="unschedulePost()" id="unschedule-btn" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-3 py-2 text-sm">Cancel</button>
       </div>
     </div>
@@ -805,8 +812,8 @@
     <!-- Reel (video) — built from slides, so hidden for a text-only post -->
     <div id="reel-card" class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
       <div class="flex items-center justify-between">
-        <label class="text-sm font-semibold text-purple-300">🎬 Reel (video from slides)</label>
-        <button onclick="makeReel()" id="make-reel-btn" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-1.5 text-sm font-semibold">Make Reel</button>
+        <label class="text-sm font-semibold text-purple-300">Turn this post into a video</label>
+        <button onclick="makeReel()" id="make-reel-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-1.5 text-sm font-semibold">Make Reel</button>
       </div>
       <div class="flex items-center gap-2 flex-wrap text-xs">
         <label class="flex items-center gap-1.5 cursor-pointer text-gray-300">
@@ -816,7 +823,7 @@
         <input id="reel-voice-id" type="text" placeholder="Voice ID (default: Rachel)"
                class="ce-input px-2 py-1 text-xs w-52" />
         <select id="reel-visuals" disabled class="ce-input px-2 py-1 text-xs" title="B-roll needs a Pexels key (Account → API keys)">
-          <option value="slides">🖼 Slides</option>
+          <option value="slides">Slides</option>
           <option value="broll">🎞 Stock b-roll</option>
         </select>
         <label class="flex items-center gap-1.5 cursor-pointer text-gray-300" title="Your uploaded track, ducked under the voice (Account → Reel music)">
@@ -858,14 +865,14 @@
   <div id="view-calendar" class="hidden space-y-4">
     <!-- Content pillars mix -->
     <section class="bg-gray-900 rounded-2xl p-6 space-y-3">
-      <h2 class="text-lg font-semibold text-purple-300">🎯 Content pillars</h2>
+      <h2 class="text-lg font-semibold text-purple-300">Content pillars</h2>
       <div id="pillar-suggestion" class="text-sm bg-purple-950/40 border border-purple-900 rounded-lg px-3 py-2"></div>
       <div id="pillar-bars" class="space-y-2"></div>
     </section>
 
     <!-- Plan a week: propose topics (cheap), review, then generate as drafts -->
     <section class="bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">🗓 Plan a week</h2>
+      <h2 class="text-lg font-semibold text-purple-300">Plan a week</h2>
       <p class="text-xs text-gray-500">Get a balanced set of topics first — edit or drop any before you spend on full generation. Posts land as drafts on the calendar for you to review; nothing is published automatically.</p>
 
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -901,14 +908,14 @@
         </div>
       </div>
 
-      <button id="plan-suggest-btn" onclick="suggestPlan()" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">✨ Suggest topics</button>
+      <button id="plan-suggest-btn" onclick="suggestPlan()" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Suggest topics</button>
 
       <div id="plan-list" class="hidden space-y-2"></div>
 
       <div id="plan-actions" class="hidden flex flex-wrap items-center gap-3 border-t border-gray-800 pt-3">
         <button id="plan-add-btn" onclick="addPlanRow()" class="ce-btn-ghost px-3 py-1.5 text-sm">+ Add topic</button>
         <span id="plan-estimate" class="text-xs text-gray-500"></span>
-        <button id="plan-generate-btn" onclick="runBatch()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold ml-auto">✨ Generate posts</button>
+        <button id="plan-generate-btn" onclick="runBatch()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold ml-auto">Generate posts</button>
       </div>
       <div id="plan-progress" class="hidden text-sm text-gray-300"></div>
     </section>
@@ -951,28 +958,28 @@
     <!-- Personal API keys (cloud accounts only) -->
     <section id="keys-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <div class="flex items-center justify-between gap-3 flex-wrap">
-        <h2 id="keys-title" class="text-lg font-semibold text-purple-300">🔑 Your API keys</h2>
-        <button onclick="startSetupWizard()" class="ce-btn-ghost px-3 py-1.5 text-xs whitespace-nowrap">🧭 Setup guide</button>
+        <h2 id="keys-title" class="text-lg font-semibold text-purple-300">Your API keys</h2>
+        <button onclick="startSetupWizard()" class="ce-btn-ghost px-3 py-1.5 text-xs whitespace-nowrap">Setup guide</button>
       </div>
       <p class="text-xs text-gray-500">Stored encrypted and used only for your posts. Leave a field blank to keep the current value; the placeholder shows what's set.</p>
       <div id="conn-health" class="hidden space-y-2"></div>
       <div id="keys-form" class="space-y-4"></div>
       <div class="flex items-center gap-3 flex-wrap">
-        <button id="save-keys-btn" onclick="saveCredentials()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save keys</button>
+        <button id="save-keys-btn" onclick="saveCredentials()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save keys</button>
         <button id="renew-ig-btn" onclick="renewInstagramToken()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">♻️ Renew Instagram token</button>
-        <button id="test-conn-btn" onclick="testPublishConnection()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">🔌 Test connection</button>
-        <button id="test-x-btn" onclick="testPublishConnection('x')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">🔌 Test 𝕏</button>
-        <button id="test-ig-btn" onclick="testPublishConnection('instagram')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">🔌 Test Instagram</button>
+        <button id="test-conn-btn" onclick="testPublishConnection()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test connection</button>
+        <button id="test-x-btn" onclick="testPublishConnection('x')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test 𝕏</button>
+        <button id="test-ig-btn" onclick="testPublishConnection('instagram')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test Instagram</button>
         <span id="test-conn-result" class="text-sm"></span>
       </div>
     </section>
 
     <!-- AI models (cloud accounts only) -->
     <section id="ai-models-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">🤖 AI models</h2>
+      <h2 class="text-lg font-semibold text-purple-300">AI models</h2>
       <p class="text-xs text-gray-500">Choose who generates your content and paste that provider's key — you pay them directly. Text and images are independent, so you can mix providers. Not sure? OpenRouter gives every vendor's models with one key.</p>
       <div id="ai-models-form" class="space-y-5"></div>
-      <button id="save-ai-btn" onclick="saveAISettings()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save AI settings</button>
+      <button id="save-ai-btn" onclick="saveAISettings()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save AI settings</button>
     </section>
 
     <!-- Brand profile (cloud accounts only) -->
@@ -994,7 +1001,7 @@
         <input id="profile-brand" type="text" maxlength="120" placeholder="e.g. Crumb & Co"
           class="ce-input w-full px-3 py-2 text-sm" />
       </div>
-      <button id="save-profile-btn" onclick="saveProfile()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save profile</button>
+      <button id="save-profile-btn" onclick="saveProfile()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save profile</button>
     </section>
 
     <!-- X plan (cloud accounts only) -->
@@ -1005,12 +1012,12 @@
         <input id="x-premium" type="checkbox" class="w-4 h-4 accent-purple-500" />
         My X account has Premium
       </label>
-      <button id="save-x-btn" onclick="saveXSettings()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save</button>
+      <button id="save-x-btn" onclick="saveXSettings()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save</button>
     </section>
 
     <!-- Slide colours (cloud accounts only) -->
     <section id="slide-style-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">🎨 Slide colours</h2>
+      <h2 class="text-lg font-semibold text-purple-300">Slide colours</h2>
       <p class="text-xs text-gray-500">Your brand colours for generated slides. Any colour works — text on the boxes is auto-set to black or white so it stays readable. Leave empty to use the default.</p>
       <div class="flex flex-wrap gap-6">
         <div>
@@ -1034,8 +1041,8 @@
       </div>
       <div id="style-swatches" class="flex flex-wrap gap-2"></div>
       <div class="flex gap-2">
-        <button id="save-style-btn" onclick="saveSlideStyle()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save colours</button>
-        <button onclick="resetSlideStyle()" class="ce-btn-ghost px-4 py-2 text-sm">↶ Reset to default</button>
+        <button id="save-style-btn" onclick="saveSlideStyle()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save colours</button>
+        <button onclick="resetSlideStyle()" class="ce-btn-ghost px-4 py-2 text-sm">Reset to default</button>
       </div>
 
       <!-- Brand logo -->
@@ -1046,7 +1053,7 @@
           <div id="logo-preview" class="w-16 h-16 rounded-lg border border-gray-700 flex items-center justify-center text-[10px] text-gray-600"
             style="background-image:linear-gradient(45deg,#374151 25%,transparent 25%),linear-gradient(-45deg,#374151 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#374151 75%),linear-gradient(-45deg,transparent 75%,#374151 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;">none</div>
           <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
-            📁 Upload logo
+            Upload logo
             <input id="logo-input" type="file" accept="image/png,image/webp,image/jpeg" class="hidden" onchange="uploadLogo(event)" />
           </label>
           <button id="logo-remove-btn" onclick="removeLogo()" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
@@ -1060,7 +1067,7 @@
         <div class="flex items-center gap-3">
           <span id="music-state" class="text-xs text-gray-500">no track uploaded</span>
           <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
-            📁 Upload track
+            Upload track
             <input id="music-input" type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav" class="hidden" onchange="uploadMusic(event)" />
           </label>
           <button id="music-remove-btn" onclick="removeMusic()" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
@@ -1080,17 +1087,17 @@
           placeholder="Describe how your brand sounds — tone, personality, who you speak to. Example: Warm and encouraging, like a coach who believes in you. Speak directly to 'you', keep it simple, celebrate small wins, never preachy."
           class="ce-input w-full px-3 py-2 text-sm"></textarea>
       </div>
-      <button id="save-voice-btn" onclick="saveBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">💾 Save voice</button>
+      <button id="save-voice-btn" onclick="saveBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save voice</button>
     </section>
 
     <section id="usage-section" class="bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">📊 Usage</h2>
+      <h2 class="text-lg font-semibold text-purple-300">Usage</h2>
       <div id="admin-usage" class="text-sm text-gray-300 bg-gray-800 rounded-lg p-3">Loading usage…</div>
     </section>
 
     <!-- Whole-DB backup/restore — admin / local desktop only -->
     <section id="backup-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">💾 Backup & Restore</h2>
+      <h2 class="text-lg font-semibold text-purple-300">Backup & Restore</h2>
       <div class="flex flex-wrap gap-3">
         <button onclick="downloadBackup()" class="bg-blue-700 hover:bg-blue-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download backup</button>
         <label class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer">
@@ -1109,7 +1116,7 @@
         <p class="text-xs text-gray-500">A ZIP with everything we hold about your account — profile, posts, captions, generated images, Business sources and leads. API keys are listed as set or not set only: we never write a usable key into a file you might forward.</p>
       </div>
       <div class="border-t border-gray-800 pt-4 space-y-2">
-        <button onclick="openDeleteAccount()" class="bg-red-800 hover:bg-red-700 transition rounded-lg px-4 py-2 text-sm font-semibold">🗑 Delete my account</button>
+        <button onclick="openDeleteAccount()" class="bg-red-800 hover:bg-red-700 transition rounded-lg px-4 py-2 text-sm font-semibold">Delete my account</button>
         <p class="text-xs text-gray-500">Erases your account, posts, images and keys from our servers. This cannot be undone — download your data first if you want to keep it.</p>
       </div>
     </section>
@@ -1121,7 +1128,7 @@
      to destroy someone's work. -->
 <div id="delete-account-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
   <div class="ce-card p-6 max-w-sm w-full space-y-3 shadow-2xl">
-    <div class="text-lg font-semibold text-red-300">🗑 Delete your account</div>
+    <div class="text-lg font-semibold text-red-300">Delete your account</div>
     <div class="text-sm text-gray-400">This erases your posts, images, Business workspace and stored keys. It cannot be undone.</div>
     <div>
       <label class="block text-xs text-gray-400 mb-1">Type your password to confirm</label>
@@ -1139,7 +1146,7 @@
   <!-- ===== ANALYTICS VIEW ===== -->
   <div id="view-analytics" class="hidden space-y-4">
     <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">📊 Analytics</h2>
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Analytics</h2>
       <p class="text-xs text-gray-400 mt-1">Your published <span class="analytics-net">Instagram</span> posts — open each to view it on the network. (In-app metrics are Instagram-only.)</p>
       <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
     </div>
@@ -1148,7 +1155,7 @@
   <!-- ===== BUSINESS: Sources ===== -->
   <div id="view-biz-sources" class="hidden space-y-4">
     <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">🔗 Sources</h2>
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Sources</h2>
       <p class="text-xs text-gray-400 mt-1">Public links we watch for you — release notes, an RSS feed, a changelog page. We check them hourly and collect what's worth posting into Leads.</p>
       <div class="mt-4 flex flex-col sm:flex-row gap-2">
         <input id="biz-source-url" type="url" placeholder="https://github.com/your-org/your-repo" class="ce-input flex-1 px-4 py-3" />
@@ -1163,7 +1170,7 @@
   <div id="view-biz-leads" class="hidden space-y-4">
     <div class="ce-card p-5">
       <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-lg font-semibold" style="color:var(--accent)">📰 Leads</h2>
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Leads</h2>
         <span class="text-xs text-gray-400">Newsworthy updates from your sources. Pick one to draft a post.</span>
         <button id="biz-digest-btn" onclick="makeDigest()" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto hidden">Make digest from selected</button>
       </div>
@@ -1174,7 +1181,7 @@
   <!-- ===== BUSINESS: Drafts ===== -->
   <div id="view-biz-drafts" class="hidden space-y-4">
     <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">✎ Drafts</h2>
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Drafts</h2>
       <p class="text-xs text-gray-400 mt-1">Posts drafted from your leads. A person reviews and approves before anything goes out.</p>
       <div id="biz-drafts-list" class="mt-4 space-y-3">Loading…</div>
     </div>
@@ -1183,7 +1190,7 @@
   <!-- ===== BUSINESS: Source analytics ===== -->
   <div id="view-biz-analytics" class="hidden space-y-4">
     <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">📊 Source analytics</h2>
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Source analytics</h2>
       <p class="text-xs text-gray-400 mt-1">Which sources give you the best posts — ranked by your pipeline: leads → worthy → drafts → approved. Engagement stats arrive once publishing is enabled.</p>
       <div id="biz-analytics-totals" class="mt-4"></div>
       <div id="biz-analytics-list" class="mt-4 space-y-2">Loading…</div>
@@ -1194,7 +1201,7 @@
   <div id="view-biz-journal" class="hidden space-y-4">
     <div class="ce-card p-5">
       <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-lg font-semibold" style="color:var(--accent)">📋 Journal</h2>
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Journal</h2>
         <span class="text-xs text-gray-400">Every approval, with the AI draft vs the human's edits — your audit trail.</span>
         <span class="ml-auto flex gap-2">
           <button onclick="exportJournal('csv')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export CSV</button>
@@ -1213,7 +1220,7 @@
   <!-- ===== BUSINESS: Brand rules ===== -->
   <div id="view-biz-rules" class="hidden space-y-4">
     <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">🛡 Brand rules</h2>
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Brand rules</h2>
       <p class="text-xs text-gray-400 mt-1">Not a legal check — just what your brand allows. Forbidden phrases block approval; required disclaimers must appear in every post. One phrase per line.</p>
       <div class="mt-4 grid sm:grid-cols-2 gap-4">
         <div>
@@ -1245,7 +1252,7 @@
   <div id="brands-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-40 p-4">
     <div class="ce-card p-6 max-w-lg w-full space-y-4 shadow-2xl" style="max-height:90vh;overflow-y:auto">
       <div class="flex items-center gap-2">
-        <h3 class="text-lg font-semibold" style="color:var(--accent)">🎨 Brands</h3>
+        <h3 class="text-lg font-semibold" style="color:var(--accent)">Brands</h3>
         <span class="text-xs text-gray-400">Manage client brands. Each has its own voice, profile and logo. Posts publish to your own connected account for now.</span>
         <button onclick="closeBrandsModal()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
       </div>
@@ -1282,14 +1289,14 @@
   <!-- ===== Edit Slide Modal ===== -->
   <div id="edit-slide-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-40 p-4">
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-      <h3 class="text-lg font-semibold text-purple-300">🖼 Replace this slide</h3>
+      <h3 class="text-lg font-semibold text-purple-300">Replace this slide</h3>
       <p id="edit-slide-label" class="text-xs text-gray-500"></p>
 
       <div>
         <label class="block text-xs text-gray-400 mb-1">Image source</label>
         <div class="flex gap-2">
-          <button data-edit-src="stock"  class="edit-src-btn px-3 py-1.5 rounded-lg text-xs border-2">📷 Stock</button>
-          <button data-edit-src="ai_gen" class="edit-src-btn px-3 py-1.5 rounded-lg text-xs border-2">🤖 AI gen</button>
+          <button data-edit-src="stock"  class="edit-src-btn px-3 py-1.5 rounded-lg text-xs border-2">Stock</button>
+          <button data-edit-src="ai_gen" class="edit-src-btn px-3 py-1.5 rounded-lg text-xs border-2">AI gen</button>
         </div>
       </div>
 
@@ -1308,10 +1315,10 @@
 
       <div class="flex flex-col gap-2 pt-1">
         <button id="edit-replace-btn" onclick="submitReplaceSlide()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg py-2 text-sm font-semibold">
-          🔄 Replace
+          Replace
         </button>
         <label class="bg-gray-700 hover:bg-gray-600 transition rounded-lg py-2 text-sm font-semibold text-center cursor-pointer">
-          📁 Upload custom image
+          Upload custom image
           <input id="edit-upload-input" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="submitUploadSlide(event)" />
         </label>
         <button onclick="closeEditSlide()" class="bg-gray-800 hover:bg-gray-700 transition rounded-lg py-2 text-sm">Cancel</button>
@@ -1539,7 +1546,7 @@ function renderSourceRow(s) {
       <a href="${safeUrl(s.url)}" target="_blank" rel="noopener noreferrer" class="text-sm underline break-all" style="color:var(--accent)">${esc(s.url)}</a>
       <div class="text-xs text-gray-500 mt-0.5">${esc(s.kind)} · <span style="color:${st.color}">${st.label}</span></div>
     </div>
-    <button class="ce-btn-ghost px-2 py-1 text-xs" data-act="refresh">↻ Refresh</button>
+    <button class="ce-btn-ghost px-2 py-1 text-xs" data-act="refresh">Refresh</button>
     <button class="ce-btn-ghost px-2 py-1 text-xs" data-act="delete">✕</button>
   `;
   row.querySelector('[data-act="refresh"]').onclick = () => refreshSource(s.id);
@@ -1625,10 +1632,10 @@ function renderLeadRow(lead) {
         <option value="x">X</option>
       </select>
       <select class="ce-input px-2 py-1.5 text-xs hidden" data-role="xmode" title="X post shape">
-        <option value="short">💬 Short</option>
-        <option value="thread">🧵 Thread</option>
+        <option value="short">Short</option>
+        <option value="thread">Thread</option>
       </select>
-      <button class="ce-btn px-3 py-1.5 text-xs" data-act="post">✎ Make a post</button>
+      <button class="ce-btn px-3 py-1.5 text-xs" data-act="post">Make a post</button>
       <button class="ce-btn-ghost px-3 py-1.5 text-xs" data-act="dismiss">Skip</button>
       <button class="ce-btn-ghost px-3 py-1.5 text-xs" data-act="snooze">Don't show this kind</button>
     </div>
@@ -1733,8 +1740,8 @@ function renderDraftRow(p) {
     <div class="flex items-center gap-2 mb-1 flex-wrap">
       <span class="text-xs font-semibold" style="color:${st.color}">● ${st.label}</span>
       <span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--accent-dim)">${netLabel}</span>
-      ${threadN > 1 ? `<span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--accent-dim)">🧵 ${threadN} tweets</span>` : ''}
-      <span class="text-xs text-gray-500">🔗 ${origin}${p.source_url ? ` · <a href="${safeUrl(p.source_url)}" target="_blank" rel="noopener noreferrer" class="underline" style="color:var(--accent)">source</a>` : ''}</span>
+      ${threadN > 1 ? `<span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--accent-dim)">${threadN} tweets</span>` : ''}
+      <span class="text-xs text-gray-500">${origin}${p.source_url ? ` · <a href="${safeUrl(p.source_url)}" target="_blank" rel="noopener noreferrer" class="underline" style="color:var(--accent)">source</a>` : ''}</span>
     </div>
     ${p.hook ? `<div class="font-semibold text-sm">${esc(p.hook)}</div>` : ''}
     ${editable
@@ -1846,7 +1853,7 @@ function renderJournalRow(a) {
   row.innerHTML = `
     <div class="text-xs text-gray-500">${esc(when)}${a.source_url ? ` · <a href="${safeUrl(a.source_url)}" target="_blank" rel="noopener noreferrer" class="underline" style="color:var(--accent)">source</a>` : ''}</div>
     <div class="mt-1 whitespace-pre-line">${esc(a.human_edits || a.ai_draft || '')}</div>
-    ${edited ? '<div class="text-xs text-gray-400 mt-1">✎ edited by a human before approval</div>' : ''}
+    ${edited ? '<div class="text-xs text-gray-400 mt-1">edited by a human before approval</div>' : ''}
   `;
   return row;
 }
@@ -1901,7 +1908,7 @@ function renderSourceAnalyticsRow(s, i) {
     <div class="mt-2 grid grid-cols-5 gap-2 text-center">
       ${cell(s.leads_total, 'leads')}${cell(s.worthy, 'worthy')}${cell(s.drafts, 'drafts')}${cell(s.approved, 'approved')}${cell(s.published, 'published')}
     </div>
-    ${s.measured_posts ? `<div class="mt-2 text-xs text-gray-300">📊 reach <b>${esc(String(s.reach || 0))}</b> · engagement <b>${esc(String(s.engagement || 0))}</b> <span class="text-gray-500">(${esc(String(s.measured_posts))} measured)</span></div>` : ''}
+    ${s.measured_posts ? `<div class="mt-2 text-xs text-gray-300">reach <b>${esc(String(s.reach || 0))}</b> · engagement <b>${esc(String(s.engagement || 0))}</b> <span class="text-gray-500">(${esc(String(s.measured_posts))} measured)</span></div>` : ''}
     ${bar('worthy', worthyPct, 'bg-purple-600')}
     ${bar('approved', approvePct, 'bg-green-600')}
   `;
@@ -2450,7 +2457,7 @@ async function submitReset() {
 async function resendVerification() {
   try {
     await apiFetch(`${API}/api/auth/resend-verification`, { method: 'POST' });
-    toast('📧 Verification email sent — check your inbox.', 'success');
+    toast('Verification email sent — check your inbox.', 'success');
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -2870,7 +2877,7 @@ function renderPreview(post) {
         <button onclick="openEditSlide(${slide.slide_number}, ${JSON.stringify(slide.search_query || '').replace(/"/g, '&quot;')}, '${slide.image_source}')"
           class="absolute top-2 right-2 bg-black/70 hover:bg-purple-700 transition text-white text-xs rounded-full px-2 py-1"
           title="Replace this image">
-          🖼 Replace
+          Replace
         </button>
       </div>
       <div class="bg-gray-800 border border-gray-700 rounded-lg p-2 space-y-1 w-56 sm:w-64" data-slide-edit="${slide.slide_number}">
@@ -2892,7 +2899,7 @@ function renderPreview(post) {
           <button onclick="resetOverlay(${slide.slide_number})" ${editable ? '' : 'disabled'}
             title="Restore to LLM-generated text"
             class="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition rounded px-2 py-1 text-[11px]">
-            ↶ Reset
+            Reset
           </button>
         </div>
         ${editable ? '' : '<p class="text-[10px] text-gray-600">Replace this slide first to enable in-place editing.</p>'}
@@ -3020,7 +3027,7 @@ async function submitReplaceSlide() {
   } catch (e) {
     toast('❌ ' + e.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = '🔄 Replace';
+    btn.disabled = false; btn.textContent = 'Replace';
   }
 }
 
@@ -3158,7 +3165,7 @@ function renderClaims(post) {
   const canVerify = !!(post && post.id && S.user && !S.user.is_local);
   panel.classList.toggle('hidden', !claims.length && !canVerify);
   document.getElementById('claims-title').textContent =
-    claims.length ? '⚠️ Check before posting' : '🔍 Check before posting';
+    claims.length ? '⚠️ Check before posting' : 'Check before posting';
   document.getElementById('claims-intro').textContent = claims.length
     ? 'These lines state a number or cite research. Verify them against a source before you publish under your brand — AI can round facts in its own favour.'
     : 'Nothing here reads like a hard claim, but you can still check this post against a source.';
@@ -3393,7 +3400,7 @@ function undoEdit() {
   S.seoKeywords = [...snap.seo]; renderSeoKeywords();
   try { localStorage.setItem('undo_' + S.postId, JSON.stringify(S.undoStack)); } catch(e){}
   document.getElementById('undo-btn').classList.toggle('hidden', S.undoStack.length === 0);
-  toast('↶ Reverted last edit', 'info');
+  toast('Reverted last edit', 'info');
 }
 
 // ===== AUTOSAVE DRAFT (client-side) =====
@@ -3575,7 +3582,7 @@ function splitIntoThread() {
   if (parts.length < 2) { toast('Fits in one tweet — nothing to split', 'warn'); return; }
   renderThread(parts);            // editable per-tweet cells; hides the single box
   scheduleDraftSave();
-  toast(`✂ Split into ${parts.length} tweets`, 'success');
+  toast(`Split into ${parts.length} tweets`, 'success');
 }
 
 // ===== SAVE CAPTION =====
@@ -3810,7 +3817,7 @@ function applyScheduleState(post) {
 // ===== INSIGHTS =====
 async function refreshInsights() {
   if (!S.postId) return;
-  toast('📊 Fetching insights…', 'info');
+  toast('Fetching insights…', 'info');
   try {
     const res = await apiFetch(`${API}/api/posts/${S.postId}/insights/refresh`, { method: 'POST' });
     if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'Insights failed'); }
@@ -3832,7 +3839,7 @@ async function showVariations(field) {
   if (!S.postId) return;
   const modal = document.getElementById('variations-modal');
   const list = document.getElementById('variations-list');
-  document.getElementById('variations-title').textContent = '↻ Variations — ' + field;
+  document.getElementById('variations-title').textContent = 'Variations — ' + field;
   list.innerHTML = '<p class="text-sm text-gray-500">⏳ Generating…</p>';
   modal.classList.remove('hidden');
   onModalOpen('variations-modal');
@@ -4034,7 +4041,7 @@ function renderPlan() {
   const est = (n * _batchSlides() * 0.0015 + n * 0.004).toFixed(2);
   document.getElementById('plan-estimate').textContent =
     `${n} post${n === 1 ? '' : 's'} · ~$${est}`;
-  document.getElementById('plan-generate-btn').textContent = `✨ Generate ${n} post${n === 1 ? '' : 's'}`;
+  document.getElementById('plan-generate-btn').textContent = `Generate ${n} post${n === 1 ? '' : 's'}`;
 }
 
 function addPlanRow() {
@@ -4393,7 +4400,7 @@ async function refreshCost() {
     const d = await res.json();
     S.usage = d;
     const badge = document.getElementById('cost-badge');
-    badge.textContent = `💰 $${(d.today.cost || 0).toFixed(2)}`;
+    badge.textContent = `$${(d.today.cost || 0).toFixed(2)}`;
     badge.classList.remove('hidden');
     const limit = parseFloat(localStorage.getItem('cost_limit') || '5');
     badge.classList.toggle('text-red-300', d.today.cost > limit);
@@ -4472,7 +4479,7 @@ async function guardGenerateKeys() {
 
   const text = needs('text');
   if (text) {
-    needKey('🤖 Set up your AI model',
+    needKey('Set up your AI model',
       text === 'choose'
         ? 'Pick who writes your posts — provider and model — under Account → AI models.'
         : 'Add the API key for your chosen text provider under Account → AI models.',
@@ -4480,7 +4487,7 @@ async function guardGenerateKeys() {
     return false;
   }
   if (S.source === 'ai_gen' && needs('image')) {
-    needKey('🖼 Set up image generation',
+    needKey('Set up image generation',
       'AI images need an image provider, model and key under Account → AI models. '
       + 'Or switch the image source to Stock photos.',
       'account');
@@ -4496,7 +4503,7 @@ async function guardPublishKeys(network) {
   const missing = (NETWORK_KEYS[network] || []).filter(k => !hasKey(k));
   if (missing.length) {
     const label = network === 'x' ? 'X' : 'Instagram';
-    needKey(`🔑 Connect ${label}`,
+    needKey(`Connect ${label}`,
       `Publishing to ${label} needs your ${label} keys. Add them under ${label} keys, then try again.`,
       'keys');
     return false;
@@ -4513,8 +4520,8 @@ async function loadAdmin() {
   // it shows every credential group (media + Instagram + X) at once.
   const business = !!(S.user && S.user.account_type === 'business');
   const keysH = document.getElementById('keys-title');
-  if (keysH) keysH.textContent = account ? '🔑 Account keys'
-    : (business ? '🔑 Connections' : ('🔑 ' + (S.network === 'x' ? 'X' : 'Instagram') + ' keys'));
+  if (keysH) keysH.textContent = account ? 'Account keys'
+    : (business ? 'Connections' : ('' + (S.network === 'x' ? 'X' : 'Instagram') + ' keys'));
   document.getElementById('usage-section').classList.toggle('hidden', !account);
   document.getElementById('backup-section').classList.toggle('hidden', !(account && S.user && (S.user.is_admin || S.user.is_local)));
   // Export and erasure are about a cloud tenancy; local mode's data is already
@@ -4524,7 +4531,7 @@ async function loadAdmin() {
     await refreshCost();
     const d = S.usage || {today:{},month:{}};
     document.getElementById('admin-usage').innerHTML =
-      `💰 LLM spend — today <b>$${(d.today?.cost||0).toFixed(4)}</b>, this month <b>$${(d.month?.cost||0).toFixed(4)}</b> (${d.month?.calls||0} calls)`;
+      `LLM spend — today <b>$${(d.today?.cost||0).toFixed(4)}</b>, this month <b>$${(d.month?.cost||0).toFixed(4)}</b> (${d.month?.calls||0} calls)`;
   }
   const keysSec = document.getElementById('keys-section');
   if (S.user && !S.user.is_local) {
@@ -4661,7 +4668,7 @@ function expiryLine(c) {
     : `expires in ${d} day${d === 1 ? '' : 's'}`;
   const tone = d <= 7 ? 'text-yellow-300' : 'text-gray-400';
   const hedge = est ? ' (estimated — press Renew for the exact date)' : '';
-  return `<div class="text-xs mt-0.5 ${tone}">🔑 Token ${when}${esc(hedge)}</div>`;
+  return `<div class="text-xs mt-0.5 ${tone}">Token ${when}${esc(hedge)}</div>`;
 }
 
 /** Warn about a token that is about to take scheduled publishing down with it. */
@@ -4680,7 +4687,7 @@ function refreshExpiryBanner() {
     const when = worst.days < 0 ? 'has expired' :
       worst.days === 0 ? 'expires today' : `expires in ${worst.days} days`;
     document.getElementById('expiry-banner-text').textContent =
-      `🔑 Your ${label} token ${when}${worst.est ? ' (estimated)' : ''} — scheduled posts will stop going out.`;
+      `Your ${label} token ${when}${worst.est ? ' (estimated)' : ''} — scheduled posts will stop going out.`;
   }
   layoutBanners();
 }
@@ -4909,8 +4916,8 @@ function renderAISettings() {
   const form = document.getElementById('ai-models-form');
   if (!form) return;
   form.innerHTML =
-    _aiBlock('text', '✍️ Text — captions and hooks', 'Used for every post you generate.') +
-    _aiBlock('image', '🖼 Images — AI slide backgrounds', 'Only used when a slide’s source is AI. Stock photos do not need this. Anthropic is not listed: it cannot generate images.');
+    _aiBlock('text', 'Text — captions and hooks', 'Used for every post you generate.') +
+    _aiBlock('image', 'Images — AI slide backgrounds', 'Only used when a slide’s source is AI. Stock photos do not need this. Anthropic is not listed: it cannot generate images.');
 }
 
 function onAIProviderChange(kind) {
@@ -5296,7 +5303,7 @@ const WIZ = {
   // ---- 2. AI key (both) — the step that actually unblocks the product ------
   ai: {
     primary: 'Save and test', skippable: true, focus: 'wiz-ai-key',
-    title: () => '🤖 Connect an AI model',
+    title: () => 'Connect an AI model',
     sub: () => 'You bring your own key, so you pay the model vendor directly and we never mark it up. Nothing in the app can generate until one is set.',
     body: () => {
       const provs = (S.aiCatalog && S.aiCatalog.text) || [];
