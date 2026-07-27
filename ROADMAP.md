@@ -31,7 +31,7 @@ Two products share one engine, split only by `account_type`:
 
 ## Current baseline — what's already shipped & live
 
-Running on Hetzner (`https://167.233.156.202.sslip.io`), 882 tests green, ruff clean.
+Running on Hetzner (`https://167.233.156.202.sslip.io`), 934 tests + 17 browser tests green, ruff clean.
 
 - **Platform/tenancy** — argon2 + JWT auth, Fernet per-user key vault, `user_id` data
   isolation, email verify/reset flow (code-ready), JWT revocation (`token_version`),
@@ -176,7 +176,7 @@ finalize legal · Sentry on. *All four are owner/external gates; no engineering 
 
 | Item | P | Effort | Status | Gate | Notes |
 |---|---|---|---|---|---|
-| **Frontend test harness** | P1 | M | idea | 🟢 | The SPA has no JS test harness — verified manually in-browser. Add one (Playwright/vitest). |
+| **Frontend test harness** | P1 | M | shipped | 🟢 | `tests/e2e/` drives the SPA in real Chromium via pytest-playwright against a subprocess uvicorn. 17 specs over the wizard, Connections, export and erasure; wired into CI as its own step. Run locally with `pytest -m e2e`. |
 | **Feature flags** | P2 | S | idea | 🟢 | Ship risky features behind flags. |
 | **Coverage / mutation gates in CI** | P2 | S | idea | 🟢 | Enforce the TDD + mutation discipline in CI, not just locally. |
 

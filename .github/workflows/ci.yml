@@ -18,11 +18,14 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        # ruff is CI-only — it is deliberately not in requirements.txt, which the
-        # desktop launcher pip-installs for end users.
+        # ruff and playwright are CI-only — deliberately not in requirements.txt,
+        # which the desktop launcher pip-installs for end users.
         run: |
           pip install -r backend/requirements.txt
-          pip install ruff==0.15.21
+          pip install ruff==0.15.21 pytest-playwright==0.8.0
+
+      - name: Install browser
+        run: python -m playwright install --with-deps chromium
 
       - name: Lint
         run: ruff check backend InstaContentEngine.pyw
@@ -30,3 +33,10 @@ jobs:
       - name: Test
         working-directory: backend
         run: pytest -q
+
+      # A separate process on purpose: Playwright's sync API holds an event loop
+      # on the main thread for the whole session, which breaks every asyncio.run()
+      # in the tests above. pytest.ini deselects them from the default run.
+      - name: Browser tests
+        working-directory: backend
+        run: pytest -q -m e2e
