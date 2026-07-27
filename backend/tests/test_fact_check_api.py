@@ -190,3 +190,18 @@ def test_an_over_long_paste_is_rejected_not_truncated_silently(ctx):
     pid = _seed(SM, uid)
     r = c.post(f"/api/posts/{pid}/verify", json={"source_text": "x" * 20001}, headers=h)
     assert r.status_code == 422
+
+
+def test_no_ai_key_is_a_clear_message_not_a_stack_trace(ctx):
+    """Reachable in one click before setup is finished. The reason must be about
+    the missing key, not an AttributeError that reads like the post's fault."""
+    c, SM, fake = ctx
+    h = _register(c)
+    uid = c.get("/api/auth/me", headers=h).json()["id"]
+    pid = _seed(SM, uid)
+    fake.text_provider = None
+
+    r = c.post(f"/api/posts/{pid}/verify", json={"source_text": SOURCE}, headers=h)
+    assert r.status_code == 400
+    assert "AI key" in r.json()["detail"]
+    assert _stored(SM, pid) in (None, {})       # nothing recorded on the post
