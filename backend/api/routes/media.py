@@ -27,8 +27,10 @@ from api.deps import get_current_user, get_db, get_effective_settings, get_image
 from api.ratelimit import limiter
 from config import Settings
 from models.database import MediaAsset as MediaAssetModel, User as UserModel
-from models.schemas import GenerateImageRequest, MediaAssetDetail, MediaAssetSummary
-from services import media_store
+from models.schemas import (
+    GenerateImageRequest, MediaAssetDetail, MediaAssetSummary, StagedUpload,
+)
+from services import media_store, staging
 from services.ai.base import AIError
 from services.user_settings import resolve_ai_choice
 
@@ -299,3 +301,32 @@ async def get_media_file(
         headers={"Cache-Control": "private, max-age=300",
                 "X-Content-Type-Options": "nosniff"},
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage — hand a library image to a fresh generation via the existing upload_ids
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/{asset_id}/stage", response_model=StagedUpload)
+async def stage_media_asset(
+    asset_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> StagedUpload:
+    """Copy a library image into staging so /api/posts/generate's upload_ids
+    can refer to it by id, same as a photo picked fresh off disk.
+
+    Composes two stores that each already prove their own containment in
+    tests, rather than teaching generation a third source of media — staging
+    and media_store are different namespaces on purpose, so a staged id and a
+    library asset id are never interchangeable.
+    """
+    asset = await _owned_asset(db, asset_id, user)
+    if asset.kind != "image":
+        raise HTTPException(status_code=400,
+                            detail="Only an image asset can be used to generate a post.")
+    if asset.status != "ready":
+        raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
+    data = media_store.read(asset.user_id, asset.id)
+    upload_id = staging.save(str(user.id), data, asset.mime or "image/jpeg")
+    return StagedUpload(id=upload_id, filename=asset.title or "", bytes=len(data))

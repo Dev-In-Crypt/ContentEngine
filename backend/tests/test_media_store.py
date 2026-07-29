@@ -165,6 +165,25 @@ def test_adopt_file_checks_the_same_guards_as_save(tmp_path):
         media_store.adopt_file("user-1", ASSET, tmp, "application/pdf", root=tmp_path / "media")
 
 
+def test_read_returns_the_bytes(tmp_path):
+    media_store.save("user-1", ASSET, b"the actual pixels", "image/jpeg", root=tmp_path)
+    assert media_store.read("user-1", ASSET, root=tmp_path) == b"the actual pixels"
+
+
+def test_read_of_an_asset_with_no_file_yet_raises(tmp_path):
+    """Distinct from path_for's None: a caller reaching for read() wants bytes
+    right now, and "there aren't any" has to stop them rather than hand back
+    nothing silently."""
+    with pytest.raises(MediaError):
+        media_store.read("user-1", ASSET, root=tmp_path)
+
+
+def test_read_does_not_cross_tenants(tmp_path):
+    media_store.save("user-1", ASSET, b"private", "image/jpeg", root=tmp_path)
+    with pytest.raises(MediaError):
+        media_store.read("user-2", ASSET, root=tmp_path)
+
+
 def test_adopt_file_replaces_an_existing_asset_file(tmp_path):
     media_root = tmp_path / "media"
     media_store.save("user-1", ASSET, b"old", "image/jpeg", root=media_root)

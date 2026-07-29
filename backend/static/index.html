@@ -814,7 +814,10 @@
     <div id="reel-card" class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
       <div class="flex items-center justify-between">
         <label class="text-sm font-semibold text-purple-300">Turn this post into a video</label>
-        <button onclick="makeReel()" id="make-reel-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-1.5 text-sm font-semibold">Make Reel</button>
+        <span class="flex gap-2">
+          <button onclick="makeReel()" id="make-reel-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-1.5 text-sm font-semibold">Make Reel</button>
+          <button onclick="openLibraryPicker('reel')" class="ce-btn-ghost rounded-lg px-3 py-1.5 text-sm">From library</button>
+        </span>
       </div>
       <div class="flex items-center gap-2 flex-wrap text-xs">
         <label class="flex items-center gap-1.5 cursor-pointer text-gray-300">
@@ -1342,8 +1345,20 @@
           Upload custom image
           <input id="edit-upload-input" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="submitUploadSlide(event)" />
         </label>
+        <button onclick="openLibraryPicker('slide')" class="ce-btn-ghost rounded-lg py-2 text-sm">From library</button>
         <button onclick="closeEditSlide()" class="bg-gray-800 hover:bg-gray-700 transition rounded-lg py-2 text-sm">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== Library Picker Modal (choose an existing asset for a slide or a Reel) ===== -->
+  <div id="library-picker-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl" style="max-height:85vh;overflow-y:auto">
+      <div class="flex items-center gap-2">
+        <h3 id="library-picker-title" class="text-lg font-semibold text-purple-300">Choose from your library</h3>
+        <button onclick="closeLibraryPicker()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+      </div>
+      <div id="library-picker-grid" class="grid grid-cols-3 gap-2">Loading…</div>
     </div>
   </div>
 
@@ -1373,6 +1388,7 @@ const S = {
   seoKeywords: [],
   editingSlide: null,      // slide number being replaced/uploaded
   editSource: 'stock',     // chosen source in the Edit modal
+  libraryPickerMode: null, // 'slide' | 'reel' — which action a library pick completes
   slideOriginals: {},      // {slide_number: {overlay, niche}} for Reset
   currentPost: null,       // last-rendered PostPreview (for schedule/insights)
   calRef: null,            // {year, month} shown in calendar
@@ -3373,6 +3389,7 @@ const _MODAL_CLOSERS = {
   'delete-account-modal': () => closeDeleteAccount(),
   'variations-modal': () => closeVariations(),
   'edit-slide-modal': () => closeEditSlide(),
+  'library-picker-modal': () => closeLibraryPicker(),
 };
 let _modalReturnFocus = null;
 function onModalOpen(id) {
@@ -4502,6 +4519,73 @@ async function deleteLibraryAsset(id, kind) {
     if (!res.ok && res.status !== 204) throw new Error('Delete failed');
     await loadLibrary(kind);
   } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
+// ===== LIBRARY PICKER (used from the composer: replace a slide, or attach a Reel) =====
+
+async function openLibraryPicker(mode) {
+  S.libraryPickerMode = mode;   // 'slide' | 'reel'
+  const kind = mode === 'reel' ? 'video' : 'image';
+  document.getElementById('library-picker-title').textContent =
+    mode === 'reel' ? 'Choose a video from your library' : 'Choose a photo from your library';
+  const grid = document.getElementById('library-picker-grid');
+  grid.innerHTML = 'Loading…';
+  document.getElementById('library-picker-modal').classList.remove('hidden');
+  onModalOpen('library-picker-modal');
+  try {
+    const res = await apiFetch(`${API}/api/media?kind=${kind}`);
+    const assets = (res.ok ? await res.json() : []).filter(a => a.status === 'ready');
+    if (!assets.length) {
+      grid.innerHTML = `<span class="text-gray-500 text-sm col-span-full">Nothing in your ${kind === 'video' ? 'Video' : 'Photos'} library yet.</span>`;
+      return;
+    }
+    grid.innerHTML = '';
+    assets.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = 'rounded-lg overflow-hidden border-2 border-gray-700 hover:border-purple-500 transition';
+      btn.title = a.title || a.prompt || '';
+      btn.innerHTML = kind === 'video'
+        ? `<div class="w-full aspect-square bg-black flex items-center justify-center text-2xl">▶</div>`
+        : `<img src="${API}${a.url}" class="w-full aspect-square object-cover" />`;
+      btn.onclick = () => pickLibraryAsset(a.id);
+      grid.appendChild(btn);
+    });
+  } catch { grid.innerHTML = '<span class="text-red-400 text-sm">Couldn\'t load your library.</span>'; }
+}
+
+function closeLibraryPicker() {
+  document.getElementById('library-picker-modal').classList.add('hidden');
+  onModalClose();
+}
+
+async function pickLibraryAsset(assetId) {
+  const mode = S.libraryPickerMode;
+  try {
+    if (mode === 'reel') {
+      const res = await apiFetch(`${API}/api/posts/${S.postId}/reel/from-library`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_id: assetId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Failed'); }
+      const data = await res.json();
+      const url = API + data.video_url;
+      document.getElementById('reel-video').src = url;
+      document.getElementById('reel-download').href = url;
+      document.getElementById('reel-preview').classList.remove('hidden');
+      toast('✅ Video attached', 'success');
+    } else {
+      const res = await apiFetch(`${API}/api/posts/${S.postId}/slides/${S.editingSlide}/from-library`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_id: assetId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Failed'); }
+      const updated = await res.json();
+      refreshSlideImage(updated);
+      closeEditSlide();
+      toast('✅ Slide updated', 'success');
+    }
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+  finally { closeLibraryPicker(); }
 }
 
 // ===== GRID MODE (responsive preview) =====

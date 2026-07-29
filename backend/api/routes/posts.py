@@ -23,6 +23,7 @@ from api.deps import (
     require_verified,
 )
 from api.ratelimit import limiter
+from api.routes.media import _owned_asset as _owned_media_asset
 from services.brand_engine import PillowBrandEngine
 from services.brand_voice import resolve_brand_voice
 from services.managed_account import resolve_active_account
@@ -39,9 +40,10 @@ from models.schemas import (
     CaptionUpdate, GenerateRequest, ImageSource, OverlayUpdateRequest, Platform,
     PostInsightSchema, PostPreview, PostStatus, PostSummary, RegenFieldRequest,
     RegenFieldResponse, ReelRequest, ReplaceSlideRequest, ScheduleRequest, SlidePreview,
-    PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, XPostMode,
+    PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
+    XPostMode,
 )
-from services import staging
+from services import media_store, staging
 from services.claims import find_claims
 from services.content_engine import ContentEngine, GeneratedPost, _num_slides
 from services.content_plan import plan_topics
@@ -816,6 +818,55 @@ async def upload_slide(
     return _build_slide_preview(post, slide, cache_bust=True)
 
 
+@router.post(
+    "/{post_id}/slides/{slide_num}/from-library",
+    response_model=SlidePreview,
+)
+async def slide_from_library(
+    post_id: str,
+    slide_num: int,
+    body: UseAssetRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> SlidePreview:
+    """Replace a slide with a COPY of a library asset's bytes.
+
+    A copy, not a reference — same posture as upload_slide just above. Both
+    orphan cleanup and GDPR erasure rmtree uploads/posts/<post_id>; a slide
+    that merely pointed at the library file would let post cleanup delete a
+    library asset out from under the user.
+    """
+    post, slide = await _slide_with_post(db, post_id, slide_num, user)
+    asset = await _owned_media_asset(db, body.asset_id, user)
+    if asset.kind != "image":
+        raise HTTPException(status_code=400, detail="Only an image asset can replace a slide.")
+    if asset.status != "ready":
+        raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
+    raw_bytes = media_store.read(asset.user_id, asset.id)
+
+    brand_cfg = apply_user_slide_style(await load_brand_config(db, None), user)
+    brand_engine = PillowBrandEngine(brand_cfg)
+    branded = _rebrand_slide_bytes(raw_bytes, slide.render_params, brand_engine)
+
+    path = Path(slide.image_path) if slide.image_path else _slide_path(post.id, slide.slide_number)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(branded)
+    # Save the library image as the new raw so PUT /overlay can re-brand later.
+    raw_path = _slide_raw_path(post.id, slide.slide_number)
+    raw_path.write_bytes(raw_bytes)
+
+    # Same posture as a manual upload — no stock attribution, no search query.
+    slide.image_source = ImageSource.UPLOAD.value
+    slide.search_query = None
+    slide.gen_prompt = None
+    slide.attribution = None
+    slide.raw_image_path = str(raw_path)
+    slide.media_asset_id = asset.id
+    await db.commit()
+    await db.refresh(slide)
+    return _build_slide_preview(post, slide, cache_bust=True)
+
+
 @router.put(
     "/{post_id}/slides/{slide_num}/overlay",
     response_model=SlidePreview,
@@ -1204,6 +1255,35 @@ async def make_reel(
     ts = int(datetime.now(timezone.utc).timestamp())
     return {"video_url": f"/api/posts/{post.id}/reel/video?t={ts}",
             "size_bytes": len(mp4), **extra}
+
+
+@router.put("/{post_id}/reel/from-library")
+async def reel_from_library(
+    post_id: str,
+    body: UseAssetRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> dict:
+    """Attach a library video to this post's Reel slot — the same slot a
+    rendered Reel occupies, so GET .../reel/video and POST .../publish-reel
+    work on the result unchanged. A copy, not a reference, for the same reason
+    as slide_from_library above."""
+    post = await owned_post(db, post_id, user)
+    asset = await _owned_media_asset(db, body.asset_id, user)
+    if asset.kind != "video":
+        raise HTTPException(status_code=400, detail="Only a video asset can become a Reel.")
+    if asset.status != "ready":
+        raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
+    data = media_store.read(asset.user_id, asset.id)
+
+    path = _reel_path(post.id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    post.video_path = str(path)
+    post.video_asset_id = asset.id
+    await db.commit()
+    ts = int(datetime.now(timezone.utc).timestamp())
+    return {"video_url": f"/api/posts/{post.id}/reel/video?t={ts}", "size_bytes": len(data)}
 
 
 async def _make_voiceover_reel(*, settings, user, text_provider, post, provider,

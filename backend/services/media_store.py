@@ -142,6 +142,15 @@ def path_for(user_id: str, asset_id: str,
     return None
 
 
+def read(user_id: str, asset_id: str, root: Optional[Path] = None) -> bytes:
+    """The asset's bytes, or raise — unlike path_for's None, a caller reaching
+    for the bytes right now needs a refusal, not a silent nothing."""
+    path = path_for(user_id, asset_id, root)
+    if path is None:
+        raise MediaError("Asset file not found")
+    return path.read_bytes()
+
+
 def delete(user_id: str, asset_id: str, root: Optional[Path] = None) -> None:
     """Remove the asset's file if present. No error if there is none."""
     directory = _checked_dir(user_id, asset_id, root)

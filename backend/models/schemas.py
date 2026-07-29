@@ -776,3 +776,8 @@ class MediaAssetDetail(MediaAssetSummary):
 class GenerateImageRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=2000)
     title: Optional[str] = Field(None, max_length=200)
+
+
+class UseAssetRequest(BaseModel):
+    """Which library asset to copy into a slide, a Reel, or a staged upload."""
+    asset_id: str = Field(..., min_length=1, max_length=40)

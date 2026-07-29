@@ -93,6 +93,17 @@ def _compose(page, topic: str = "Sourdough starters"):
     expect(page.locator("#step-2")).to_be_visible()
 
 
+def _reach_step4(page, **post_overrides):
+    """Compose and generate, landing on the preview step with a real post id
+    to address — the precondition every library-picker test needs."""
+    page.route("**/api/posts/generate", lambda r: r.fulfill(
+        status=200, content_type="text/event-stream",
+        body=_sse({"type": "complete", "post": _generated_post(**post_overrides)})))
+    _compose(page)
+    page.locator("#generate-btn").click()
+    expect(page.locator("#step-4")).to_be_visible()
+
+
 # ── Step navigation ──────────────────────────────────────────────────────────
 
 def test_a_topic_too_short_to_generate_from_does_not_advance(page, signed_in):
@@ -353,3 +364,99 @@ def test_an_x_post_is_generated_as_x_not_as_the_default_network(
     assert sent["x_mode"] == "short"
     # Reels are an Instagram format and have no meaning on an X post.
     expect(page.locator("#reel-card")).to_be_hidden()
+
+
+# ── The media library picker, reached from an already-rendered post ─────────
+#
+# These fakes are built from MediaAssetSummary, the same discipline as the rest
+# of this file — a hand-rolled fake drifts from the real payload.
+
+def _library_asset(**over) -> dict:
+    from models.schemas import MediaAssetSummary
+    fields = dict(
+        id="a1a1a1a1-1a1a-4a1a-8a1a-a1a1a1a1a1a1",
+        kind="image", status="ready", source="ai_gen",
+        url="/api/media/a1a1a1a1-1a1a-4a1a-8a1a-a1a1a1a1a1a1/file",
+        title="a loaf of sourdough", bytes=999,
+        created_at="2026-07-27T00:00:00Z",
+    )
+    fields.update(over)
+    return MediaAssetSummary(**fields).model_dump(mode="json")
+
+
+def test_replace_slide_from_library_updates_the_image_and_closes_both_modals(
+        page, signed_in, keyed):
+    signed_in()
+    _reach_step4(page)
+    page.route("**/api/media?kind=image", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([_library_asset()])))
+    updated_slide = SlidePreview(
+        slide_number=1, image_url="/api/posts/e2e-post-1/slides/1/image?t=2",
+        image_source="upload", width=1080, height=1350, has_raw_image=True,
+    ).model_dump(mode="json")
+    page.route("**/api/posts/e2e-post-1/slides/1/from-library", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(updated_slide)))
+
+    page.locator('button[onclick^="openEditSlide"]').first.click()
+    expect(page.locator("#edit-slide-modal")).to_be_visible()
+    page.locator("#edit-slide-modal").get_by_role("button", name="From library").click()
+    expect(page.locator("#library-picker-modal")).to_be_visible()
+
+    page.locator("#library-picker-grid button").first.click()
+
+    expect(page.locator("#library-picker-modal")).to_be_hidden()
+    expect(page.locator("#edit-slide-modal")).to_be_hidden()
+    expect(page.locator('img[data-slide-num="1"]')).to_have_attribute(
+        "src", f"{page.url.rstrip('/')}/api/posts/e2e-post-1/slides/1/image?t=2")
+
+
+def test_an_empty_photo_library_says_so_in_the_picker(page, signed_in, keyed):
+    signed_in()
+    _reach_step4(page)
+    page.route("**/api/media?kind=image", lambda r: r.fulfill(
+        status=200, content_type="application/json", body="[]"))
+
+    page.locator('button[onclick^="openEditSlide"]').first.click()
+    page.locator("#edit-slide-modal").get_by_role("button", name="From library").click()
+    expect(page.locator("#library-picker-grid")).to_contain_text("Nothing in your Photos library")
+
+
+def test_use_a_library_video_as_the_reel(page, signed_in, keyed):
+    signed_in()
+    _reach_step4(page)
+    page.route("**/api/media?kind=video", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps([_library_asset(
+            id="b2b2b2b2-2b2b-4b2b-8b2b-b2b2b2b2b2b2", kind="video",
+            url="/api/media/b2b2b2b2-2b2b-4b2b-8b2b-b2b2b2b2b2b2/file")])))
+    page.route("**/api/posts/e2e-post-1/reel/from-library", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"video_url": "/api/posts/e2e-post-1/reel/video?t=1",
+                        "size_bytes": 999})))
+
+    expect(page.locator("#reel-preview")).to_be_hidden()
+    page.locator("#reel-card").get_by_role("button", name="From library").click()
+    expect(page.locator("#library-picker-modal")).to_be_visible()
+    page.locator("#library-picker-grid button").first.click()
+
+    expect(page.locator("#library-picker-modal")).to_be_hidden()
+    expect(page.locator("#reel-preview")).to_be_visible()
+    expect(page.locator("#reel-video")).to_have_attribute(
+        "src", f"{page.url.rstrip('/')}/api/posts/e2e-post-1/reel/video?t=1")
+
+
+def test_declining_the_picker_leaves_the_slide_untouched(page, signed_in, keyed):
+    signed_in()
+    _reach_step4(page)
+    page.route("**/api/media?kind=image", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([_library_asset()])))
+    calls = []
+    page.on("request", lambda r: calls.append(r.url) if "from-library" in r.url else None)
+
+    page.locator('button[onclick^="openEditSlide"]').first.click()
+    page.locator("#edit-slide-modal").get_by_role("button", name="From library").click()
+    page.locator("#library-picker-modal button", has_text="✕").click()
+
+    expect(page.locator("#library-picker-modal")).to_be_hidden()
+    assert calls == []
+    expect(page.locator("#edit-slide-modal")).to_be_visible()   # the slide modal is untouched

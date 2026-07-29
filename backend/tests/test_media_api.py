@@ -9,12 +9,13 @@ import io
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.deps import get_db, get_image_provider, get_settings
 from config import Settings
 from main import app
-from models.database import Base, MediaAsset
+from models.database import Base, MediaAsset, User
 from services import media_store
 from services.ai.base import AIError
 
@@ -402,6 +403,57 @@ def test_generated_images_are_isolated_by_tenant(client):
         app.dependency_overrides.pop(get_image_provider, None)
     assert r.status_code == 200          # would otherwise pass vacuously
     assert client.get("/api/media", headers=b).json() == []
+
+
+# ------------------------------------------------------------------ stage (into staging)
+
+def test_staging_a_library_image_returns_an_id_that_generation_can_use(client):
+    """Composes two already-tested stores rather than teaching generation a
+    third source of media: the returned id is a normal staging id."""
+    from services import staging
+    h = _register(client, "a@ex.com")
+    asset_id = _upload(client, h, data=b"library photo").json()[0]["id"]
+
+    r = client.post(f"/api/media/{asset_id}/stage", headers=h)
+    assert r.status_code == 200
+    staged = r.json()
+    assert staged["bytes"] == len(b"library photo")
+
+    async def _find_user_id():
+        async with app.state.sessionmaker() as db:
+            return (await db.get(MediaAsset, asset_id)).user_id
+    user_id = asyncio.run(_find_user_id())
+    assert staging.read(user_id, staged["id"]) == b"library photo"
+
+
+def test_staging_a_video_asset_is_refused(client):
+    h = _register(client, "a@ex.com")
+    asset_id = _upload(client, h, data=b"mp4-bytes", mime="video/mp4", name="c.mp4").json()[0]["id"]
+    r = client.post(f"/api/media/{asset_id}/stage", headers=h)
+    assert r.status_code == 400
+
+
+def test_staging_a_pending_asset_is_refused(client):
+    h = _register(client, "a@ex.com")
+    asset_id = "33333333-3333-4333-8333-333333333333"
+
+    async def _seed():
+        async with app.state.sessionmaker() as db:
+            user_id = (await db.execute(
+                select(User).where(User.email == "a@ex.com"))).scalar_one().id
+            db.add(MediaAsset(id=asset_id, user_id=user_id, kind="image",
+                              source="ai_gen", status="pending"))
+            await db.commit()
+    asyncio.run(_seed())
+    r = client.post(f"/api/media/{asset_id}/stage", headers=h)
+    assert r.status_code == 400
+
+
+def test_staging_another_tenants_asset_is_404(client):
+    a = _register(client, "a@ex.com")
+    b = _register(client, "b@ex.com")
+    asset_id = _upload(client, a).json()[0]["id"]
+    assert client.post(f"/api/media/{asset_id}/stage", headers=b).status_code == 404
 
 
 def test_serving_reads_the_real_file_not_a_forged_file_path_column(client, tmp_path):
