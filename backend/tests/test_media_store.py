@@ -135,3 +135,41 @@ def test_sweep_ignores_files_it_does_not_recognise(tmp_path):
 
 def test_sweep_on_a_missing_root_is_a_no_op(tmp_path):
     assert media_store.sweep(set(), root=tmp_path / "nope") == {"files": 0, "bytes": 0}
+
+
+# ------------------------------------------------------------------ adopt_file
+#
+# Uploads are streamed to a temp file in chunks and handed off here, rather
+# than read whole into memory and passed to save() — a video-sized file read
+# in one shot is a memory-exhaustion vector the image path never had to worry
+# about. adopt_file moves the already-written file into place instead of
+# reading it again.
+
+
+def test_adopt_file_moves_the_temp_file_into_the_store(tmp_path):
+    tmp = tmp_path / "incoming.bin"
+    tmp.write_bytes(b"streamed-bytes")
+    path = media_store.adopt_file("user-1", ASSET, tmp, "video/mp4", root=tmp_path / "media")
+    assert path.read_bytes() == b"streamed-bytes"
+    assert not tmp.exists()                      # moved, not copied
+
+
+def test_adopt_file_checks_the_same_guards_as_save(tmp_path):
+    tmp = tmp_path / "incoming.bin"
+    tmp.write_bytes(b"x")
+    with pytest.raises(MediaError):
+        media_store.adopt_file("user-1", "../escape", tmp, "video/mp4", root=tmp_path / "media")
+    with pytest.raises(MediaError):
+        media_store.adopt_file("../..", ASSET, tmp, "video/mp4", root=tmp_path / "media")
+    with pytest.raises(MediaError):
+        media_store.adopt_file("user-1", ASSET, tmp, "application/pdf", root=tmp_path / "media")
+
+
+def test_adopt_file_replaces_an_existing_asset_file(tmp_path):
+    media_root = tmp_path / "media"
+    media_store.save("user-1", ASSET, b"old", "image/jpeg", root=media_root)
+    tmp = tmp_path / "incoming.bin"
+    tmp.write_bytes(b"new")
+    media_store.adopt_file("user-1", ASSET, tmp, "video/mp4", root=media_root)
+    assert not (media_root / "user-1" / f"{ASSET}.jpg").exists()
+    assert media_store.path_for("user-1", ASSET, root=media_root).read_bytes() == b"new"

@@ -20,6 +20,7 @@ what it doesn't recognise is how a sweep turns into data loss.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterable
 from pathlib import Path
@@ -88,9 +89,14 @@ def _candidates(directory: Path, asset_id: str) -> Iterable[Path]:
         yield candidate
 
 
-def save(user_id: str, asset_id: str, data: bytes, content_type: str,
-         root: Optional[Path] = None) -> Path:
-    """Store the bytes for an existing asset row; return the path written."""
+def _prepare_target(user_id: str, asset_id: str, content_type: str,
+                    root: Optional[Path]) -> Path:
+    """Resolve the path an asset's file belongs at, clearing whatever was there.
+
+    Shared by save() and adopt_file() so the two ways bytes can arrive — held
+    in memory, or already streamed to a temp file on disk — end up written by
+    exactly one path-construction and one write-clears-old-extension rule.
+    """
     ext = EXTENSIONS.get(content_type)
     if ext is None:
         raise MediaError(f"Unsupported content type {content_type!r}")
@@ -101,7 +107,28 @@ def save(user_id: str, asset_id: str, data: bytes, content_type: str,
     target = (directory / f"{asset_id}.{ext}").resolve()
     if not target.is_relative_to(directory):
         raise MediaError("Unknown asset id")
+    return target
+
+
+def save(user_id: str, asset_id: str, data: bytes, content_type: str,
+         root: Optional[Path] = None) -> Path:
+    """Store the bytes for an existing asset row; return the path written."""
+    target = _prepare_target(user_id, asset_id, content_type, root)
     target.write_bytes(data)
+    return target
+
+
+def adopt_file(user_id: str, asset_id: str, tmp_path: Path, content_type: str,
+              root: Optional[Path] = None) -> Path:
+    """Move an already-written file into the store; return the path written.
+
+    For an upload streamed to a temp file in chunks rather than read whole into
+    memory — a video-sized file is large enough that `save()`'s in-memory bytes
+    would be a real cost, and there is no reason to read it a second time just
+    to write it once.
+    """
+    target = _prepare_target(user_id, asset_id, content_type, root)
+    os.replace(tmp_path, target)
     return target
 
 

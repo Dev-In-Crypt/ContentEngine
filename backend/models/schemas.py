@@ -743,3 +743,31 @@ class AccountListResponse(BaseModel):
 
 class AccountSwitch(BaseModel):
     account_id: Optional[str] = None     # None → Personal
+
+
+# --- Media library (standalone assets, not tied to a post) ---
+
+class MediaAssetSummary(BaseModel):
+    """One row for the library grid. `url` is None while a generated asset is
+    still pending — there is nothing to point at yet."""
+    id: str
+    kind: str                            # image | video
+    status: str                          # pending | running | ready | failed
+    source: str                          # ai_gen | upload | edited
+    url: Optional[str] = None
+    title: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration_sec: Optional[float] = None
+    bytes: int = 0
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MediaAssetDetail(MediaAssetSummary):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    prompt: Optional[str] = None
+    error: Optional[str] = None
+    parent_asset_id: Optional[str] = None
