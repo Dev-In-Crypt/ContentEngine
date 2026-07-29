@@ -11,21 +11,26 @@ Route order matters: literal paths (`/uploads`) are declared before the
 """
 from __future__ import annotations
 
+import io
 import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user, get_db
+from api.deps import get_current_user, get_db, get_effective_settings, get_image_provider
+from api.ratelimit import limiter
+from config import Settings
 from models.database import MediaAsset as MediaAssetModel, User as UserModel
-from models.schemas import MediaAssetDetail, MediaAssetSummary
+from models.schemas import GenerateImageRequest, MediaAssetDetail, MediaAssetSummary
 from services import media_store
+from services.ai.base import AIError
+from services.user_settings import resolve_ai_choice
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 log = logging.getLogger(__name__)
@@ -42,6 +47,17 @@ _CHUNK_BYTES = 1024 * 1024
 
 def _kind_for(content_type: str) -> str:
     return "video" if content_type in _VIDEO_TYPES else "image"
+
+
+def _probe_image(data: bytes) -> tuple[str, int, int]:
+    """The real mime + dimensions, read from the bytes themselves rather than
+    assumed — a provider's docstring says "JPEG/PNG" but doesn't promise which,
+    and storing the wrong one would both mislabel the asset and pick the wrong
+    file extension in media_store."""
+    from PIL import Image
+    with Image.open(io.BytesIO(data)) as img:
+        mime = Image.MIME.get(img.format, "image/jpeg")
+        return mime, img.width, img.height
 
 
 def _asset_url(asset: MediaAssetModel) -> Optional[str]:
@@ -105,6 +121,56 @@ async def _stream_to_temp(file: UploadFile, max_bytes: int) -> tuple[Path, int]:
         tmp_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail="Empty file")
     return tmp_path, total
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generate — an AI image, synchronous (unlike video, this returns in seconds)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/images", response_model=MediaAssetDetail)
+@limiter.limit("15/minute;150/hour")
+async def generate_image_asset(
+    request: Request,
+    body: GenerateImageRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_effective_settings)],
+    image_provider: Annotated[object, Depends(get_image_provider)],
+) -> MediaAssetDetail:
+    # Same two-step resolution posts.py uses everywhere: the dependency builds
+    # the provider client from the tenant's key, this call separately reads
+    # which model they picked — resolve_ai_choice is cheap and side-effect-free,
+    # so calling it twice costs nothing and keeps the two concerns apart.
+    provider_name, model, _key = resolve_ai_choice(user, settings, "image")
+    if image_provider is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No image provider configured. Choose one in Account → AI models.")
+    if not model:
+        raise HTTPException(
+            status_code=400,
+            detail="No image model selected. Choose one in Account → AI models.")
+
+    try:
+        image_bytes = await image_provider.generate_image(model=model, prompt=body.prompt)
+    except AIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    mime, width, height = _probe_image(image_bytes)
+    asset = MediaAssetModel(user_id=user.id, kind="image", source="ai_gen",
+                            status="ready", provider=provider_name, model=model,
+                            prompt=body.prompt, title=body.title or "",
+                            mime=mime, width=width, height=height,
+                            bytes=len(image_bytes))
+    db.add(asset)
+    await db.flush()   # need asset.id before the file can be named on disk
+    try:
+        path = media_store.save(str(user.id), asset.id, image_bytes, mime)
+    except media_store.MediaError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    asset.file_path = str(path)
+    await db.commit()
+    return _detail(asset)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

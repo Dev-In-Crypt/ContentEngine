@@ -11,11 +11,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from api.deps import get_db, get_settings
+from api.deps import get_db, get_image_provider, get_settings
 from config import Settings
 from main import app
 from models.database import Base, MediaAsset
 from services import media_store
+from services.ai.base import AIError
 
 
 @pytest.fixture
@@ -276,6 +277,131 @@ def test_a_failed_asset_with_a_leftover_file_still_404s(client, tmp_path):
                      root=media_store.MEDIA_ROOT)
 
     assert client.get(f"/api/media/{asset_id}/file").status_code == 404
+
+
+# ------------------------------------------------------------------ generate (AI)
+
+# A 1x1 transparent PNG — small enough to inline, real enough for PIL to probe.
+_PNG_PIXEL = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000a49444154789c6300010000050001"
+    "0d0a2db40000000049454e44ae426082".replace("\n", ""))
+
+
+class _FakeImageProvider:
+    def __init__(self, data=None, error=None):
+        self._data, self._error = data, error
+
+    async def generate_image(self, model, prompt):
+        if self._error:
+            raise self._error
+        return self._data
+
+    async def close(self):
+        pass
+
+
+def _override_image_provider(fake):
+    app.dependency_overrides[get_image_provider] = lambda: fake
+
+
+def _set_image_model(client, headers, provider="openrouter", model="google/gemini-image"):
+    r = client.put("/api/settings/ai", headers=headers,
+                   json={"image_provider": provider, "image_model": model})
+    assert r.status_code == 200
+
+
+def test_generate_without_a_provider_configured_never_calls_a_model(client):
+    """A brand-new account has no provider and no key — the real dependency
+    (not overridden) must refuse before any bytes are requested."""
+    h = _register(client, "a@ex.com")
+    r = client.post("/api/media/images", headers=h, json={"prompt": "a cat on a windowsill"})
+    assert r.status_code == 400
+    assert "provider" in r.json()["detail"].lower()
+    assert client.get("/api/media", headers=h).json() == []
+
+
+def test_generate_without_a_model_selected(client):
+    """Provider chosen, model left blank — a different refusal from "no
+    provider at all", and the one a half-finished settings page produces."""
+    h = _register(client, "a@ex.com")
+    client.put("/api/settings/ai", headers=h, json={"image_provider": "openrouter"})
+    _override_image_provider(_FakeImageProvider(data=_PNG_PIXEL))
+    try:
+        r = client.post("/api/media/images", headers=h, json={"prompt": "a cat on a windowsill"})
+    finally:
+        app.dependency_overrides.pop(get_image_provider, None)
+    assert r.status_code == 400
+    assert "model" in r.json()["detail"].lower()
+
+
+def test_a_successful_generation_lands_in_the_library(client):
+    h = _register(client, "a@ex.com")
+    _set_image_model(client, h)
+    _override_image_provider(_FakeImageProvider(data=_PNG_PIXEL))
+    try:
+        r = client.post("/api/media/images", headers=h,
+                        json={"prompt": "a cat on a windowsill", "title": "cat pic"})
+    finally:
+        app.dependency_overrides.pop(get_image_provider, None)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["kind"] == "image"
+    assert body["status"] == "ready"
+    assert body["source"] == "ai_gen"
+    assert body["provider"] == "openrouter"
+    assert body["model"] == "google/gemini-image"
+    assert body["prompt"] == "a cat on a windowsill"
+    assert body["width"] == 1 and body["height"] == 1
+    assert body["url"] == f"/api/media/{body['id']}/file"
+
+    served = client.get(body["url"])
+    assert served.status_code == 200
+    assert served.content == _PNG_PIXEL
+    assert len(client.get("/api/media", headers=h).json()) == 1
+
+
+def test_a_provider_failure_creates_no_asset(client):
+    """A refusal must not leave a half-made row behind for the user to find
+    and be confused by — there is no post standing in front of this one that
+    the pattern elsewhere in the app leans on."""
+    h = _register(client, "a@ex.com")
+    _set_image_model(client, h)
+    _override_image_provider(_FakeImageProvider(error=AIError("The provider rejected the key.")))
+    try:
+        r = client.post("/api/media/images", headers=h, json={"prompt": "a cat on a windowsill"})
+    finally:
+        app.dependency_overrides.pop(get_image_provider, None)
+
+    assert r.status_code == 502
+    assert "rejected the key" in r.json()["detail"]
+    assert client.get("/api/media", headers=h).json() == []
+
+
+def test_a_too_short_prompt_is_rejected(client):
+    h = _register(client, "a@ex.com")
+    _set_image_model(client, h)
+    _override_image_provider(_FakeImageProvider(data=_PNG_PIXEL))
+    try:
+        r = client.post("/api/media/images", headers=h, json={"prompt": "ok"})
+    finally:
+        app.dependency_overrides.pop(get_image_provider, None)
+    assert r.status_code == 422
+    assert client.get("/api/media", headers=h).json() == []
+
+
+def test_generated_images_are_isolated_by_tenant(client):
+    a = _register(client, "a@ex.com")
+    b = _register(client, "b@ex.com")
+    _set_image_model(client, a)
+    _override_image_provider(_FakeImageProvider(data=_PNG_PIXEL))
+    try:
+        r = client.post("/api/media/images", headers=a, json={"prompt": "a cat on a windowsill"})
+    finally:
+        app.dependency_overrides.pop(get_image_provider, None)
+    assert r.status_code == 200          # would otherwise pass vacuously
+    assert client.get("/api/media", headers=b).json() == []
 
 
 def test_serving_reads_the_real_file_not_a_forged_file_path_column(client, tmp_path):

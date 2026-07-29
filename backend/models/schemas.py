@@ -771,3 +771,8 @@ class MediaAssetDetail(MediaAssetSummary):
     prompt: Optional[str] = None
     error: Optional[str] = None
     parent_asset_id: Optional[str] = None
+
+
+class GenerateImageRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=2000)
+    title: Optional[str] = Field(None, max_length=200)

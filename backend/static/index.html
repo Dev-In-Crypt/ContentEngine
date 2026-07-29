@@ -405,6 +405,7 @@
     <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▦ Calendar</button>
     <button data-section="feed" onclick="setSection('feed')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▤ Feed</button>
     <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
+    <button data-section="library-images" onclick="setSection('library-images')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Photos</button>
     <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
     <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
     <button data-section="biz-drafts" onclick="setSection('biz-drafts')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Drafts</button>
@@ -1149,6 +1150,26 @@
       <h2 class="text-lg font-semibold" style="color:var(--accent)">Analytics</h2>
       <p class="text-xs text-gray-400 mt-1">Your published <span class="analytics-net">Instagram</span> posts — open each to view it on the network. (In-app metrics are Instagram-only.)</p>
       <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ===== LIBRARY: Photos (standalone media, not tied to any post) ===== -->
+  <div id="view-library-images" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Photos</h2>
+      <p class="text-xs text-gray-400 mt-1">Generate an image on its own, or upload one — then use it in any post later. Nothing here belongs to a post until you put it in one.</p>
+      <div class="mt-4 flex flex-col sm:flex-row gap-2">
+        <input id="lib-img-prompt" type="text" placeholder="Describe the image you want"
+          class="ce-input flex-1 px-4 py-3" />
+        <button id="lib-img-generate-btn" onclick="generateLibraryImage()" class="ce-btn px-5 py-3 text-sm whitespace-nowrap">Generate</button>
+        <label class="ce-btn-ghost px-5 py-3 text-sm whitespace-nowrap cursor-pointer text-center">
+          Upload
+          <input id="lib-img-upload-input" type="file" multiple accept="image/jpeg,image/png,image/webp"
+            class="hidden" onchange="uploadToLibrary(event, 'image')" />
+        </label>
+      </div>
+      <p id="lib-img-status" class="hidden text-sm text-gray-400 mt-2"></p>
+      <div id="library-image-grid" class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
     </div>
   </div>
 
@@ -4339,19 +4360,22 @@ async function saveXSettings() {
 function setSection(sec) {
   S.section = sec;
   const map = { create:'view-create', calendar:'view-calendar', feed:'view-grid',
-                analytics:'view-analytics', keys:'view-admin', account:'view-admin',
+                analytics:'view-analytics', 'library-images':'view-library-images',
+                keys:'view-admin', account:'view-admin',
                 'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
                 'biz-drafts':'view-biz-drafts', 'biz-analytics':'view-biz-analytics',
                 'biz-journal':'view-biz-journal', 'biz-rules':'view-biz-rules' };
-  for (const v of ['view-create','view-calendar','view-grid','view-admin','view-analytics',
-                   'view-biz-sources','view-biz-leads','view-biz-drafts','view-biz-analytics',
-                   'view-biz-journal','view-biz-rules']) {
+  // Every view id is a value in `map` above — deriving the list from it means a
+  // section added only to the map (the easy mistake) can no longer end up
+  // stuck visible forever, which used to require editing this list separately.
+  for (const v of new Set(Object.values(map))) {
     const el = document.getElementById(v); if (el) el.classList.toggle('hidden', map[sec] !== v);
   }
   document.querySelectorAll('#section-nav .sec-btn').forEach(b => b.classList.toggle('sec-active', b.dataset.section === sec));
   if (sec === 'calendar') renderCalendar();
   else if (sec === 'feed') loadGrid();
   else if (sec === 'analytics') loadAnalytics();
+  else if (sec === 'library-images') loadLibrary('image');
   else if (sec === 'keys' || sec === 'account') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
@@ -4380,6 +4404,104 @@ async function loadAnalytics() {
       ${p.published_url ? `<a href="${esc(safeUrl(p.published_url))}" target="_blank" class="ce-btn-ghost px-3 py-1 text-xs">View post ↗</a>` : ''}
     </div>`).join('');
   } catch (e) { box.innerHTML = '<span class="text-red-400">' + esc(e.message) + '</span>'; }
+}
+
+// ===== MEDIA LIBRARY (standalone assets — generate or upload, use in a post later) =====
+
+async function loadLibrary(kind) {
+  const box = document.getElementById(`library-${kind}-grid`);
+  box.innerHTML = '<span class="text-gray-500 text-sm">Loading…</span>';
+  try {
+    const res = await apiFetch(`${API}/api/media?kind=${encodeURIComponent(kind)}`);
+    const assets = res.ok ? await res.json() : [];
+    renderLibraryGrid(kind, assets);
+  } catch { box.innerHTML = '<span class="text-red-400 text-sm">Couldn\'t load your library.</span>'; }
+}
+
+function renderLibraryGrid(kind, assets) {
+  const box = document.getElementById(`library-${kind}-grid`);
+  if (!assets.length) {
+    box.innerHTML = `<span class="text-gray-500 text-sm col-span-full">Nothing here yet — generate one above or upload your own.</span>`;
+    return;
+  }
+  box.innerHTML = '';
+  assets.forEach(a => box.appendChild(renderLibraryCard(a)));
+}
+
+function renderLibraryCard(asset) {
+  const card = document.createElement('div');
+  card.className = 'ce-card p-2 space-y-1';
+  const media = asset.status === 'ready' && asset.url
+    ? `<img src="${API}${asset.url}" alt="${esc(asset.title || 'Generated image')}" class="w-full aspect-square object-cover rounded-lg bg-black" />`
+    : asset.status === 'failed'
+      ? `<div class="w-full aspect-square rounded-lg bg-gray-800 flex items-center justify-center text-xs text-red-400 p-2 text-center">${esc(asset.error || 'Failed')}</div>`
+      : `<div class="w-full aspect-square rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-400">Generating…</div>`;
+  card.innerHTML = `
+    ${media}
+    <div class="text-xs text-gray-400 truncate" title="${esc(asset.title || asset.prompt || '')}">${esc(asset.title || asset.prompt || 'Untitled')}</div>
+    <button class="ce-btn-ghost w-full px-2 py-1 text-xs" data-act="delete">Delete</button>
+  `;
+  card.querySelector('[data-act="delete"]').onclick = () => deleteLibraryAsset(asset.id, asset.kind);
+  return card;
+}
+
+async function generateLibraryImage() {
+  const input = document.getElementById('lib-img-prompt');
+  const btn = document.getElementById('lib-img-generate-btn');
+  const status = document.getElementById('lib-img-status');
+  const setStatus = (m) => { status.textContent = m; status.classList.remove('hidden'); };
+  const prompt = (input.value || '').trim();
+  if (prompt.length < 3) return setStatus('Describe the image in at least 3 characters.');
+
+  btn.disabled = true; setStatus('Generating…');
+  try {
+    const res = await apiFetch(`${API}/api/media/images`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.detail || `Server error ${res.status}`;
+      // The two guard messages both point at the same fix; send the user there
+      // instead of leaving them staring at an error with nowhere to go.
+      if (res.status === 400 && /provider|model/i.test(msg)) {
+        needKey('Set up image generation', msg, 'account');
+        status.classList.add('hidden');
+        return;
+      }
+      setStatus('❌ ' + msg);
+      return;
+    }
+    input.value = '';
+    status.classList.add('hidden');
+    await loadLibrary('image');
+  } catch (e) { setStatus('❌ ' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function uploadToLibrary(event, kind) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';    // same file can be picked again later
+  if (!files.length) return;
+  const form = new FormData();
+  files.forEach(f => form.append('files', f));
+  try {
+    const res = await apiFetch(`${API}/api/media/uploads`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Upload failed');
+    }
+    await loadLibrary(kind);
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
+async function deleteLibraryAsset(id, kind) {
+  if (!confirm('Delete this from your library? This cannot be undone.')) return;
+  try {
+    const res = await apiFetch(`${API}/api/media/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) throw new Error('Delete failed');
+    await loadLibrary(kind);
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
 }
 
 // ===== GRID MODE (responsive preview) =====
