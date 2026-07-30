@@ -39,14 +39,20 @@ def probe_video(path: Path) -> tuple[int, int, float]:
     return int(dims.group(1)), int(dims.group(2)), h * 3600 + m * 60 + s
 
 
+def aspect_fit_vf(src_w: int, src_h: int, out_w: int, out_h: int) -> str:
+    """Fit any source into out_w x out_h: landscape sources are center-cropped
+    to the target aspect then scaled up; portrait/square ones are scaled down
+    and padded with black. No motion — shared by normalize.py's buffer-fit and
+    clip_edit.py's motion-free reframe."""
+    if src_w / src_h > out_w / out_h:
+        return f"crop=ih*{out_w}/{out_h}:ih,scale={out_w}:{out_h},setsar=1"
+    return (f"scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,"
+            f"pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1")
+
+
 def _aspect_to_buffer_vf(src_w: int, src_h: int) -> str:
     """Fit any source into BUFFER_W x BUFFER_H."""
-    if src_w / src_h > 9 / 16:
-        # landscape → center-crop to 9:16, scale up to buffer
-        return f"crop=ih*9/16:ih,scale={BUFFER_W}:{BUFFER_H},setsar=1"
-    # portrait/square → fit + pad black
-    return (f"scale={BUFFER_W}:{BUFFER_H}:force_original_aspect_ratio=decrease,"
-            f"pad={BUFFER_W}:{BUFFER_H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1")
+    return aspect_fit_vf(src_w, src_h, BUFFER_W, BUFFER_H)
 
 
 def _motion_vf(duration: float, segment_id: int) -> str:
