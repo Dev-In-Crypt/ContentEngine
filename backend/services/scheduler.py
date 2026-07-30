@@ -58,6 +58,15 @@ def init_scheduler(database_url: str, sessionmaker, poll_sources: bool = False) 
         id="connection_check", replace_existing=True,
         misfire_grace_time=3600,
     )
+    # Video generation runs for minutes and the provider's result URL is
+    # temporary, so this has to be a server-side poll, not a browser waiting on
+    # a tab that might get closed. Unconditional (unlike source_poll below) —
+    # video generation is a creator feature, not Business-only.
+    _scheduler.add_job(
+        _run_video_poll_job, trigger="interval", seconds=20,
+        id="video_poll", replace_existing=True,
+        misfire_grace_time=60,
+    )
     # Business source polling (cloud only): rules-only, no LLM, once an hour.
     if poll_sources:
         _scheduler.add_job(
@@ -239,6 +248,16 @@ async def _run_cleanup_job() -> None:
         await run_upload_cleanup(_sessionmaker)
     except Exception as e:
         log.error("Upload cleanup FAILED: %s", e)
+
+
+async def _run_video_poll_job() -> None:
+    """~20s video-generation poll. Never lets an error escape into APScheduler."""
+    from services.video_poll import run_video_poll
+
+    try:
+        await run_video_poll(_sessionmaker)
+    except Exception as e:
+        log.error("Video poll FAILED: %s", e)
 
 
 async def _run_source_poll_job() -> None:
