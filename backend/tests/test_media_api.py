@@ -456,6 +456,188 @@ def test_staging_another_tenants_asset_is_404(client):
     assert client.post(f"/api/media/{asset_id}/stage", headers=b).status_code == 404
 
 
+# ------------------------------------------------------------------ generate (video)
+
+class _FakeVideoProvider:
+    def __init__(self, task_id="text2video:abc123", error=None, create_calls=None):
+        self._task_id, self._error = task_id, error
+        self.create_calls = create_calls if create_calls is not None else []
+
+    async def create_task(self, **kwargs):
+        self.create_calls.append(kwargs)
+        if self._error:
+            raise self._error
+        return self._task_id
+
+    async def poll(self, task_id):
+        raise NotImplementedError
+
+    async def download(self, url):
+        raise NotImplementedError
+
+    async def close(self):
+        pass
+
+
+def _override_gen_video_provider(monkeypatch, fake):
+    import api.routes.media as media_routes
+    monkeypatch.setattr(media_routes, "get_gen_video_provider", lambda *a, **kw: fake)
+
+
+def _set_kling_key(client, headers, key="sk-kling-test"):
+    r = client.put("/api/settings/credentials", headers=headers,
+                   json={"kling_api_key": key})
+    assert r.status_code == 200
+
+
+def test_generate_video_without_a_key_never_calls_the_provider(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    fake = _FakeVideoProvider()
+    _override_gen_video_provider(monkeypatch, fake)
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "a cat walking on a windowsill"})
+    assert r.status_code == 400
+    assert fake.create_calls == []
+    assert client.get("/api/media?kind=video", headers=h).json() == []
+
+
+def test_generate_video_success_creates_a_pending_asset(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    fake = _FakeVideoProvider()
+    _override_gen_video_provider(monkeypatch, fake)
+
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "a cat walking on a windowsill",
+                          "model": "kling-v1-6", "duration_sec": 5})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["kind"] == "video"
+    assert body["status"] == "pending"
+    assert body["url"] is None
+    assert body["provider"] == "kling"
+    assert body["model"] == "kling-v1-6"
+    assert len(fake.create_calls) == 1
+    assert fake.create_calls[0]["prompt"] == "a cat walking on a windowsill"
+    assert fake.create_calls[0]["duration_sec"] == 5
+    assert fake.create_calls[0].get("image_bytes") is None
+
+
+def test_generate_video_records_a_cost_estimate(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    _override_gen_video_provider(monkeypatch, _FakeVideoProvider())
+    asset_id = client.post("/api/media/videos", headers=h,
+                           json={"prompt": "a cat walking on a windowsill",
+                                 "model": "kling-v1-6", "duration_sec": 10}).json()["id"]
+
+    async def _fetch():
+        async with app.state.sessionmaker() as db:
+            return await db.get(MediaAsset, asset_id)
+    asset = asyncio.run(_fetch())
+    assert asset.cost_usd == pytest.approx(10 * 0.075, rel=0.01)
+
+
+def test_generate_video_with_a_seed_image_uses_image_to_video(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    image_id = _upload(client, h, data=b"seed image bytes").json()[0]["id"]
+    fake = _FakeVideoProvider()
+    _override_gen_video_provider(monkeypatch, fake)
+
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "make it move", "image_asset_id": image_id})
+    assert r.status_code == 200
+    assert fake.create_calls[0]["image_bytes"] == b"seed image bytes"
+
+
+def test_generate_video_seed_image_must_be_ready(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    asset_id = "44444444-4444-4444-8444-444444444444"
+
+    async def _seed():
+        async with app.state.sessionmaker() as db:
+            user_id = (await db.execute(
+                select(User).where(User.email == "a@ex.com"))).scalar_one().id
+            db.add(MediaAsset(id=asset_id, user_id=user_id, kind="image",
+                              source="ai_gen", status="pending"))
+            await db.commit()
+    asyncio.run(_seed())
+    _override_gen_video_provider(monkeypatch, _FakeVideoProvider())
+
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "make it move", "image_asset_id": asset_id})
+    assert r.status_code == 400
+
+
+def test_generate_video_seed_image_must_be_an_image(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    video_id = _upload(client, h, data=b"mp4", mime="video/mp4", name="c.mp4").json()[0]["id"]
+    _override_gen_video_provider(monkeypatch, _FakeVideoProvider())
+
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "make it move", "image_asset_id": video_id})
+    assert r.status_code == 400
+
+
+def test_generate_video_seed_image_cross_tenant_is_404(client, monkeypatch):
+    a = _register(client, "a@ex.com")
+    b = _register(client, "b@ex.com")
+    _set_kling_key(client, b)
+    image_id = _upload(client, a).json()[0]["id"]
+    _override_gen_video_provider(monkeypatch, _FakeVideoProvider())
+
+    r = client.post("/api/media/videos", headers=b,
+                    json={"prompt": "make it move", "image_asset_id": image_id})
+    assert r.status_code == 404
+
+
+def test_generate_video_provider_failure_creates_no_asset(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    from services.video.genai.base import VideoGenError
+    fake = _FakeVideoProvider(error=VideoGenError("Kling rejected the key"))
+    _override_gen_video_provider(monkeypatch, fake)
+
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "a cat walking on a windowsill"})
+    assert r.status_code == 502
+    assert "rejected the key" in r.json()["detail"]
+    assert client.get("/api/media?kind=video", headers=h).json() == []
+
+
+def test_generate_video_is_isolated_by_tenant(client, monkeypatch):
+    a = _register(client, "a@ex.com")
+    b = _register(client, "b@ex.com")
+    _set_kling_key(client, a)
+    _override_gen_video_provider(monkeypatch, _FakeVideoProvider())
+    r = client.post("/api/media/videos", headers=a,
+                    json={"prompt": "a cat walking on a windowsill"})
+    assert r.status_code == 200
+    assert client.get("/api/media?kind=video", headers=b).json() == []
+
+
+def test_generate_video_rejects_a_too_short_prompt(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    fake = _FakeVideoProvider()
+    _override_gen_video_provider(monkeypatch, fake)
+    r = client.post("/api/media/videos", headers=h, json={"prompt": "ok"})
+    assert r.status_code == 422
+    assert fake.create_calls == []
+
+
+def test_generate_video_rejects_an_out_of_range_duration(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_kling_key(client, h)
+    _override_gen_video_provider(monkeypatch, _FakeVideoProvider())
+    r = client.post("/api/media/videos", headers=h,
+                    json={"prompt": "a cat walking on a windowsill", "duration_sec": 60})
+    assert r.status_code == 422
+
+
 def test_serving_reads_the_real_file_not_a_forged_file_path_column(client, tmp_path):
     """The path is re-derived from media_store rather than trusted off the row —
     a bad write that put an unexpected path in file_path must not be servable."""

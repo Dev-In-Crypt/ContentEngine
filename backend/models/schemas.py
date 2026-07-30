@@ -781,3 +781,24 @@ class GenerateImageRequest(BaseModel):
 class UseAssetRequest(BaseModel):
     """Which library asset to copy into a slide, a Reel, or a staged upload."""
     asset_id: str = Field(..., min_length=1, max_length=40)
+
+
+class GenerateVideoRequest(BaseModel):
+    """Text-to-video, or image-to-video when image_asset_id names a library
+    photo. duration_sec is capped at 10 in v1 — Kling bills per second, so this
+    keeps a single click's worst case bounded (~$1 at today's indicative price,
+    see catalog.estimate_video_cost's own caveat)."""
+    prompt: str = Field(..., min_length=3, max_length=2500)
+    model: Optional[str] = None
+    duration_sec: int = Field(5, ge=5, le=10)
+    aspect_ratio: str = Field("9:16", pattern=r"^(9:16|16:9|1:1)$")
+    image_asset_id: Optional[str] = Field(None, max_length=40)
+    title: Optional[str] = Field(None, max_length=200)
+
+
+class SuggestVideoIdeaRequest(BaseModel):
+    niche: Optional[str] = Field(None, max_length=100)
+
+
+class SuggestVideoIdeaResponse(BaseModel):
+    prompt: str

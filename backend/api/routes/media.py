@@ -28,11 +28,15 @@ from api.ratelimit import limiter
 from config import Settings
 from models.database import MediaAsset as MediaAssetModel, User as UserModel
 from models.schemas import (
-    GenerateImageRequest, MediaAssetDetail, MediaAssetSummary, StagedUpload,
+    GenerateImageRequest, GenerateVideoRequest, MediaAssetDetail, MediaAssetSummary,
+    StagedUpload,
 )
 from services import media_store, staging
 from services.ai.base import AIError
+from services.ai.catalog import estimate_video_cost
 from services.user_settings import resolve_ai_choice
+from services.video.genai.base import VideoGenError
+from services.video.genai.factory import get_gen_video_provider
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 log = logging.getLogger(__name__)
@@ -171,6 +175,64 @@ async def generate_image_asset(
     except media_store.MediaError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     asset.file_path = str(path)
+    await db.commit()
+    return _detail(asset)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generate — a video via Kling. Asynchronous, unlike images: this only creates
+# the provider's task and a pending MediaAsset; services/video_poll.py finishes
+# the job once Kling reports it done.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/videos", response_model=MediaAssetDetail)
+@limiter.limit("6/minute;30/hour")
+async def generate_video_asset(
+    request: Request,
+    body: GenerateVideoRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_effective_settings)],
+) -> MediaAssetDetail:
+    # Kling isn't part of PROVIDERS/resolve_ai_choice — no text/image models, no
+    # per-token pricing — so its key is read the same direct way as
+    # elevenlabs_api_key/pexels_api_key, not through that machinery.
+    if not settings.kling_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="No Kling key configured. Add one in Account → API keys.")
+
+    image_bytes = None
+    if body.image_asset_id:
+        seed = await _owned_asset(db, body.image_asset_id, user)
+        if seed.kind != "image":
+            raise HTTPException(status_code=400,
+                                detail="Only an image asset can be animated into a video.")
+        if seed.status != "ready":
+            raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
+        image_bytes = media_store.read(seed.user_id, seed.id)
+
+    model = body.model or "kling-v1-6"
+    client = get_gen_video_provider("kling", settings.kling_api_key,
+                                   ssl_verify=settings.ssl_verify)
+    try:
+        task_id = await client.create_task(
+            prompt=body.prompt, model=model, duration_sec=body.duration_sec,
+            aspect_ratio=body.aspect_ratio, image_bytes=image_bytes)
+    except VideoGenError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    finally:
+        await client.close()
+
+    # Only on success: a failed create_task leaves no row behind, same as a
+    # failed image generation — nothing for the user to find and be confused by.
+    asset = MediaAssetModel(
+        user_id=user.id, kind="video", source="ai_gen", status="pending",
+        provider="kling", model=model, prompt=body.prompt, title=body.title or "",
+        provider_task_id=task_id,
+        cost_usd=estimate_video_cost("kling", model, body.duration_sec),
+    )
+    db.add(asset)
     await db.commit()
     return _detail(asset)
 
