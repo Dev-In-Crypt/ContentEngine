@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # overridable per request or via .env.
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+
+    # Kling AI video generation. A single bearer key (the current API key
+    # format), per-user in cloud like every key above it — not part of the
+    # PROVIDERS/resolve_ai_choice text-image system, since it has no text or
+    # image models and is priced per second rather than per token.
+    kling_api_key: str = ""
     # B-roll frame judge (Reels R2) — a cheap vision model on the user's OpenRouter
     # key; fail-open, so an empty/wrong model just disables the filter.
     broll_judge_model: str = "google/gemini-2.0-flash-001"

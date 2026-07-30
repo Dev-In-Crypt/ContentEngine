@@ -84,6 +84,18 @@ def test_effective_settings_overlays_user_key(cloud_client):
     assert settings.openrouter_api_key == "user-own-key"
 
 
+def test_kling_key_round_trips_through_put_and_get(cloud_client):
+    """A field present in _CRED_FIELDS but missing from CredentialsUpdate raises
+    AttributeError at request time — that gap is exactly what this pins."""
+    hdr = _register(cloud_client)
+    r = cloud_client.put("/api/settings/credentials",
+                         json={"kling_api_key": "kling-secret-abc"}, headers=hdr)
+    assert r.status_code == 200
+    body = cloud_client.get("/api/settings/credentials", headers=hdr).json()
+    assert body["kling_api_key"]["set"] is True
+    assert "kling-secret-abc" not in str(body)
+
+
 def test_local_user_gets_platform_settings(cloud_client):
     # A local user must NOT be overlaid — it uses the platform .env as-is.
     async def _eff():

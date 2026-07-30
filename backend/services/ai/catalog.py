@@ -159,3 +159,72 @@ def estimate_cost(provider: str, model: str,
                     (prompt_tokens or 0) / 1e6 * m["price_in"]
                     + (completion_tokens or 0) / 1e6 * m["price_out"], 6)
     return 0.0
+
+
+# ── Video generation ──────────────────────────────────────────────────────────
+#
+# Deliberately a separate catalogue, not another PROVIDERS entry. Kling's
+# current API key is a single bearer token (the older AccessKey+SecretKey pair
+# that needed a JWT signed on our side is now legacy and won't reach new
+# models), which fits the plain per-user Settings field every non-text/image
+# key already uses (elevenlabs_api_key, pexels_api_key) — not the
+# provider+model+key trio resolve_ai_choice() resolves. And it is billed per
+# second, not per token, so it can't share estimate_cost() either. Folding it
+# into PROVIDERS would mean bending every existing entry's shape (key_field,
+# a token-priced cost function) to accommodate one entry that would not even
+# use most of it.
+def _mv(model_id: str, label: str, price_per_sec: float) -> dict:
+    return {"id": model_id, "label": label, "price_per_sec": price_per_sec}
+
+
+# Model ids confirmed against Kling's own API reference. Per-second prices are
+# NOT from Kling directly — they are reseller/aggregator-quoted figures at the
+# time this was written and drift, sometimes by a lot, between vendors and
+# over time. Treat these as a rough order of magnitude for a pre-flight UI
+# estimate, the same "indicative, not billing-grade" caveat as estimate_cost(),
+# and re-verify against Kling's current price sheet before this ships anywhere
+# a user makes a spending decision from it.
+VIDEO_PROVIDERS: dict[str, dict] = {
+    "kling": {
+        "label": "Kling",
+        "key_field": "kling_api_key",
+        "key_url": "https://kling.ai/dev/api-key",
+        "hint": "Text-to-video and image-to-video. Billed per second, not per token — a "
+                "10s clip runs roughly $0.75, about a hundred times an AI image.",
+        "video_models": [
+            _mv("kling-v3-0", "Kling 3.0", 0.075),
+            _mv("kling-v3-0-turbo", "Kling 3.0 Turbo", 0.106),
+            _mv("kling-v2-6", "Kling 2.6", 0.075),
+            _mv("kling-v2-1-master", "Kling 2.1 Master", 0.075),
+            _mv("kling-v1-6", "Kling 1.6 (default)", 0.075),
+        ],
+    },
+}
+
+
+def list_video_providers() -> list[dict]:
+    """Catalogue for the video model dropdown. Never includes keys or secrets."""
+    out = []
+    for key, meta in VIDEO_PROVIDERS.items():
+        out.append({
+            "key": key,
+            "label": meta["label"],
+            "hint": meta["hint"],
+            "key_field": meta["key_field"],
+            "key_url": meta["key_url"],
+            "models": meta["video_models"],
+        })
+    return out
+
+
+def estimate_video_cost(provider: str, model: str, seconds: float) -> float:
+    """Approximate USD spend for a video call, priced per second. See the
+    VIDEO_PROVIDERS comment above for how rough these prices are — this exists
+    to show an order of magnitude before a $0.75 click, not to bill anyone."""
+    meta = VIDEO_PROVIDERS.get(provider)
+    if not meta:
+        return 0.0
+    for m in meta["video_models"]:
+        if m["id"] == model:
+            return round(max(seconds, 0) * m["price_per_sec"], 4)
+    return 0.0

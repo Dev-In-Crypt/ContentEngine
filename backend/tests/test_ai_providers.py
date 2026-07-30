@@ -12,8 +12,9 @@ from pytest_httpx import HTTPXMock
 from services.ai.anthropic_provider import AnthropicProvider
 from services.ai.base import AIError, require_model
 from services.ai.catalog import (
-    IMAGE, PROVIDERS, TEXT, estimate_cost, is_valid_provider, key_field_for,
-    list_providers, supports_grounding,
+    IMAGE, PROVIDERS, TEXT, VIDEO_PROVIDERS, estimate_cost, estimate_video_cost,
+    is_valid_provider, key_field_for, list_providers, list_video_providers,
+    supports_grounding,
 )
 from services.ai.factory import make_image_provider, make_text_provider
 from services.ai.google_provider import GoogleProvider
@@ -32,6 +33,38 @@ def test_catalog_entries_are_well_formed():
             for m in meta[bucket]:
                 assert m["id"] and m["label"]
                 assert m["price_in"] >= 0 and m["price_out"] >= 0, f"{key}/{m['id']}"
+
+
+def test_video_catalog_is_separate_from_the_text_image_providers():
+    """Kling has no text_models/image_models and its key is a single bearer
+    token priced per second — it must not live inside PROVIDERS, which every
+    other test here assumes is the text/image, per-token world."""
+    assert "kling" not in PROVIDERS
+    assert "kling" in VIDEO_PROVIDERS
+
+
+def test_video_catalog_entries_are_well_formed():
+    for key, meta in VIDEO_PROVIDERS.items():
+        assert meta["label"] and meta["key_field"] and meta["key_url"]
+        for m in meta["video_models"]:
+            assert m["id"] and m["label"]
+            assert m["price_per_sec"] >= 0, f"{key}/{m['id']}"
+
+
+def test_list_video_providers_never_leaks_secrets():
+    for p in list_video_providers():
+        assert all(not k.endswith("_enc") for k in p)
+
+
+def test_estimate_video_cost_scales_with_seconds():
+    model = VIDEO_PROVIDERS["kling"]["video_models"][0]
+    assert estimate_video_cost("kling", model["id"], 10) == round(10 * model["price_per_sec"], 4)
+    assert estimate_video_cost("kling", model["id"], 0) == 0.0
+
+
+def test_estimate_video_cost_unknown_model_or_provider_is_zero():
+    assert estimate_video_cost("kling", "not-a-real-model", 10) == 0.0
+    assert estimate_video_cost("not-a-real-provider", "kling-v3-0", 10) == 0.0
 
 
 def test_anthropic_has_no_image_models():

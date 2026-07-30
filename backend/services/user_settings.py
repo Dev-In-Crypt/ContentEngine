@@ -30,6 +30,7 @@ _CRED_FIELDS: dict[str, str] = {
     "unsplash_access_key": "unsplash_access_key_enc",
     "pexels_api_key": "pexels_api_key_enc",
     "elevenlabs_api_key": "elevenlabs_api_key_enc",
+    "kling_api_key": "kling_api_key_enc",
 }
 
 

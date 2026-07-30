@@ -133,6 +133,24 @@ def test_export_masks_credentials_instead_of_decrypting_them(sm, two):
     assert creds["imgbb_api_key"]["set"] is False
 
 
+def test_export_picks_up_a_new_credential_column_with_no_code_change(sm, two):
+    """_credential_summary() introspects UserCredentials.__table__.columns for
+    any *_enc suffix rather than naming fields one by one — this pins that a
+    freshly added key (Kling) is reported without anyone having to remember to
+    wire it in by hand."""
+    async def _set_kling():
+        async with sm() as db:
+            user = two["mine"]["user"]
+            creds = await db.get(UserCredentials, user.id)
+            creds.kling_api_key_enc = encrypt("kling-secret-xyz")
+            await db.commit()
+    asyncio.run(_set_kling())
+
+    data = _collect(sm, two["mine"]["user"])
+    assert data["credentials"]["kling_api_key"]["set"] is True
+    assert "kling-secret-xyz" not in json.dumps(data)
+
+
 def test_export_includes_the_business_workspace(sm, two):
     ws = _collect(sm, two["mine"]["user"])["workspace"]
     assert ws["name"] == "Acme"

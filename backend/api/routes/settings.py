@@ -54,6 +54,7 @@ class CredentialsUpdate(BaseModel):
     unsplash_access_key: Optional[str] = None
     pexels_api_key: Optional[str] = None
     elevenlabs_api_key: Optional[str] = None
+    kling_api_key: Optional[str] = None
 
 
 def _mask(value: Optional[str]) -> Optional[str]:

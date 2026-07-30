@@ -96,3 +96,12 @@ def test_the_connections_page_shows_the_key_fields(page, signup):
     page.locator('[data-section="keys"]').click()
     expect(page.locator("#keys-section")).to_be_visible()
     expect(page.locator('#keys-form input[data-cred]').first).to_be_visible()
+
+
+def test_the_account_page_offers_a_kling_key_for_video(page, signup):
+    """Account, not Connections — Kling is an account-scoped key like ElevenLabs
+    and Pexels, not a per-network publishing credential."""
+    signup()
+    page.get_by_text("Close setup").click()
+    page.locator('[data-section="account"]').click()
+    expect(page.locator('#keys-form input[data-cred="kling_api_key"]')).to_be_visible()

@@ -53,6 +53,7 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     slide_cols = {r[1] for r in sqlite3.connect(db).execute("PRAGMA table_info(slides)")}
     assert "media_asset_id" in slide_cols
     assert "video_asset_id" in post_cols
+    assert "kling_api_key_enc" in cred_cols                         # video generation key
 
 
 def test_migrations_autostamp_preexisting_db(tmp_path):

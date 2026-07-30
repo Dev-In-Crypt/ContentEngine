@@ -97,6 +97,11 @@ class UserCredentials(Base):
     unsplash_access_key_enc = Column(Text)
     pexels_api_key_enc = Column(Text)
     elevenlabs_api_key_enc = Column(Text)   # TTS for voiceover Reels (R1)
+    # Kling's current API key format is a single bearer token (the legacy
+    # AccessKey+SecretKey pair that needed a JWT signed on our side won't
+    # support new models going forward) — so this is one column, the same
+    # shape as elevenlabs/pexels above, not a pair.
+    kling_api_key_enc = Column(Text)
     # Per-network health + token expiry, e.g.
     # {"instagram": {"ok": true, "checked_at": ..., "expires_at": ..., "expires_estimated": true}}
     # JSON rather than a column per network so adding LinkedIn needs no migration.

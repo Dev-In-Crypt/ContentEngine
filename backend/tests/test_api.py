@@ -82,12 +82,22 @@ def test_provider_catalogue(client):
     resp = client.get("/api/models/providers")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["text"] and body["image"]
+    assert body["text"] and body["image"] and body["video"]
     assert {p["key"] for p in body["text"]} >= {"openrouter", "openai", "anthropic", "google"}
     # Anthropic has no image generation, so it must not be offered for images
     assert "anthropic" not in {p["key"] for p in body["image"]}
+    # Video is a separate catalogue (Kling isn't a text/image provider)
+    assert {p["key"] for p in body["video"]} == {"kling"}
     # the catalogue never carries secrets
     assert all("api_key" not in p for p in body["text"])
+
+
+def test_list_video_models(client):
+    resp = client.get("/api/models/video")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) > 0
+    assert all(m["provider"] == "kling" for m in data)
 
 
 # ── request validation ──────────────────────────────────────────────────────
@@ -153,6 +163,7 @@ def cloud_client(client):
     "/api/stock/search?query=run",
     "/api/models/text",
     "/api/models/image",
+    "/api/models/video",
     "/api/models/providers",
 ])
 def test_protected_routes_401_without_jwt(cloud_client, path):
