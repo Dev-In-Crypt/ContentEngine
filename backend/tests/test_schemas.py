@@ -4,7 +4,7 @@ from models.schemas import (
     GenerateRequest, PostFormat, ImageSource, SlideConfig,
     CaptionUpdate, ScheduleRequest, BrandConfigSchema,
     Platform, LengthTier, TemplateStyle, PostPreview, PostStatus,
-    SlidePreview, NICHE_BOX_PALETTE,
+    SlidePreview, NICHE_BOX_PALETTE, EditClipSpec, EditVideoRequest,
 )
 from datetime import datetime, timezone
 
@@ -130,3 +130,34 @@ def test_brand_config_schema_new_fields():
     assert cfg.niche_box_color == "#ff751f"
     assert cfg.description_box_alpha == 0.79
     assert cfg.niche_box_palette == NICHE_BOX_PALETTE
+
+
+def test_edit_video_request_defaults():
+    req = EditVideoRequest(clips=[EditClipSpec(asset_id="a1")])
+    assert req.transitions is False
+    assert req.voiceover is False
+    assert req.clips[0].trim_start_sec == 0.0
+    assert req.clips[0].trim_end_sec is None
+
+
+def test_edit_video_request_transitions_needs_two_clips():
+    with pytest.raises(ValidationError, match="transitions requires at least 2 clips"):
+        EditVideoRequest(clips=[EditClipSpec(asset_id="a1")], transitions=True)
+
+
+def test_edit_video_request_transitions_ok_with_two_clips():
+    req = EditVideoRequest(
+        clips=[EditClipSpec(asset_id="a1"), EditClipSpec(asset_id="a2")],
+        transitions=True,
+    )
+    assert req.transitions is True
+
+
+def test_edit_video_request_requires_at_least_one_clip():
+    with pytest.raises(ValidationError):
+        EditVideoRequest(clips=[])
+
+
+def test_edit_clip_spec_trim_end_must_be_positive():
+    with pytest.raises(ValidationError):
+        EditClipSpec(asset_id="a1", trim_end_sec=0.0)

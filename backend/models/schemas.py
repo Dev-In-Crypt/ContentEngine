@@ -802,3 +802,31 @@ class SuggestVideoIdeaRequest(BaseModel):
 
 class SuggestVideoIdeaResponse(BaseModel):
     prompt: str
+
+
+class EditClipSpec(BaseModel):
+    """One library video clip in the editor's timeline, with its trim points."""
+    asset_id: str = Field(..., min_length=1, max_length=40)
+    trim_start_sec: float = Field(0.0, ge=0.0)
+    trim_end_sec: Optional[float] = Field(None, gt=0.0)   # None = to the clip's end
+
+
+class EditVideoRequest(BaseModel):
+    """Trim/reframe/concat a list of library video clips into one new asset,
+    optionally adding voiceover, music and a cover — the Phase 6 editor.
+    Clips with neither voiceover nor music produce a silent result (see
+    api/routes/media.py's edit_video_asset)."""
+    clips: list[EditClipSpec] = Field(..., min_length=1, max_length=20)
+    transitions: bool = False       # crossfade between clips; needs >=2 clips
+    voiceover: bool = False
+    voiceover_script: Optional[str] = Field(None, max_length=4000)
+    voice_id: Optional[str] = Field(None, max_length=80)
+    music: bool = False
+    cover: bool = False
+    title: Optional[str] = Field(None, max_length=200)
+
+    @model_validator(mode="after")
+    def _transitions_need_multiple_clips(self):
+        if self.transitions and len(self.clips) < 2:
+            raise ValueError("transitions requires at least 2 clips")
+        return self
