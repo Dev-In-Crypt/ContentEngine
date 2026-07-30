@@ -406,6 +406,7 @@
     <button data-section="feed" onclick="setSection('feed')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▤ Feed</button>
     <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
     <button data-section="library-images" onclick="setSection('library-images')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Photos</button>
+    <button data-section="library-video" onclick="setSection('library-video')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Video</button>
     <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
     <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
     <button data-section="biz-drafts" onclick="setSection('biz-drafts')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Drafts</button>
@@ -1176,6 +1177,45 @@
     </div>
   </div>
 
+  <!-- ===== LIBRARY: Video (Kling — text-to-video and image-to-video) ===== -->
+  <div id="view-library-video" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Video</h2>
+      <p class="text-xs text-gray-400 mt-1">Generate a short video from a prompt, or animate a photo from your library — then use it as a Reel later. Billed per second by Kling, unlike a photo.</p>
+
+      <div class="mt-4 space-y-2">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <textarea id="lib-vid-prompt" rows="2" placeholder="Describe the video you want"
+            class="ce-input flex-1 px-4 py-3"></textarea>
+          <button id="lib-vid-idea-btn" onclick="suggestVideoIdea()" class="ce-btn-ghost px-4 py-3 text-sm whitespace-nowrap">✨ Suggest an idea</button>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center text-sm">
+          <select id="lib-vid-model" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs"></select>
+          <select id="lib-vid-duration" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs">
+            <option value="5">5s</option>
+            <option value="10">10s</option>
+          </select>
+          <select id="lib-vid-aspect" class="ce-input px-2 py-1.5 text-xs">
+            <option value="9:16" selected>9:16</option>
+            <option value="16:9">16:9</option>
+            <option value="1:1">1:1</option>
+          </select>
+          <button id="lib-vid-seed-btn" onclick="openLibraryPicker('video-seed')" class="ce-btn-ghost px-3 py-1.5 text-xs">Animate a photo</button>
+          <span id="lib-vid-seed-preview" class="hidden text-xs text-gray-400 flex items-center gap-1">
+            <img id="lib-vid-seed-thumb" class="w-8 h-8 rounded object-cover" alt="Seed photo" />
+            <button onclick="clearVideoSeed()" class="text-gray-500 hover:text-gray-300">✕</button>
+          </span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="lib-vid-generate-btn" onclick="generateLibraryVideo()" class="ce-btn px-5 py-2.5 text-sm">Generate</button>
+          <span id="lib-vid-cost" class="text-xs text-gray-500"></span>
+        </div>
+      </div>
+      <p id="lib-vid-status" class="hidden text-sm text-gray-400 mt-2"></p>
+      <div id="library-video-grid" class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+    </div>
+  </div>
+
   <!-- ===== BUSINESS: Sources ===== -->
   <div id="view-biz-sources" class="hidden space-y-4">
     <div class="ce-card p-5">
@@ -1388,7 +1428,9 @@ const S = {
   seoKeywords: [],
   editingSlide: null,      // slide number being replaced/uploaded
   editSource: 'stock',     // chosen source in the Edit modal
-  libraryPickerMode: null, // 'slide' | 'reel' — which action a library pick completes
+  libraryPickerMode: null, // 'slide' | 'reel' | 'video-seed' — which action a library pick completes
+  videoSeedImageId: null, // library image chosen to animate into a video (image-to-video)
+  videoModels: [],        // {id,label,price_per_sec}[] from GET /api/models/providers's video bucket
   slideOriginals: {},      // {slide_number: {overlay, niche}} for Reset
   currentPost: null,       // last-rendered PostPreview (for schedule/insights)
   calRef: null,            // {year, month} shown in calendar
@@ -4378,6 +4420,7 @@ function setSection(sec) {
   S.section = sec;
   const map = { create:'view-create', calendar:'view-calendar', feed:'view-grid',
                 analytics:'view-analytics', 'library-images':'view-library-images',
+                'library-video':'view-library-video',
                 keys:'view-admin', account:'view-admin',
                 'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
                 'biz-drafts':'view-biz-drafts', 'biz-analytics':'view-biz-analytics',
@@ -4393,6 +4436,7 @@ function setSection(sec) {
   else if (sec === 'feed') loadGrid();
   else if (sec === 'analytics') loadAnalytics();
   else if (sec === 'library-images') loadLibrary('image');
+  else if (sec === 'library-video') { loadVideoModels(); loadLibrary('video'); startVideoPolling(); }
   else if (sec === 'keys' || sec === 'account') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
@@ -4448,7 +4492,9 @@ function renderLibraryGrid(kind, assets) {
 function renderLibraryCard(asset) {
   const card = document.createElement('div');
   card.className = 'ce-card p-2 space-y-1';
-  const media = asset.status === 'ready' && asset.url
+  const media = asset.status === 'ready' && asset.url && asset.kind === 'video'
+    ? `<video src="${API}${asset.url}" controls class="w-full aspect-square object-cover rounded-lg bg-black"></video>`
+    : asset.status === 'ready' && asset.url
     ? `<img src="${API}${asset.url}" alt="${esc(asset.title || 'Generated image')}" class="w-full aspect-square object-cover rounded-lg bg-black" />`
     : asset.status === 'failed'
       ? `<div class="w-full aspect-square rounded-lg bg-gray-800 flex items-center justify-center text-xs text-red-400 p-2 text-center">${esc(asset.error || 'Failed')}</div>`
@@ -4521,13 +4567,132 @@ async function deleteLibraryAsset(id, kind) {
   } catch (e) { toast('❌ ' + e.message, 'error'); }
 }
 
+// ===== VIDEO GENERATION (Kling) =====
+
+async function loadVideoModels() {
+  const sel = document.getElementById('lib-vid-model');
+  if (sel.dataset.loaded) return;   // populate once; the catalogue doesn't change mid-session
+  try {
+    const res = await apiFetch(`${API}/api/models/providers`);
+    const body = res.ok ? await res.json() : {};
+    S.videoModels = (body.video && body.video[0] && body.video[0].models) || [];
+    sel.innerHTML = S.videoModels.map(m =>
+      `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+    sel.dataset.loaded = '1';
+    updateVideoCostEstimate();
+  } catch { /* the Generate call itself will surface a clearer error */ }
+}
+
+function updateVideoCostEstimate() {
+  const el = document.getElementById('lib-vid-cost');
+  if (!el) return;
+  const modelId = document.getElementById('lib-vid-model').value;
+  const seconds = Number(document.getElementById('lib-vid-duration').value) || 5;
+  const model = (S.videoModels || []).find(m => m.id === modelId);
+  el.textContent = model && model.price_per_sec
+    ? `~$${(seconds * model.price_per_sec).toFixed(2)} (Kling, indicative)`
+    : '';
+}
+
+async function suggestVideoIdea() {
+  const btn = document.getElementById('lib-vid-idea-btn');
+  const promptEl = document.getElementById('lib-vid-prompt');
+  btn.disabled = true;
+  try {
+    const res = await apiFetch(`${API}/api/media/videos/suggest-idea`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Could not suggest an idea');
+    }
+    promptEl.value = (await res.json()).prompt;
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+  finally { btn.disabled = false; }
+}
+
+async function generateLibraryVideo() {
+  const promptEl = document.getElementById('lib-vid-prompt');
+  const btn = document.getElementById('lib-vid-generate-btn');
+  const status = document.getElementById('lib-vid-status');
+  const setStatus = (m) => { status.textContent = m; status.classList.remove('hidden'); };
+  const prompt = (promptEl.value || '').trim();
+  if (prompt.length < 3) return setStatus('Describe the video in at least 3 characters.');
+
+  const body = {
+    prompt,
+    duration_sec: Number(document.getElementById('lib-vid-duration').value) || 5,
+    aspect_ratio: document.getElementById('lib-vid-aspect').value,
+  };
+  const modelId = document.getElementById('lib-vid-model').value;
+  if (modelId) body.model = modelId;
+  if (S.videoSeedImageId) body.image_asset_id = S.videoSeedImageId;
+
+  btn.disabled = true; setStatus('Starting…');
+  try {
+    const res = await apiFetch(`${API}/api/media/videos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.detail || `Server error ${res.status}`;
+      if (res.status === 400 && /kling|key/i.test(msg)) {
+        needKey('Set up video generation', msg, 'account');
+        status.classList.add('hidden');
+        return;
+      }
+      setStatus('❌ ' + msg);
+      return;
+    }
+    promptEl.value = '';
+    clearVideoSeed();
+    status.classList.add('hidden');
+    await loadLibrary('video');
+    startVideoPolling();
+  } catch (e) { setStatus('❌ ' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+// The provider takes minutes, so the grid has to refresh itself rather than
+// leave a "Generating…" card stuck until the user happens to reload the tab.
+// Stops itself once nothing in the last-rendered list is still waiting.
+let _videoPollTimer = null;
+let _videoPollSignature = null;
+
+function startVideoPolling() {
+  if (_videoPollTimer) return;
+  _videoPollTimer = setInterval(async () => {
+    if (S.section !== 'library-video') { stopVideoPolling(); return; }
+    const res = await apiFetch(`${API}/api/media?kind=video`).catch(() => null);
+    if (!res || !res.ok) return;
+    const assets = await res.json();
+    // Re-rendering unconditionally would tear down and restart any <video>
+    // already playing in the grid every tick — only redraw when something
+    // about the list actually changed.
+    const signature = assets.map(a => `${a.id}:${a.status}`).join('|');
+    if (signature !== _videoPollSignature) {
+      _videoPollSignature = signature;
+      renderLibraryGrid('video', assets);
+    }
+    if (!assets.some(a => a.status === 'pending' || a.status === 'running')) stopVideoPolling();
+  }, 5000);
+}
+
+function stopVideoPolling() {
+  if (_videoPollTimer) { clearInterval(_videoPollTimer); _videoPollTimer = null; }
+  _videoPollSignature = null;
+}
+
 // ===== LIBRARY PICKER (used from the composer: replace a slide, or attach a Reel) =====
 
 async function openLibraryPicker(mode) {
-  S.libraryPickerMode = mode;   // 'slide' | 'reel'
+  S.libraryPickerMode = mode;   // 'slide' | 'reel' | 'video-seed'
   const kind = mode === 'reel' ? 'video' : 'image';
   document.getElementById('library-picker-title').textContent =
-    mode === 'reel' ? 'Choose a video from your library' : 'Choose a photo from your library';
+    mode === 'reel' ? 'Choose a video from your library'
+    : mode === 'video-seed' ? 'Choose a photo to animate'
+    : 'Choose a photo from your library';
   const grid = document.getElementById('library-picker-grid');
   grid.innerHTML = 'Loading…';
   document.getElementById('library-picker-modal').classList.remove('hidden');
@@ -4547,7 +4712,7 @@ async function openLibraryPicker(mode) {
       btn.innerHTML = kind === 'video'
         ? `<div class="w-full aspect-square bg-black flex items-center justify-center text-2xl">▶</div>`
         : `<img src="${API}${a.url}" class="w-full aspect-square object-cover" />`;
-      btn.onclick = () => pickLibraryAsset(a.id);
+      btn.onclick = () => pickLibraryAsset(a.id, a);
       grid.appendChild(btn);
     });
   } catch { grid.innerHTML = '<span class="text-red-400 text-sm">Couldn\'t load your library.</span>'; }
@@ -4558,9 +4723,18 @@ function closeLibraryPicker() {
   onModalClose();
 }
 
-async function pickLibraryAsset(assetId) {
+async function pickLibraryAsset(assetId, asset) {
   const mode = S.libraryPickerMode;
   try {
+    if (mode === 'video-seed') {
+      // Just remembers the choice — no insert to make, nothing to attach yet.
+      // generateLibraryVideo() reads S.videoSeedImageId when it actually posts.
+      S.videoSeedImageId = assetId;
+      const thumb = document.getElementById('lib-vid-seed-thumb');
+      if (thumb && asset) thumb.src = API + asset.url;
+      document.getElementById('lib-vid-seed-preview')?.classList.remove('hidden');
+      return;
+    }
     if (mode === 'reel') {
       const res = await apiFetch(`${API}/api/posts/${S.postId}/reel/from-library`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -4586,6 +4760,11 @@ async function pickLibraryAsset(assetId) {
     }
   } catch (e) { toast('❌ ' + e.message, 'error'); }
   finally { closeLibraryPicker(); }
+}
+
+function clearVideoSeed() {
+  S.videoSeedImageId = null;
+  document.getElementById('lib-vid-seed-preview')?.classList.add('hidden');
 }
 
 // ===== GRID MODE (responsive preview) =====
