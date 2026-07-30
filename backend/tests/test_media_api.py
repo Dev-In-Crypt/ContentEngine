@@ -638,6 +638,86 @@ def test_generate_video_rejects_an_out_of_range_duration(client, monkeypatch):
     assert r.status_code == 422
 
 
+# ------------------------------------------------------------------ suggest-idea
+
+class _FakeTextProvider:
+    supports_grounding = False
+
+    def __init__(self, content="A paper boat drifting down a rain-soaked gutter.",
+                error=None):
+        self._content, self._error = content, error
+        self.calls = []
+
+    async def generate_text(self, **kwargs):
+        self.calls.append(kwargs)
+        if self._error:
+            raise self._error
+        return self._content, []
+
+    async def close(self):
+        pass
+
+
+def _override_text_provider(monkeypatch, fake):
+    from api.deps import get_text_provider
+    app.dependency_overrides[get_text_provider] = lambda: fake
+    return get_text_provider
+
+
+def _set_text_model(client, headers, provider="openrouter", model="anthropic/claude-sonnet-5"):
+    r = client.put("/api/settings/ai", headers=headers,
+                   json={"text_provider": provider, "text_model": model})
+    assert r.status_code == 200
+
+
+def test_suggest_idea_without_a_text_model_never_calls_the_provider(client):
+    h = _register(client, "a@ex.com")
+    r = client.post("/api/media/videos/suggest-idea", headers=h, json={})
+    assert r.status_code == 400
+
+
+def test_suggest_idea_returns_a_prompt(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_text_model(client, h)
+    fake = _FakeTextProvider()
+    key = _override_text_provider(monkeypatch, fake)
+    try:
+        r = client.post("/api/media/videos/suggest-idea", headers=h, json={})
+    finally:
+        app.dependency_overrides.pop(key, None)
+    assert r.status_code == 200
+    assert r.json()["prompt"] == "A paper boat drifting down a rain-soaked gutter."
+    assert len(fake.calls) == 1
+
+
+def test_suggest_idea_passes_the_niche_through(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_text_model(client, h)
+    fake = _FakeTextProvider()
+    key = _override_text_provider(monkeypatch, fake)
+    try:
+        r = client.post("/api/media/videos/suggest-idea", headers=h,
+                        json={"niche": "artisan coffee"})
+    finally:
+        app.dependency_overrides.pop(key, None)
+    assert r.status_code == 200
+    assert "artisan coffee" in fake.calls[0]["user_prompt"]
+
+
+def test_suggest_idea_provider_failure_is_a_502(client, monkeypatch):
+    h = _register(client, "a@ex.com")
+    _set_text_model(client, h)
+    from services.ai.base import AIError
+    fake = _FakeTextProvider(error=AIError("The provider rejected the key."))
+    key = _override_text_provider(monkeypatch, fake)
+    try:
+        r = client.post("/api/media/videos/suggest-idea", headers=h, json={})
+    finally:
+        app.dependency_overrides.pop(key, None)
+    assert r.status_code == 502
+    assert "rejected the key" in r.json()["detail"]
+
+
 def test_serving_reads_the_real_file_not_a_forged_file_path_column(client, tmp_path):
     """The path is re-derived from media_store rather than trusted off the row —
     a bad write that put an unexpected path in file_path must not be servable."""

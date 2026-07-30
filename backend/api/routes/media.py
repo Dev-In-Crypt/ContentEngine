@@ -23,18 +23,20 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user, get_db, get_effective_settings, get_image_provider
+from api.deps import (
+    get_current_user, get_db, get_effective_settings, get_image_provider, get_text_provider,
+)
 from api.ratelimit import limiter
 from config import Settings
 from models.database import MediaAsset as MediaAssetModel, User as UserModel
 from models.schemas import (
     GenerateImageRequest, GenerateVideoRequest, MediaAssetDetail, MediaAssetSummary,
-    StagedUpload,
+    StagedUpload, SuggestVideoIdeaRequest, SuggestVideoIdeaResponse,
 )
 from services import media_store, staging
 from services.ai.base import AIError
 from services.ai.catalog import estimate_video_cost
-from services.user_settings import resolve_ai_choice
+from services.user_settings import resolve_ai_choice, resolve_user_profile
 from services.video.genai.base import VideoGenError
 from services.video.genai.factory import get_gen_video_provider
 
@@ -235,6 +237,45 @@ async def generate_video_asset(
     db.add(asset)
     await db.commit()
     return _detail(asset)
+
+
+_IDEA_SYSTEM_PROMPT = (
+    "You suggest a single vivid, concrete, filmable video concept for a short "
+    "social clip (5-10 seconds). Answer with ONE or TWO sentences describing "
+    "exactly what the camera sees — no preamble, no options, no surrounding quotes."
+)
+
+
+@router.post("/videos/suggest-idea", response_model=SuggestVideoIdeaResponse)
+@limiter.limit("15/minute;150/hour")
+async def suggest_video_idea(
+    request: Request,
+    body: SuggestVideoIdeaRequest,
+    user: Annotated[UserModel, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_effective_settings)],
+    text_provider: Annotated[object, Depends(get_text_provider)],
+) -> SuggestVideoIdeaResponse:
+    _provider_name, model, _key = resolve_ai_choice(user, settings, "text")
+    if text_provider is None or not model:
+        raise HTTPException(
+            status_code=400,
+            detail="No text model configured. Choose one in Account → AI models.")
+
+    profile = resolve_user_profile(user)
+    niche = body.niche or profile.get("niche")
+    audience = profile.get("target_audience")
+    user_prompt = f"Niche: {niche or 'general'}."
+    if audience:
+        user_prompt += f" Audience: {audience}."
+
+    try:
+        content, _citations = await text_provider.generate_text(
+            model=model, system_prompt=_IDEA_SYSTEM_PROMPT, user_prompt=user_prompt,
+            max_tokens=150)
+    except AIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    return SuggestVideoIdeaResponse(prompt=content.strip())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
