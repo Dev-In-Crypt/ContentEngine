@@ -14,6 +14,8 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Annotated, Optional
@@ -30,15 +32,25 @@ from api.ratelimit import limiter
 from config import Settings
 from models.database import MediaAsset as MediaAssetModel, User as UserModel
 from models.schemas import (
-    GenerateImageRequest, GenerateVideoRequest, MediaAssetDetail, MediaAssetSummary,
-    StagedUpload, SuggestVideoIdeaRequest, SuggestVideoIdeaResponse,
+    EditVideoRequest, GenerateImageRequest, GenerateVideoRequest, MediaAssetDetail,
+    MediaAssetSummary, StagedUpload, SuggestVideoIdeaRequest, SuggestVideoIdeaResponse,
 )
-from services import media_store, staging
+from services import media_store, music_store, staging
 from services.ai.base import AIError
 from services.ai.catalog import estimate_video_cost
+from services.subtitles import chunk_segments, write_ass
+from services.tts import (
+    ElevenLabsTTS, TTSError, concat_wavs, loop_music_only, mix_with_music, mp3_to_wav,
+)
 from services.user_settings import resolve_ai_choice, resolve_user_profile
+from services.video.assemble import mux_reel, prepend_cover, render_cover
+from services.video.base import VideoError
+from services.video.clip_edit import grab_frame, reframe_clip, trim_clip
 from services.video.genai.base import VideoGenError
 from services.video.genai.factory import get_gen_video_provider
+from services.video.normalize import (
+    XFADE_SEC, align_to_duration, concat_clips, concat_clips_xfade, probe_video,
+)
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 log = logging.getLogger(__name__)
@@ -433,3 +445,211 @@ async def stage_media_asset(
     data = media_store.read(asset.user_id, asset.id)
     upload_id = staging.save(str(user.id), data, asset.mime or "image/jpeg")
     return StagedUpload(id=upload_id, filename=asset.title or "", bytes=len(data))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Edit — trim/reframe/concat library video clips into a new asset, optionally
+# adding voiceover, music and a cover (Phase 6). Synchronous, no poller: this
+# is seconds of local ffmpeg work, the same order of magnitude as
+# posts._make_voiceover_reel, which does the same thing synchronously today.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _split_script_into_segments(script: str) -> list[str]:
+    """A blank line separates segments; no blank line at all → one segment for
+    the whole script. No LLM rewriting: these are the user's own words."""
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", script) if p.strip()]
+    return paragraphs or [script.strip()]
+
+
+@router.post("/{asset_id}/edit", response_model=MediaAssetDetail)
+@limiter.limit("6/minute;30/hour")
+async def edit_video_asset(
+    asset_id: str,
+    request: Request,
+    body: EditVideoRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_effective_settings)],
+) -> MediaAssetDetail:
+    """The URL asset anchors the route (owned_post-style guard); every clip in
+    the body is independently owned-checked before any ffmpeg call runs — a
+    foreign id anywhere in the list rejects the whole request up front."""
+    await _owned_asset(db, asset_id, user)
+
+    owned_clips: list[MediaAssetModel] = []
+    for clip in body.clips:
+        clip_asset = await _owned_asset(db, clip.asset_id, user)
+        if clip_asset.kind != "video":
+            raise HTTPException(status_code=400,
+                                detail="Only video assets can be edited into a clip.")
+        if clip_asset.status != "ready":
+            raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
+        owned_clips.append(clip_asset)
+
+    if body.voiceover and not (body.voiceover_script or "").strip():
+        raise HTTPException(status_code=400, detail="Voiceover needs a script.")
+    if body.voiceover and not settings.elevenlabs_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Voiceover needs an ElevenLabs API key — add it in Account → API keys.")
+    music_path = music_store.path_for(str(user.id)) if body.music else None
+    if body.music and music_path is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Background music needs an uploaded track — add one in Account.")
+
+    n = len(owned_clips)
+    tmpdir = Path(tempfile.mkdtemp(prefix="clipedit_"))
+    try:
+        raw_paths: list[Path] = []
+        src_durs: list[float] = []
+        for i, clip_asset in enumerate(owned_clips):
+            data = media_store.read(clip_asset.user_id, clip_asset.id)
+            raw = tmpdir / f"raw_{i:02d}.mp4"
+            raw.write_bytes(data)
+            raw_paths.append(raw)
+            src_durs.append(probe_video(raw)[2])
+
+        starts = [c.trim_start_sec for c in body.clips]
+        user_ends = [c.trim_end_sec if c.trim_end_sec is not None else src_durs[i]
+                    for i, c in enumerate(body.clips)]
+        durations = [max(0.0, ue - s) for s, ue in zip(starts, user_ends, strict=True)]
+
+        fade = 0.0
+        if body.transitions:
+            # each non-last clip's surplus of real source material past its
+            # requested trim end, capped at XFADE_SEC — the crossfade eats
+            # this, never the content the user actually asked to keep.
+            capacities = [max(0.0, min(XFADE_SEC, src_durs[i] - user_ends[i]))
+                         for i in range(n - 1)]
+            fade = min(capacities)
+
+        edited_paths: list[Path] = []
+        for i in range(n):
+            end = user_ends[i]
+            if body.transitions and i < n - 1:
+                end = min(src_durs[i], user_ends[i] + fade)
+            trimmed = tmpdir / f"trim_{i:02d}.mp4"
+            try:
+                await trim_clip(raw_paths[i], trimmed, start_sec=starts[i], end_sec=end)
+            except VideoError as e:
+                raise HTTPException(status_code=502, detail=f"Trim failed: {e}") from e
+            reframed = tmpdir / f"reframe_{i:02d}.mp4"
+            try:
+                await reframe_clip(trimmed, reframed)
+            except VideoError as e:
+                raise HTTPException(status_code=502, detail=f"Reframe failed: {e}") from e
+            edited_paths.append(reframed)
+
+        video_tmp = tmpdir / "video.mp4"
+        try:
+            if body.transitions:
+                await concat_clips_xfade(edited_paths, durations, video_tmp, fade=fade)
+                aligned = tmpdir / "aligned.mp4"
+                await align_to_duration(video_tmp, aligned, sum(durations))
+                video_tmp = aligned
+                video_dur = sum(durations)
+            else:
+                await concat_clips(edited_paths, video_tmp)
+                video_dur = probe_video(video_tmp)[2]
+        except VideoError as e:
+            raise HTTPException(status_code=502, detail=f"Concat failed: {e}") from e
+
+        audio_in: Optional[Path] = None
+        ass_path: Optional[Path] = None
+        if body.voiceover:
+            segments = _split_script_into_segments(body.voiceover_script or "")
+            voice = (body.voice_id or "").strip() or settings.elevenlabs_voice_id
+            gap = 0.35
+            try:
+                tts = ElevenLabsTTS(settings.elevenlabs_api_key,
+                                    ssl_verify=settings.ssl_verify)
+                wavs: list[Path] = []
+                seg_durs: list[float] = []
+                for i, text in enumerate(segments):
+                    mp3 = await tts.synthesize(text, voice_id=voice)
+                    wav = tmpdir / f"seg_{i:02d}.wav"
+                    seg_durs.append(await mp3_to_wav(mp3, wav))
+                    wavs.append(wav)
+                track = tmpdir / "voice.m4a"
+                total_voice = await concat_wavs(wavs, track, gap_sec=gap)
+            except TTSError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
+            aligned_to_voice = tmpdir / "video_voice_aligned.mp4"
+            try:
+                await align_to_duration(video_tmp, aligned_to_voice, total_voice)
+            except VideoError as e:
+                raise HTTPException(status_code=502, detail=f"Align failed: {e}") from e
+            video_tmp = aligned_to_voice
+            video_dur = total_voice
+
+            ass_path = tmpdir / "subs.ass"
+            advance = [d + gap for d in seg_durs]
+            ass_path.write_text(
+                write_ass(chunk_segments(segments, seg_durs, advance_durs=advance)),
+                encoding="utf-8")
+            audio_in = track
+
+        if body.music:
+            if audio_in is not None:
+                mixed = tmpdir / "mixed.m4a"
+                try:
+                    await mix_with_music(audio_in, music_path, mixed, total_dur=video_dur)
+                except TTSError as e:
+                    raise HTTPException(status_code=502,
+                                        detail=f"Music mix failed: {e}") from e
+                audio_in = mixed
+            else:
+                looped = tmpdir / "music_only.m4a"
+                try:
+                    await loop_music_only(music_path, looped, video_dur)
+                except TTSError as e:
+                    raise HTTPException(status_code=502,
+                                        detail=f"Music mix failed: {e}") from e
+                audio_in = looped
+
+        if body.cover:
+            try:
+                frame = grab_frame(video_tmp, at_sec=0.0)
+                cover_mp4 = tmpdir / "cover.mp4"
+                await render_cover(frame, cover_mp4)
+                covered = tmpdir / "covered.mp4"
+                await prepend_cover(cover_mp4, video_tmp, covered, video_dur)
+                video_tmp = covered
+            except VideoError as e:
+                raise HTTPException(status_code=502,
+                                    detail=f"Cover render failed: {e}") from e
+
+        # §6.3: with neither voiceover nor music, the trimmed/concatenated
+        # video IS the final asset — no mux_reel call, the result is silent.
+        if audio_in is not None:
+            out_tmp = tmpdir / "final.mp4"
+            try:
+                await mux_reel(video_tmp, audio_in, ass_path, out_tmp)
+            except VideoError as e:
+                raise HTTPException(status_code=502, detail=f"Assembly failed: {e}") from e
+            final_path = out_tmp
+        else:
+            final_path = video_tmp
+
+        data = final_path.read_bytes()
+        _w, _h, real_dur = probe_video(final_path)
+
+        asset = MediaAssetModel(
+            user_id=user.id, kind="video", source="edited", status="ready",
+            parent_asset_id=owned_clips[0].id, title=body.title or "",
+            mime="video/mp4", width=1080, height=1920,
+            duration_sec=real_dur, bytes=len(data),
+        )
+        db.add(asset)
+        await db.flush()   # need asset.id before the file can be named on disk
+        try:
+            path = media_store.save(str(user.id), asset.id, data, "video/mp4")
+        except media_store.MediaError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+        asset.file_path = str(path)
+        await db.commit()
+        return _detail(asset)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
