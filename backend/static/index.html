@@ -1391,6 +1391,48 @@
     </div>
   </div>
 
+  <!-- ===== Edit Video Modal (Phase 6: trim/reframe/concat + voiceover/music/cover) ===== -->
+  <div id="edit-video-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl" style="max-height:90vh;overflow-y:auto">
+      <div class="flex items-center gap-2">
+        <h3 class="text-lg font-semibold text-purple-300">Edit video</h3>
+        <button onclick="closeEditVideoModal()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+      </div>
+
+      <div id="edit-video-clips" class="space-y-2"></div>
+      <button onclick="openLibraryPicker('edit-clip')" class="ce-btn-ghost w-full px-3 py-1.5 text-xs">+ Add a clip</button>
+
+      <div class="flex flex-wrap gap-3 text-xs items-center pt-2 border-t" style="border-color:var(--border)">
+        <label class="flex items-center gap-1.5 cursor-pointer text-gray-300" title="Needs at least 2 clips">
+          <input type="checkbox" id="edit-video-transitions" class="accent-purple-600" disabled />
+          🔀 Crossfade transitions
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-gray-300">
+          <input type="checkbox" id="edit-video-music" class="accent-purple-600" />
+          🎵 Music
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-gray-300">
+          <input type="checkbox" id="edit-video-cover" class="accent-purple-600" />
+          🖼 Cover
+        </label>
+      </div>
+
+      <label class="flex items-center gap-1.5 cursor-pointer text-gray-300 text-xs">
+        <input type="checkbox" id="edit-video-voiceover" class="accent-purple-600" onchange="toggleEditVideoVoiceoverFields()" />
+        🎙 Add voiceover + subtitles
+      </label>
+      <div id="edit-video-voiceover-fields" class="hidden space-y-2">
+        <textarea id="edit-video-script" rows="3" placeholder="What should the voice say? Blank line = new segment."
+          class="ce-input w-full px-3 py-2 text-sm"></textarea>
+        <input id="edit-video-voice-id" type="text" placeholder="Voice ID (default: Rachel)"
+               class="ce-input px-2 py-1 text-xs w-52" />
+      </div>
+
+      <button id="edit-video-submit-btn" onclick="submitEditVideo()" class="ce-btn w-full px-5 py-2.5 text-sm">Save edit</button>
+      <p id="edit-video-status" class="hidden text-sm text-gray-400"></p>
+    </div>
+  </div>
+
   <!-- ===== Library Picker Modal (choose an existing asset for a slide or a Reel) ===== -->
   <div id="library-picker-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl" style="max-height:85vh;overflow-y:auto">
@@ -1428,9 +1470,11 @@ const S = {
   seoKeywords: [],
   editingSlide: null,      // slide number being replaced/uploaded
   editSource: 'stock',     // chosen source in the Edit modal
-  libraryPickerMode: null, // 'slide' | 'reel' | 'video-seed' — which action a library pick completes
+  libraryPickerMode: null, // 'slide' | 'reel' | 'video-seed' | 'edit-clip' — which action a library pick completes
   videoSeedImageId: null, // library image chosen to animate into a video (image-to-video)
   videoModels: [],        // {id,label,price_per_sec}[] from GET /api/models/providers's video bucket
+  editVideoAnchorId: null, // the clip clicked to open the edit-video modal (ownership anchor for POST .../edit)
+  editVideoClips: [],      // [{asset_id, trim_start_sec, trim_end_sec, title, url}] — the editor's clip list
   slideOriginals: {},      // {slide_number: {overlay, niche}} for Reset
   currentPost: null,       // last-rendered PostPreview (for schedule/insights)
   calRef: null,            // {year, month} shown in calendar
@@ -3432,6 +3476,7 @@ const _MODAL_CLOSERS = {
   'variations-modal': () => closeVariations(),
   'edit-slide-modal': () => closeEditSlide(),
   'library-picker-modal': () => closeLibraryPicker(),
+  'edit-video-modal': () => closeEditVideoModal(),
 };
 let _modalReturnFocus = null;
 function onModalOpen(id) {
@@ -4499,11 +4544,16 @@ function renderLibraryCard(asset) {
     : asset.status === 'failed'
       ? `<div class="w-full aspect-square rounded-lg bg-gray-800 flex items-center justify-center text-xs text-red-400 p-2 text-center">${esc(asset.error || 'Failed')}</div>`
       : `<div class="w-full aspect-square rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-400">Generating…</div>`;
+  const editBtn = asset.kind === 'video' && asset.status === 'ready'
+    ? `<button class="ce-btn-ghost w-full px-2 py-1 text-xs" data-act="edit">Edit</button>` : '';
   card.innerHTML = `
     ${media}
     <div class="text-xs text-gray-400 truncate" title="${esc(asset.title || asset.prompt || '')}">${esc(asset.title || asset.prompt || 'Untitled')}</div>
+    ${editBtn}
     <button class="ce-btn-ghost w-full px-2 py-1 text-xs" data-act="delete">Delete</button>
   `;
+  const editEl = card.querySelector('[data-act="edit"]');
+  if (editEl) editEl.onclick = () => openEditVideoModal(asset);
   card.querySelector('[data-act="delete"]').onclick = () => deleteLibraryAsset(asset.id, asset.kind);
   return card;
 }
@@ -4687,11 +4737,12 @@ function stopVideoPolling() {
 // ===== LIBRARY PICKER (used from the composer: replace a slide, or attach a Reel) =====
 
 async function openLibraryPicker(mode) {
-  S.libraryPickerMode = mode;   // 'slide' | 'reel' | 'video-seed'
-  const kind = mode === 'reel' ? 'video' : 'image';
+  S.libraryPickerMode = mode;   // 'slide' | 'reel' | 'video-seed' | 'edit-clip'
+  const kind = (mode === 'reel' || mode === 'edit-clip') ? 'video' : 'image';
   document.getElementById('library-picker-title').textContent =
     mode === 'reel' ? 'Choose a video from your library'
     : mode === 'video-seed' ? 'Choose a photo to animate'
+    : mode === 'edit-clip' ? 'Choose a clip to add'
     : 'Choose a photo from your library';
   const grid = document.getElementById('library-picker-grid');
   grid.innerHTML = 'Loading…';
@@ -4735,6 +4786,14 @@ async function pickLibraryAsset(assetId, asset) {
       document.getElementById('lib-vid-seed-preview')?.classList.remove('hidden');
       return;
     }
+    if (mode === 'edit-clip') {
+      // Just appends to the editor's in-memory clip list — nothing to attach
+      // yet, submitEditVideo() sends the whole list on save.
+      S.editVideoClips.push({ asset_id: assetId, trim_start_sec: 0, trim_end_sec: null,
+                              title: (asset && asset.title) || '', url: asset && asset.url });
+      renderEditVideoClipsList();
+      return;
+    }
     if (mode === 'reel') {
       const res = await apiFetch(`${API}/api/posts/${S.postId}/reel/from-library`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -4765,6 +4824,138 @@ async function pickLibraryAsset(assetId, asset) {
 function clearVideoSeed() {
   S.videoSeedImageId = null;
   document.getElementById('lib-vid-seed-preview')?.classList.add('hidden');
+}
+
+// ===== EDIT VIDEO MODAL (Phase 6: trim/reframe/concat + voiceover/music/cover) =====
+
+function openEditVideoModal(asset) {
+  S.editVideoAnchorId = asset.id;   // the clip that was clicked — always the ownership anchor URL
+  S.editVideoClips = [{ asset_id: asset.id, trim_start_sec: 0, trim_end_sec: null,
+                        title: asset.title || '', url: asset.url }];
+  document.getElementById('edit-video-music').checked = false;
+  document.getElementById('edit-video-cover').checked = false;
+  document.getElementById('edit-video-voiceover').checked = false;
+  document.getElementById('edit-video-script').value = '';
+  document.getElementById('edit-video-voice-id').value = '';
+  toggleEditVideoVoiceoverFields();
+  renderEditVideoClipsList();
+  document.getElementById('edit-video-status').classList.add('hidden');
+  document.getElementById('edit-video-modal').classList.remove('hidden');
+  onModalOpen('edit-video-modal');
+}
+
+function closeEditVideoModal() {
+  document.getElementById('edit-video-modal').classList.add('hidden');
+  onModalClose();
+}
+
+function toggleEditVideoVoiceoverFields() {
+  const on = document.getElementById('edit-video-voiceover').checked;
+  document.getElementById('edit-video-voiceover-fields').classList.toggle('hidden', !on);
+}
+
+function renderEditVideoClipsList() {
+  const box = document.getElementById('edit-video-clips');
+  box.innerHTML = '';
+  S.editVideoClips.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'ce-card p-2 flex items-center gap-2';
+    row.innerHTML = `
+      <video src="${API}${c.url}" muted preload="metadata" class="w-14 h-14 object-cover rounded bg-black flex-shrink-0"></video>
+      <div class="flex-1 min-w-0">
+        <div class="text-xs text-gray-400 truncate">${esc(c.title || 'Clip')}</div>
+        <div class="flex gap-2 mt-1 text-xs items-center">
+          <label class="text-gray-500">In<input type="number" min="0" step="0.1" value="${c.trim_start_sec}" class="ce-input w-16 px-1 py-0.5 ml-1" data-field="trim_start_sec" /></label>
+          <label class="text-gray-500">Out<input type="number" min="0" step="0.1" value="${c.trim_end_sec ?? ''}" placeholder="end" class="ce-input w-16 px-1 py-0.5 ml-1" data-field="trim_end_sec" /></label>
+        </div>
+      </div>
+      <div class="flex flex-col gap-1">
+        <button data-act="up" class="ce-btn-ghost px-1.5 text-xs" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button data-act="down" class="ce-btn-ghost px-1.5 text-xs" ${i === S.editVideoClips.length - 1 ? 'disabled' : ''}>▼</button>
+        <button data-act="remove" class="ce-btn-ghost px-1.5 text-xs text-red-400">✕</button>
+      </div>
+    `;
+    row.querySelector('[data-field="trim_start_sec"]').onchange = (e) => {
+      c.trim_start_sec = Number(e.target.value) || 0;
+    };
+    row.querySelector('[data-field="trim_end_sec"]').onchange = (e) => {
+      const v = e.target.value;
+      c.trim_end_sec = v === '' ? null : Number(v);
+    };
+    row.querySelector('[data-act="up"]').onclick = () => moveEditVideoClip(i, -1);
+    row.querySelector('[data-act="down"]').onclick = () => moveEditVideoClip(i, 1);
+    row.querySelector('[data-act="remove"]').onclick = () => removeEditVideoClip(i);
+    box.appendChild(row);
+  });
+  updateEditVideoTransitionsAvailability();
+}
+
+function moveEditVideoClip(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= S.editVideoClips.length) return;
+  [S.editVideoClips[i], S.editVideoClips[j]] = [S.editVideoClips[j], S.editVideoClips[i]];
+  renderEditVideoClipsList();
+}
+
+function removeEditVideoClip(i) {
+  S.editVideoClips.splice(i, 1);
+  renderEditVideoClipsList();
+}
+
+function updateEditVideoTransitionsAvailability() {
+  const cb = document.getElementById('edit-video-transitions');
+  const canUse = S.editVideoClips.length >= 2;
+  cb.disabled = !canUse;
+  if (!canUse) cb.checked = false;
+}
+
+async function submitEditVideo() {
+  const btn = document.getElementById('edit-video-submit-btn');
+  const status = document.getElementById('edit-video-status');
+  const setStatus = (m) => { status.textContent = m; status.classList.remove('hidden'); };
+  if (!S.editVideoClips.length) return setStatus('Add at least one clip.');
+
+  const voiceover = document.getElementById('edit-video-voiceover').checked;
+  const script = document.getElementById('edit-video-script').value.trim();
+  if (voiceover && script.length < 1) return setStatus('Write a voiceover script first.');
+
+  const body = {
+    clips: S.editVideoClips.map(c => ({
+      asset_id: c.asset_id, trim_start_sec: c.trim_start_sec, trim_end_sec: c.trim_end_sec,
+    })),
+    transitions: document.getElementById('edit-video-transitions').checked,
+    voiceover,
+    music: document.getElementById('edit-video-music').checked,
+    cover: document.getElementById('edit-video-cover').checked,
+  };
+  if (voiceover) {
+    body.voiceover_script = script;
+    const voiceId = (document.getElementById('edit-video-voice-id').value || '').trim();
+    if (voiceId) body.voice_id = voiceId;
+  }
+
+  btn.disabled = true; setStatus('Rendering…');
+  try {
+    const res = await apiFetch(`${API}/api/media/${encodeURIComponent(S.editVideoAnchorId)}/edit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.detail || `Server error ${res.status}`;
+      if (res.status === 400 && /elevenlabs/i.test(msg)) {
+        needKey('Set up voiceover', msg, 'account');
+        status.classList.add('hidden');
+        return;
+      }
+      setStatus('❌ ' + msg);
+      return;
+    }
+    closeEditVideoModal();
+    toast('✅ Video saved', 'success');
+    await loadLibrary('video');
+  } catch (e) { setStatus('❌ ' + e.message); }
+  finally { btn.disabled = false; }
 }
 
 // ===== GRID MODE (responsive preview) =====
