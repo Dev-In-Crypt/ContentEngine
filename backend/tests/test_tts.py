@@ -13,8 +13,8 @@ import httpx
 import pytest
 
 from services.tts import (
-    ElevenLabsTTS, TTSError, concat_wavs_sync, ffmpeg_exe, mix_with_music_sync,
-    mp3_to_wav_sync,
+    ElevenLabsTTS, TTSError, concat_wavs_sync, ffmpeg_exe, loop_music_only_sync,
+    mix_with_music_sync, mp3_to_wav_sync,
 )
 
 
@@ -181,6 +181,36 @@ def test_mix_fades_music_tail_when_total_dur_given(tmp_path):
     p_mid = _mean_volume_db(plain, ss=0.8, t=0.2)
     p_tail = _mean_volume_db(plain, ss=1.8, t=0.2)
     assert p_tail >= p_mid - 5.0        # no deliberate fade without total_dur
+
+
+def test_loop_music_only_pins_length_to_total_dur(tmp_path):
+    """A 1s track looped to 3s must actually reach ~3s, not stay at 1s.
+    Mutation guard: drop -stream_loop/-t → output stays at the source length."""
+    music_mp3 = _tone_mp3(tmp_path / "m.mp3", 1.0)
+    music = tmp_path / "m.wav"
+    mp3_to_wav_sync(music_mp3, music)
+
+    out = tmp_path / "looped.m4a"
+    loop_music_only_sync(music, out, 3.0)
+    proc = subprocess.run([ffmpeg_exe(), "-hide_banner", "-i", str(out)],
+                          capture_output=True, text=True, errors="replace")
+    import re
+    m = re.search(r"Duration:\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)", proc.stderr)
+    assert m, proc.stderr[-200:]
+    dur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    assert dur > 2.7
+
+
+def test_loop_music_only_fades_the_tail(tmp_path):
+    music_mp3 = _tone_mp3(tmp_path / "m.mp3", 1.0)
+    music = tmp_path / "m.wav"
+    mp3_to_wav_sync(music_mp3, music)
+
+    out = tmp_path / "looped.m4a"
+    loop_music_only_sync(music, out, 2.0)
+    mid = _mean_volume_db(out, ss=0.8, t=0.2)
+    tail = _mean_volume_db(out, ss=1.8, t=0.2)
+    assert tail < mid - 5.0
 
 
 def test_async_wrappers_run(tmp_path):

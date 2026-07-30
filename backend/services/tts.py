@@ -148,6 +148,21 @@ async def mix_with_music(voice: Path, music: Path, dst: Path, *,
                             total_dur=total_dur)
 
 
+def loop_music_only_sync(music: Path, dst: Path, total_dur: float) -> None:
+    """Loop/trim the tenant's track to exactly total_dur with a fade-out at the
+    end — for a video that has music but no voice to duck it against."""
+    fade = f",afade=t=out:st={total_dur - 0.5:.3f}:d=0.5" if total_dur > 0.5 else ""
+    _run(["-stream_loop", "-1", "-i", str(music), "-t", f"{total_dur:.3f}",
+          "-af", f"anull{fade}", "-c:a", "aac", "-b:a", "192k", str(dst)],
+         "music loop")
+    if not dst.exists() or dst.stat().st_size == 0:
+        raise TTSError("ffmpeg produced an empty looped music track")
+
+
+async def loop_music_only(music: Path, dst: Path, total_dur: float) -> None:
+    await asyncio.to_thread(loop_music_only_sync, music, dst, total_dur)
+
+
 async def mp3_to_wav(mp3: bytes, wav_path: Path) -> float:
     return await asyncio.to_thread(mp3_to_wav_sync, mp3, wav_path)
 
