@@ -142,8 +142,10 @@ class Settings(BaseSettings):
     # Error monitoring (optional). Empty → Sentry not initialized.
     sentry_dsn: str = ""
 
-    # Video (Reels) generation provider: "kenburns" (local ffmpeg slideshow) or
-    # "ai" (Runway/Kling/Luma — not implemented yet, stub raises).
+    # Reel-render backend: builds a video from a post's own slides. "kenburns"
+    # (local ffmpeg slideshow) is the only one — NOT to be confused with
+    # services/video/genai's Kling prompt-to-video generation, an unrelated
+    # system for the standalone Video tab.
     video_provider: str = "kenburns"
 
 

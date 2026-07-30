@@ -283,7 +283,7 @@ JSON everywhere; cloud endpoints are JWT-gated (`Authorization: Bearer`). Highli
 - **Billing** — plans/limits per tenant (marketing tiers exist; payments do not yet).
 - **Agency depth** — per-brand social/AI keys, author/approver roles, multiple Business workspaces per account.
 - **Engagement-based source analytics** — light up once Business posts publish to real networks.
-- **AI text-to-video** — Runway/Kling/Luma behind the existing `AIVideoProvider` interface.
+- **More video providers** — Kling ships (Media Studio: text/image-to-video, library, poller); Runway/Luma/Veo/an aggregator behind `services/video/genai/`'s provider protocol.
 - **More b-roll sources** (Pixabay, NASA) and a clip library cache; word-level karaoke subs via an API aligner.
 - **More platforms** — Threads / TikTok / LinkedIn publishing.
 

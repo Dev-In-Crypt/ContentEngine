@@ -1,8 +1,15 @@
 """Video (Reel) generation provider abstraction.
 
-Two implementations:
-- KenBurnsVideoProvider — local ffmpeg slideshow from existing slides (default).
-- AIVideoProvider — text-to-video (Runway/Kling/Luma), stub for now.
+One implementation: KenBurnsVideoProvider — a local ffmpeg slideshow built
+from a post's own slides (the only Reel-render backend that exists).
+
+This is a different system from services/video/genai/: that package is
+prompt/image-to-video generation for the standalone Video tab (Kling and,
+later, other providers), which never fits this Protocol's shape — make_reel()
+takes a post's rendered slide images, not a text prompt. A stub used to sit
+here under the name "ai" pretending to bridge the two; it never did, and has
+been removed rather than left to confuse the next person who assumes it's
+where text-to-video lives.
 """
 
 from __future__ import annotations
@@ -32,7 +39,4 @@ def get_video_provider(name: str = "kenburns") -> VideoProvider:
     if name == "kenburns":
         from services.video.kenburns import KenBurnsVideoProvider
         return KenBurnsVideoProvider()
-    if name == "ai":
-        from services.video.ai_provider import AIVideoProvider
-        return AIVideoProvider()
     raise VideoError(f"Unknown video provider: {name!r}")

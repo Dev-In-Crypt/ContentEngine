@@ -114,11 +114,13 @@ async def test_kenburns_empty_raises():
         await KenBurnsVideoProvider().make_reel([])
 
 
-@pytest.mark.asyncio
-async def test_ai_provider_stub_raises():
-    prov = get_video_provider("ai")
-    with pytest.raises(VideoError):
-        await prov.make_reel([_slide()])
+def test_get_provider_ai_is_no_longer_a_recognised_name():
+    """"ai" used to select a slideshow-shaped stub for prompt-to-video, which
+    was never the right contract (see services/video/genai/ for the real
+    thing — a wholly separate system, not a VideoProvider). Removing the stub
+    means "ai" is just an unrecognised name now, same as any other typo."""
+    with pytest.raises(VideoError, match="Unknown video provider"):
+        get_video_provider("ai")
 
 
 def test_get_provider_unknown():
