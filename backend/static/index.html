@@ -845,7 +845,7 @@
         <video id="reel-video" controls class="w-48 rounded-lg mx-auto bg-black"></video>
         <div class="flex gap-2 justify-center">
           <a id="reel-download" href="#" download="reel.mp4" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 text-xs">⬇ Download MP4</a>
-          <button onclick="publishReel()" class="ce-btn rounded-lg px-3 py-1.5 text-xs">📤 Publish Reel</button>
+          <button id="reel-publish-btn" onclick="publishReelOrToX()" class="ce-btn rounded-lg px-3 py-1.5 text-xs">📤 Publish Reel</button>
         </div>
       </div>
     </div>
@@ -1391,6 +1391,25 @@
     </div>
   </div>
 
+  <!-- ===== Publish to X Modal (Phase 8: a standalone library clip, no post) ===== -->
+  <div id="publish-x-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full space-y-3 shadow-2xl">
+      <div class="flex items-center gap-2">
+        <h3 class="text-lg font-semibold text-purple-300">𝕏 Publish to X</h3>
+        <button onclick="closePublishToXModal()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+      </div>
+      <textarea id="publish-x-text" rows="4" placeholder="What do you want to say?"
+        class="ce-input w-full px-3 py-2 text-sm" oninput="syncPublishXCounter()"></textarea>
+      <div class="flex justify-end">
+        <span id="publish-x-counter" class="text-xs text-gray-500"></span>
+      </div>
+      <input id="publish-x-alt" type="text" placeholder="Alt text (optional)"
+             class="ce-input w-full px-3 py-2 text-sm" />
+      <button id="publish-x-submit-btn" onclick="submitPublishToX()" class="ce-btn w-full px-5 py-2.5 text-sm">𝕏 Publish</button>
+      <p id="publish-x-status" class="hidden text-sm text-gray-400"></p>
+    </div>
+  </div>
+
   <!-- ===== Edit Video Modal (Phase 6: trim/reframe/concat + voiceover/music/cover) ===== -->
   <div id="edit-video-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl" style="max-height:90vh;overflow-y:auto">
@@ -1475,6 +1494,8 @@ const S = {
   videoModels: [],        // {id,label,price_per_sec}[] from GET /api/models/providers's video bucket
   editVideoAnchorId: null, // the clip clicked to open the edit-video modal (ownership anchor for POST .../edit)
   editVideoClips: [],      // [{asset_id, trim_start_sec, trim_end_sec, title, url}] — the editor's clip list
+  publishXAssetId: null,   // library asset the Publish-to-X modal is open for
+  publishJobs: {},         // {(asset_id|post_id): VideoPublishJobStatus} — polled from GET /api/publish-jobs
   slideOriginals: {},      // {slide_number: {overlay, niche}} for Reset
   currentPost: null,       // last-rendered PostPreview (for schedule/insights)
   calRef: null,            // {year, month} shown in calendar
@@ -3477,6 +3498,7 @@ const _MODAL_CLOSERS = {
   'edit-slide-modal': () => closeEditSlide(),
   'library-picker-modal': () => closeLibraryPicker(),
   'edit-video-modal': () => closeEditVideoModal(),
+  'publish-x-modal': () => closePublishToXModal(),
 };
 let _modalReturnFocus = null;
 function onModalOpen(id) {
@@ -3652,6 +3674,30 @@ function updatePostEditorChrome() {
   if (count) count.classList.toggle('hidden', !showXsingle);
   if (splitBtn) splitBtn.classList.toggle('hidden', !showXsingle);
   updateCaptionCount();
+  updateReelPublishButton();
+}
+
+// The Reel card's publish button is platform-aware (Instagram vs X) and, once
+// a job is in flight for this post, shows its live status instead of being
+// clickable again — clicking mid-upload would start a second job.
+function updateReelPublishButton() {
+  const btn = document.getElementById('reel-publish-btn');
+  if (!btn) return;
+  const isX = S.network === 'x';
+  const job = S.postId ? (S.publishJobs || {})[S.postId] : null;
+  if (job && _PUB_JOB_ACTIVE.has(job.status)) {
+    btn.disabled = true;
+    const pct = job.status === 'uploading' && job.progress_pct != null ? ` ${job.progress_pct}%` : '';
+    btn.textContent = (_PUB_JOB_LABELS[job.status] || 'Working…') + pct;
+  } else if (job && job.status === 'published') {
+    btn.disabled = false;
+    btn.textContent = '✅ View on X ↗';
+    btn.onclick = () => window.open(job.permalink, '_blank', 'noopener');
+  } else {
+    btn.disabled = false;
+    btn.textContent = isX ? '𝕏 Publish video to X' : '📤 Publish Reel';
+    btn.onclick = () => publishReelOrToX();
+  }
 }
 
 function updateCaptionCount() {
@@ -4294,6 +4340,36 @@ async function publishReel() {
   } catch(e) { toast('❌ ' + e.message, 'error'); }
 }
 
+// The Reel card's button dispatches by network: Instagram publishes
+// synchronously (publishReel, above); X is asynchronous (a background job —
+// see services/x_video_publish.py), so it queues and polls instead.
+function publishReelOrToX() {
+  if (S.network === 'x') return publishVideoToX();
+  return publishReel();
+}
+
+async function publishVideoToX() {
+  if (!S.postId) return;
+  if (!confirm('Publish this video to X now?')) return;
+  toast('📤 Queuing…', 'info');
+  try {
+    const res = await apiFetch(`${API}/api/posts/${S.postId}/publish-video`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.detail || 'Publish failed';
+      if (res.status === 400 && /credential|X \(Twitter\)/i.test(msg)) {
+        needKey('Connect your X account', msg, 'account');
+        return;
+      }
+      throw new Error(msg);
+    }
+    S.publishJobs[data.post_id] = data;
+    toast(data.warning ? '⚠ ' + data.warning : '📤 Queued — uploading to X…', data.warning ? 'warn' : 'info');
+    updatePostEditorChrome();
+    startPublishJobPolling();
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
 // ===== TOAST =====
 let toastTimer;
 function toast(msg, type = 'info') {
@@ -4481,7 +4557,7 @@ function setSection(sec) {
   else if (sec === 'feed') loadGrid();
   else if (sec === 'analytics') loadAnalytics();
   else if (sec === 'library-images') loadLibrary('image');
-  else if (sec === 'library-video') { loadVideoModels(); loadLibrary('video'); startVideoPolling(); }
+  else if (sec === 'library-video') { loadVideoModels(); loadLibrary('video'); startVideoPolling(); startPublishJobPolling(); }
   else if (sec === 'keys' || sec === 'account') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
@@ -4546,16 +4622,47 @@ function renderLibraryCard(asset) {
       : `<div class="w-full aspect-square rounded-lg bg-gray-800 flex items-center justify-center text-xs text-gray-400">Generating…</div>`;
   const editBtn = asset.kind === 'video' && asset.status === 'ready'
     ? `<button class="ce-btn-ghost w-full px-2 py-1 text-xs" data-act="edit">Edit</button>` : '';
+  const publishBtn = renderPublishXAffordance(asset);
   card.innerHTML = `
     ${media}
     <div class="text-xs text-gray-400 truncate" title="${esc(asset.title || asset.prompt || '')}">${esc(asset.title || asset.prompt || 'Untitled')}</div>
     ${editBtn}
+    ${publishBtn}
     <button class="ce-btn-ghost w-full px-2 py-1 text-xs" data-act="delete">Delete</button>
   `;
   const editEl = card.querySelector('[data-act="edit"]');
   if (editEl) editEl.onclick = () => openEditVideoModal(asset);
+  const pubEl = card.querySelector('[data-act="publish-x"]');
+  if (pubEl) pubEl.onclick = () => openPublishToXModal(asset);
+  const retryEl = card.querySelector('[data-act="publish-x-retry"]');
+  if (retryEl) retryEl.onclick = () => openPublishToXModal(asset);
   card.querySelector('[data-act="delete"]').onclick = () => deleteLibraryAsset(asset.id, asset.kind);
   return card;
+}
+
+// A ready video card is either "not published yet" (a button), mid-flight (a
+// live status badge, no button — clicking again would start a second job), or
+// terminal (a link to the tweet, or a Retry that reopens the same modal).
+const _PUB_JOB_LABELS = {
+  queued: 'Queued for X…', uploading: 'Uploading to X…',
+  processing: 'X is processing the video…', tweeting: 'Posting…',
+};
+function renderPublishXAffordance(asset) {
+  if (asset.kind !== 'video' || asset.status !== 'ready') return '';
+  const job = (S.publishJobs || {})[asset.id];
+  if (!job) {
+    return `<button class="ce-btn-ghost w-full px-2 py-1 text-xs" data-act="publish-x">𝕏 Publish to X</button>`;
+  }
+  if (job.status === 'published') {
+    return `<a href="${esc(safeUrl(job.permalink))}" target="_blank" rel="noopener"
+              class="ce-btn-ghost w-full px-2 py-1 text-xs block text-center">✅ View on X ↗</a>`;
+  }
+  if (job.status === 'failed') {
+    return `<button class="ce-btn-ghost w-full px-2 py-1 text-xs text-red-400" data-act="publish-x-retry"
+                    title="${esc(job.error || '')}">❌ Failed — Retry</button>`;
+  }
+  const pct = job.status === 'uploading' && job.progress_pct != null ? ` ${job.progress_pct}%` : '';
+  return `<div class="w-full px-2 py-1 text-xs text-center text-gray-400">${esc((_PUB_JOB_LABELS[job.status] || 'Working…') + pct)}</div>`;
 }
 
 async function generateLibraryImage() {
@@ -4956,6 +5063,101 @@ async function submitEditVideo() {
     await loadLibrary('video');
   } catch (e) { setStatus('❌ ' + e.message); }
   finally { btn.disabled = false; }
+}
+
+// ===== PUBLISH TO X (Phase 8: a standalone library clip, no post) =====
+
+function openPublishToXModal(asset) {
+  S.publishXAssetId = asset.id;
+  document.getElementById('publish-x-text').value = '';
+  document.getElementById('publish-x-alt').value = '';
+  document.getElementById('publish-x-status').classList.add('hidden');
+  syncPublishXCounter();
+  document.getElementById('publish-x-modal').classList.remove('hidden');
+  onModalOpen('publish-x-modal');
+}
+
+function closePublishToXModal() {
+  document.getElementById('publish-x-modal').classList.add('hidden');
+  onModalClose();
+}
+
+function syncPublishXCounter() {
+  const n = tweetLength(document.getElementById('publish-x-text').value);
+  const el = document.getElementById('publish-x-counter');
+  el.textContent = `${n}/${X_TWEET_LIMIT}`;
+  el.className = 'text-xs ' + (n > X_TWEET_LIMIT ? 'text-red-400' : 'text-gray-500');
+}
+
+async function submitPublishToX() {
+  const btn = document.getElementById('publish-x-submit-btn');
+  const status = document.getElementById('publish-x-status');
+  const setStatus = (m) => { status.textContent = m; status.classList.remove('hidden'); };
+  const text = document.getElementById('publish-x-text').value.trim();
+  if (!text) return setStatus('Write something to post with the video.');
+  const alt = document.getElementById('publish-x-alt').value.trim();
+
+  btn.disabled = true; setStatus('Queuing…');
+  try {
+    const res = await apiFetch(`${API}/api/media/${encodeURIComponent(S.publishXAssetId)}/publish-x`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, alt_text: alt || null }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.detail || `Server error ${res.status}`;
+      if (res.status === 400 && /credential|X \(Twitter\)/i.test(msg)) {
+        needKey('Connect your X account', msg, 'account');
+        status.classList.add('hidden');
+        return;
+      }
+      setStatus('❌ ' + msg);
+      return;
+    }
+    const data = await res.json();
+    closePublishToXModal();
+    if (data.warning) toast('⚠ ' + data.warning, 'warn');
+    else toast('📤 Queued — uploading to X…', 'info');
+    S.publishJobs[data.asset_id] = data;
+    await loadLibrary('video');
+    startPublishJobPolling();
+  } catch (e) { setStatus('❌ ' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+// Job status is polled from one shared endpoint and indexed by whichever of
+// asset_id/post_id the job carries, so both the library grid (asset_id) and
+// the composer's Reel card (post_id) read from the same S.publishJobs map.
+const _PUB_JOB_ACTIVE = new Set(['queued', 'uploading', 'processing', 'tweeting']);
+let _pubJobTimer = null;
+let _pubJobSignature = null;
+
+function startPublishJobPolling() {
+  if (_pubJobTimer) return;
+  const tick = async () => {
+    const res = await apiFetch(`${API}/api/publish-jobs`).catch(() => null);
+    if (!res || !res.ok) return;
+    const jobs = await res.json();
+    const sig = jobs.map(j => `${j.id}:${j.status}:${j.progress_pct}`).join('|');
+    S.publishJobs = {};
+    jobs.forEach(j => { S.publishJobs[j.asset_id || j.post_id] = j; });
+    if (sig !== _pubJobSignature) {
+      _pubJobSignature = sig;
+      // Only reload the grid when there's an actual job to reflect — an empty
+      // list (the common case) has nothing new to show, and reloading anyway
+      // races the grid's own independent load right after entering the tab.
+      if (jobs.length && S.section === 'library-video') loadLibrary('video');
+      updatePostEditorChrome();
+    }
+    if (!jobs.some(j => _PUB_JOB_ACTIVE.has(j.status))) stopPublishJobPolling();
+  };
+  tick();   // don't make the user wait a full interval to see an already-running job
+  _pubJobTimer = setInterval(tick, 5000);
+}
+
+function stopPublishJobPolling() {
+  if (_pubJobTimer) { clearInterval(_pubJobTimer); _pubJobTimer = null; }
+  _pubJobSignature = null;
 }
 
 // ===== GRID MODE (responsive preview) =====
