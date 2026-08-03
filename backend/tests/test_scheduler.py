@@ -54,6 +54,20 @@ async def test_run_video_poll_job_swallows_failure(monkeypatch):
     await scheduler._run_video_poll_job()   # must not raise
 
 
+def test_run_x_video_publish_job_is_a_coroutine():
+    assert inspect.iscoroutinefunction(scheduler._run_x_video_publish_job)
+
+
+async def test_run_x_video_publish_job_swallows_failure(monkeypatch):
+    """Same guarantee as the video-generation poll: a crash here must not take
+    the whole scheduler down with it."""
+    failing = AsyncMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr("services.x_video_publish.run_x_video_publish", failing)
+    monkeypatch.setattr(scheduler, "_sessionmaker", object())
+
+    await scheduler._run_x_video_publish_job()   # must not raise
+
+
 def test_sync_jobstore_driver_is_installed():
     """APScheduler's SQLAlchemyJobStore uses a SYNC engine. On Postgres the URL
     resolves to postgresql:// which needs psycopg2 — without it the scheduler

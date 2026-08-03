@@ -67,6 +67,16 @@ def init_scheduler(database_url: str, sessionmaker, poll_sources: bool = False) 
         id="video_poll", replace_existing=True,
         misfire_grace_time=60,
     )
+    # X video publish: chunked upload (INIT/APPEND/FINALIZE/STATUS) that takes
+    # minutes and must survive a restart — chunk_index on the job row lets a
+    # tick after a restart resume instead of re-uploading from scratch.
+    # max_instances=1 + coalesce so an overrunning tick (a big file) drops the
+    # next one rather than stacking. Unconditional, same as video_poll.
+    _scheduler.add_job(
+        _run_x_video_publish_job, trigger="interval", seconds=10,
+        id="x_video_publish", replace_existing=True,
+        misfire_grace_time=60, max_instances=1, coalesce=True,
+    )
     # Business source polling (cloud only): rules-only, no LLM, once an hour.
     if poll_sources:
         _scheduler.add_job(
@@ -258,6 +268,16 @@ async def _run_video_poll_job() -> None:
         await run_video_poll(_sessionmaker)
     except Exception as e:
         log.error("Video poll FAILED: %s", e)
+
+
+async def _run_x_video_publish_job() -> None:
+    """~10s X video publish poll. Never lets an error escape into APScheduler."""
+    from services.x_video_publish import run_x_video_publish
+
+    try:
+        await run_x_video_publish(_sessionmaker)
+    except Exception as e:
+        log.error("X video publish poll FAILED: %s", e)
 
 
 async def _run_source_poll_job() -> None:
