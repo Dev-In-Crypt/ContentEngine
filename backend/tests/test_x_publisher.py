@@ -1,9 +1,12 @@
 """XPublisher against mocked X endpoints (no live API — needs a paid tier)."""
 import re
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 import pytest
+from authlib.oauth1.rfc5849 import signature as oauth_sig
 from pytest_httpx import HTTPXMock
 
+from services.publish_retry import is_retryable
 from services.publishing.base import PublisherError
 from services.publishing.x import MAX_CHARS, MAX_IMAGES, XPublisher
 
@@ -202,3 +205,168 @@ async def test_alt_text_failure_does_not_block_the_tweet(httpx_mock: HTTPXMock):
     out = await pub.publish([b"img"], "cap", alt_text="desc")
     await pub.close()
     assert out.media_id == "t1"                         # tweet still went out
+
+
+# ── chunked video upload (Phase 8) ───────────────────────────────────────────
+
+def _oauth_params_from_header(auth_header: str) -> list[tuple[str, str]]:
+    """Parse 'OAuth k="v", k="v", ...' back into (key, value) pairs, values
+    LEFT percent-encoded — construct_base_string unescapes oauth_ params
+    itself, exactly once, so re-decoding here would double-unescape."""
+    body = auth_header[len("OAuth "):]
+    pairs = []
+    for part in body.split(", "):
+        k, v = part.split("=", 1)
+        pairs.append((k, v.strip('"')))
+    return pairs
+
+
+def _recompute_signature(req, consumer_secret: str, token_secret: str) -> str:
+    """Independently recompute the HMAC-SHA1 signature for a captured request,
+    using the SAME authlib primitives ClientAuth uses internally — proves the
+    query-string params are actually covered by the signature, not just
+    present in the URL next to an unrelated one."""
+    oauth_params = _oauth_params_from_header(req.headers["Authorization"])
+    query_params = parse_qsl(urlsplit(str(req.url)).query)   # already decoded
+    base = oauth_sig.construct_base_string(req.method, str(req.url),
+                                           oauth_params + query_params)
+    return oauth_sig.hmac_sha1_signature(base, consumer_secret, token_secret)
+
+
+async def test_video_init_params_are_inside_the_oauth_signature(httpx_mock: HTTPXMock):
+    """Mutation guard: sign the bare upload URL instead of the full query URL
+    (or move `command=` into a form body) → the locally recomputed signature
+    no longer matches the header. That mutation is a production 401 on every
+    single INIT/APPEND/FINALIZE/STATUS call."""
+    httpx_mock.add_response(url=UPLOAD, json={"media_id_string": "vid1"})
+    pub = _pub()
+    media_id = await pub.video_upload_init(12345, media_type="video/mp4",
+                                           media_category="tweet_video")
+    await pub.close()
+
+    assert media_id == "vid1"
+    req = httpx_mock.get_requests()[0]
+    assert "command=INIT" in str(req.url)
+    assert "total_bytes=12345" in str(req.url)
+
+    header_sig = dict(_oauth_params_from_header(req.headers["Authorization"]))["oauth_signature"]
+    assert unquote(header_sig) == _recompute_signature(req, "cs", "ats")
+
+
+async def test_video_append_keeps_the_chunk_out_of_the_signature(httpx_mock: HTTPXMock):
+    """The chunk rides multipart (outside the OAuth1 base string) — proven two
+    ways: the recomputed signature (which never touches the body) still
+    matches, and oauth_body_hash (an extension X doesn't implement) is absent.
+    Mutation guard: pass the chunk as `body` to .sign() → oauth_body_hash
+    appears in the header and a real request 401s."""
+    httpx_mock.add_response(url=UPLOAD, status_code=204)
+    pub = _pub()
+    await pub.video_upload_append("vid1", 2, b"some binary chunk bytes")
+    await pub.close()
+
+    req = httpx_mock.get_requests()[0]
+    assert "command=APPEND" in str(req.url)
+    assert "segment_index=2" in str(req.url)
+    assert req.headers["Content-Type"].startswith("multipart/")
+    assert "oauth_body_hash" not in req.headers["Authorization"]
+
+    header_sig = dict(_oauth_params_from_header(req.headers["Authorization"]))["oauth_signature"]
+    assert unquote(header_sig) == _recompute_signature(req, "cs", "ats")
+
+
+async def test_video_init_failure_keeps_the_retryable_message_shape(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=UPLOAD, status_code=503, text="Service Unavailable")
+    pub = _pub()
+    with pytest.raises(PublisherError, match="X media INIT failed") as e:
+        await pub.video_upload_init(100)
+    await pub.close()
+    assert is_retryable(e.value)   # publish_retry must find the "503" in the message
+
+
+async def test_video_append_failure_raises(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=UPLOAD, status_code=400, text="bad segment")
+    pub = _pub()
+    with pytest.raises(PublisherError, match="X media APPEND failed"):
+        await pub.video_upload_append("vid1", 0, b"chunk")
+    await pub.close()
+
+
+async def test_video_finalize_without_processing_info_is_succeeded(httpx_mock: HTTPXMock):
+    """Mutation guard: require processing_info unconditionally → a small clip
+    that finalizes instantly would hang in 'processing' forever."""
+    httpx_mock.add_response(url=UPLOAD, json={"media_id_string": "vid1", "size": 10})
+    pub = _pub()
+    status = await pub.video_upload_finalize("vid1")
+    await pub.close()
+    assert status == {"state": "succeeded", "check_after_secs": None, "error": None}
+
+
+async def test_video_finalize_reports_pending_processing(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=UPLOAD, json={
+        "media_id_string": "vid1",
+        "processing_info": {"state": "pending", "check_after_secs": 5},
+    })
+    pub = _pub()
+    status = await pub.video_upload_finalize("vid1")
+    await pub.close()
+    assert status == {"state": "pending", "check_after_secs": 5, "error": None}
+
+
+async def test_video_status_reports_succeeded(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(url=UPLOAD, json={
+        "media_id_string": "vid1",
+        "processing_info": {"state": "succeeded", "progress_percent": 100},
+    })
+    pub = _pub()
+    status = await pub.video_upload_status("vid1")
+    await pub.close()
+    assert status["state"] == "succeeded"
+
+
+async def test_video_status_reports_failed_with_the_reason(httpx_mock: HTTPXMock):
+    """Mutation guard: drop the error formatting → the poller (and the user)
+    never learns WHY X rejected the video."""
+    httpx_mock.add_response(url=UPLOAD, json={
+        "media_id_string": "vid1",
+        "processing_info": {
+            "state": "failed",
+            "error": {"code": 1, "name": "InvalidMedia", "message": "Unsupported codec"},
+        },
+    })
+    pub = _pub()
+    status = await pub.video_upload_status("vid1")
+    await pub.close()
+    assert status["state"] == "failed"
+    assert "InvalidMedia" in status["error"]
+    assert "Unsupported codec" in status["error"]
+
+
+async def test_publish_video_posts_a_single_tweet_with_the_given_media_id(httpx_mock: HTTPXMock):
+    import json as _json
+    httpx_mock.add_response(url=TWEET, json={"data": {"id": "tw1"}})
+    pub = _pub()
+    out = await pub.publish_video("vid1", "Check this out.")
+    await pub.close()
+    assert out.media_id == "tw1"
+    body = _json.loads(httpx_mock.get_requests()[0].content)
+    assert body["media"]["media_ids"] == ["vid1"]
+
+
+async def test_publish_video_thread_puts_the_video_on_the_first_tweet_only(httpx_mock: HTTPXMock):
+    """Mutation guard: attach media_ids on every tweet → bodies 1..n carry
+    'media' and this fails. Also proves the _post_chain extraction (4.4)
+    didn't change publish_thread's own behaviour — see the untouched tests
+    above."""
+    import json as _json
+    for tid in ("t1", "t2"):
+        httpx_mock.add_response(url=TWEET, json={"data": {"id": tid}})
+    pub = _pub()
+    out = await pub.publish_video_thread("vid1", ["Hook.", "Follow-up."])
+    await pub.close()
+
+    tweets = [_json.loads(r.content) for r in httpx_mock.get_requests()
+             if str(r.url) == TWEET]
+    assert tweets[0]["media"] == {"media_ids": ["vid1"]}
+    assert "media" not in tweets[1]
+    assert tweets[1]["reply"]["in_reply_to_tweet_id"] == "t1"
+    assert out.media_id == "t1"

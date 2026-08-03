@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import urlencode
 
 import httpx
 
@@ -35,6 +36,27 @@ _METADATA_URL = "https://upload.twitter.com/1.1/media/metadata/create.json"
 _TWEET_URL = "https://api.twitter.com/2/tweets"
 _ME_URL = "https://api.twitter.com/2/users/me"
 
+# Video (Phase 8): the same v1.1 media endpoint, chunked (INIT/APPEND/FINALIZE/
+# STATUS). Confirmed live against the account's own OAuth 1.0a credentials —
+# query-string params signed, the v2 dedicated endpoints reject this auth type.
+VIDEO_CHUNK_BYTES = 4 * 1024 * 1024   # X caps one APPEND segment at 5 MB
+_VIDEO_CATEGORY = "tweet_video"
+
+
+def _normalize_processing(data: dict) -> dict:
+    """FINALIZE/STATUS -> {"state", "check_after_secs", "error"}. No
+    processing_info at all (can happen for a trivial file) means X considers
+    it already done."""
+    info = data.get("processing_info")
+    if info is None:
+        return {"state": "succeeded", "check_after_secs": None, "error": None}
+    err = info.get("error")
+    return {
+        "state": info.get("state", "succeeded"),
+        "check_after_secs": info.get("check_after_secs"),
+        "error": f"{err.get('name')}: {err.get('message')}" if err else None,
+    }
+
 
 class XPublisher:
     def __init__(self, api_key: str, api_secret: str,
@@ -48,6 +70,17 @@ class XPublisher:
         # body=None: JSON/multipart bodies are not part of the OAuth1 signature.
         _, headers, _ = self._signer.sign(method, url, {}, None)
         return headers["Authorization"]
+
+    def _signed(self, method: str, url: str, params: dict) -> tuple[str, dict]:
+        """(url_to_send, headers) for a request whose parameters must ride the
+        QUERY STRING — OAuth 1.0a folds query params into the signature base
+        string but not multipart/JSON bodies, confirmed live: sending `command=`
+        only in the multipart body 401s. body stays None for the same reason
+        as _auth: a non-empty non-form body makes authlib add oauth_body_hash,
+        an extension X doesn't implement."""
+        full = f"{url}?{urlencode(sorted(params.items()))}" if params else url
+        _, headers, _ = self._signer.sign(method, full, {}, None)
+        return full, headers
 
     async def verify_credentials(self) -> dict:
         """Read-only preflight: confirm the 4 OAuth keys work WITHOUT tweeting.
@@ -83,7 +116,33 @@ class XPublisher:
     async def publish_thread(self, parts: list[str], images: list[bytes],
                              alt_text: Optional[str] = None) -> PublishOutcome:
         """Post a chain: the first tweet carries the image, each following tweet
-        replies to the one before it.
+        replies to the one before it."""
+        media_ids = [await self._upload_media(img) for img in images[:1]]
+        return await self._post_chain(parts, media_ids, alt_text)
+
+    async def publish_video(self, media_id: str, caption: str, *,
+                            alt_text: Optional[str] = None,
+                            long_form: bool = False) -> PublishOutcome:
+        """One tweet carrying an already-uploaded, already-processed video."""
+        await self._set_alt_text(media_id, alt_text)
+        text = (caption or "") if long_form else fit_tweet(caption or "", MAX_CHARS)
+        tweet_id = await self._post_tweet(text, media_ids=[media_id])
+        return PublishOutcome(
+            media_id=tweet_id,
+            permalink=f"https://x.com/i/web/status/{tweet_id}",
+        )
+
+    async def publish_video_thread(self, media_id: str, parts: list[str], *,
+                                   alt_text: Optional[str] = None) -> PublishOutcome:
+        """A thread with the video on the first tweet."""
+        return await self._post_chain(parts, [media_id], alt_text)
+
+    async def _post_chain(self, parts: list[str], media_ids: list[str],
+                          alt_text: Optional[str]) -> PublishOutcome:
+        """Post a chain: media rides the first tweet, each following tweet
+        replies to the one before it. Shared by publish_thread (images) and
+        publish_video_thread (one video) so the partial-failure handling below
+        exists in exactly one place.
 
         X has no transaction here. If tweet 4 of 7 fails, tweets 1-3 are already
         live and cannot be rolled back — so the error says how many went out and
@@ -93,7 +152,6 @@ class XPublisher:
         if not parts:
             raise PublisherError("Thread is empty — nothing to publish.")
 
-        media_ids = [await self._upload_media(img) for img in images[:1]]
         for mid in media_ids:
             await self._set_alt_text(mid, alt_text)
         first_id: Optional[str] = None
@@ -168,6 +226,68 @@ class XPublisher:
         if not mid:
             raise PublisherError(f"X media response missing id: {r.text[:200]}")
         return mid
+
+    async def video_upload_init(self, total_bytes: int, *, media_type: str = "video/mp4",
+                                media_category: str = _VIDEO_CATEGORY) -> str:
+        params = {"command": "INIT", "total_bytes": total_bytes,
+                  "media_type": media_type, "media_category": media_category}
+        url, headers = self._signed("POST", _UPLOAD_URL, params)
+        try:
+            r = await self._client.post(url, headers=headers)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise PublisherError(
+                f"X media INIT failed: {e.response.status_code} {e.response.text[:200]}"
+            ) from e
+        except httpx.RequestError as e:
+            raise PublisherError(f"X media network error: {e}") from e
+
+        mid = r.json().get("media_id_string")
+        if not mid:
+            raise PublisherError(f"X media INIT response missing id: {r.text[:200]}")
+        return mid
+
+    async def video_upload_append(self, media_id: str, segment_index: int,
+                                  chunk: bytes) -> None:
+        params = {"command": "APPEND", "media_id": media_id, "segment_index": segment_index}
+        url, headers = self._signed("POST", _UPLOAD_URL, params)
+        try:
+            r = await self._client.post(url, files={"media": chunk}, headers=headers)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise PublisherError(
+                f"X media APPEND failed: {e.response.status_code} {e.response.text[:200]}"
+            ) from e
+        except httpx.RequestError as e:
+            raise PublisherError(f"X media network error: {e}") from e
+
+    async def video_upload_finalize(self, media_id: str) -> dict:
+        params = {"command": "FINALIZE", "media_id": media_id}
+        url, headers = self._signed("POST", _UPLOAD_URL, params)
+        try:
+            r = await self._client.post(url, headers=headers)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise PublisherError(
+                f"X media FINALIZE failed: {e.response.status_code} {e.response.text[:200]}"
+            ) from e
+        except httpx.RequestError as e:
+            raise PublisherError(f"X media network error: {e}") from e
+        return _normalize_processing(r.json())
+
+    async def video_upload_status(self, media_id: str) -> dict:
+        params = {"command": "STATUS", "media_id": media_id}
+        url, headers = self._signed("GET", _UPLOAD_URL, params)
+        try:
+            r = await self._client.get(url, headers=headers)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise PublisherError(
+                f"X media STATUS failed: {e.response.status_code} {e.response.text[:200]}"
+            ) from e
+        except httpx.RequestError as e:
+            raise PublisherError(f"X media network error: {e}") from e
+        return _normalize_processing(r.json())
 
     async def _set_alt_text(self, media_id: str, alt_text: Optional[str]) -> None:
         """Attach accessibility text to an uploaded image (v1.1 metadata/create).
