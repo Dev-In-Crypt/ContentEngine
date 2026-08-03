@@ -485,4 +485,40 @@ async def test_long_x_post_is_not_squeezed_to_the_tweet_limit(
     _, caption, _ = fake.called_with
     assert len(caption) > TWEET_CHAR_LIMIT            # untouched
     assert caption.endswith("#Walking")
-    assert fake.long_form is True
+
+
+# ── build_x_text (8.2 prep: shared by publish_now and the Phase 8 video path) ──
+
+from models.database import User as UserModel  # noqa: E402
+
+
+def test_build_x_text_appends_tags_and_fits_the_char_limit():
+    from models.schemas import TWEET_CHAR_LIMIT
+    post = PostModel(caption="sentence. " * 90, hashtags=["#Walking"])
+    caption, thread_parts, long_form = pf.build_x_text(post, owner=None)
+    assert thread_parts == []
+    assert long_form is False
+    assert len(caption) <= TWEET_CHAR_LIMIT
+    assert caption.endswith("#Walking")
+
+
+def test_build_x_text_long_form_needs_a_premium_owner():
+    post = PostModel(caption="sentence. " * 90, hashtags=["#Walking"])
+    owner = UserModel(email="a@ex.com", x_premium=False)
+    _caption, _thread_parts, long_form = pf.build_x_text(post, owner)
+    assert long_form is False
+
+    owner.x_premium = True
+    _caption2, _thread_parts2, long_form2 = pf.build_x_text(post, owner)
+    assert long_form2 is True
+
+
+def test_build_x_text_puts_tags_only_on_the_last_thread_tweet():
+    """Mutation guard: tag every part instead of just the last → the hook tweet
+    carries hashtags it was never supposed to."""
+    post = PostModel(caption="unused", hashtags=["#Walking"],
+                     thread_parts=["Hook.", "Middle.", "End."])
+    _caption, thread_parts, _long_form = pf.build_x_text(post, owner=None)
+    assert thread_parts[0] == "Hook."
+    assert thread_parts[1] == "Middle."
+    assert thread_parts[2].endswith("#Walking")

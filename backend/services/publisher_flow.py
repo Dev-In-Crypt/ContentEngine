@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -23,6 +24,27 @@ from services.x_text import append_tags
 
 class PublishError(Exception):
     pass
+
+
+def build_x_text(post: PostModel, owner: Optional[UserModel]) -> tuple[str, list[str], bool]:
+    """(caption, thread_parts, long_form) for an X post.
+
+    Tags ride the last tweet of a thread and the end of a single tweet;
+    long-form (skipping the char cap) is keyed off the OWNER's x_premium flag,
+    not length alone — a non-Premium caption that happens to be long must
+    still be cut, not sent uncut and rejected by X. One place, because a
+    photo/text publish (publish_now, below) and a video publish (Phase 8) must
+    not drift apart on this.
+    """
+    tags = " ".join(post.hashtags or []).strip()
+    body = (post.caption or "").strip()
+    thread_parts = list(post.thread_parts or [])
+    owner_premium = bool(owner and getattr(owner, "x_premium", False))
+    long_form = not thread_parts and len(body) > TWEET_CHAR_LIMIT and owner_premium
+    caption = append_tags(body, tags, limit=None if long_form else TWEET_CHAR_LIMIT)
+    if thread_parts:
+        thread_parts[-1] = append_tags(thread_parts[-1], tags)
+    return caption, thread_parts, long_form
 
 
 async def publish_now(sessionmaker, post_id: str) -> str:
@@ -80,27 +102,17 @@ async def publish_now(sessionmaker, post_id: str) -> str:
 
         tags = " ".join(post.hashtags or []).strip()
         body = (post.caption or "").strip()
-        thread_parts = list(post.thread_parts or [])
 
-        # A long (uncut) tweet is only valid on an X Premium account. Decide it by
-        # the OWNER's x_premium flag, not length alone — otherwise a non-Premium
-        # caption that happens to exceed the limit would be sent uncut and rejected
-        # by X. Non-Premium (and unowned/local without the flag) → fit to the cap.
-        owner = await db.get(UserModel, post.user_id) if post.user_id else None
-        owner_premium = bool(owner and getattr(owner, "x_premium", False))
-        long_form = (platform == "x" and not thread_parts
-                     and len(body) > TWEET_CHAR_LIMIT and owner_premium)
         if platform == "x":
-            # X is the only platform with a budget tight enough for the hashtags to
-            # matter, so it gets append_tags; the rest keep the plain join.
-            caption = append_tags(body, tags, limit=None if long_form else TWEET_CHAR_LIMIT)
+            owner = await db.get(UserModel, post.user_id) if post.user_id else None
+            caption, thread_parts, long_form = build_x_text(post, owner)
         else:
             caption = f"{body}\n\n{tags}".strip()
+            thread_parts = list(post.thread_parts or [])
+            long_form = False
 
         try:
             if thread_parts and platform == "x":
-                # Hashtags belong at the END of a thread, not on the hook tweet.
-                thread_parts[-1] = append_tags(thread_parts[-1], tags)
                 outcome = await publisher.publish_thread(
                     thread_parts, images, post.alt_text or "")
             elif platform == "x":
