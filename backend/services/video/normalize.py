@@ -12,6 +12,7 @@ import asyncio
 import re
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from services.tts import ffmpeg_exe
 from services.video.base import VideoError
@@ -24,19 +25,33 @@ _UNSHARP = "unsharp=luma_msize_x=5:luma_msize_y=5:luma_amount=0.6"
 
 _RE_DIMS = re.compile(r"Video:.*?(\d{2,5})x(\d{2,5})")
 _RE_DUR = re.compile(r"Duration:\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
+_RE_VCODEC = re.compile(r"Video:\s*(\w+)")
+_RE_ACODEC = re.compile(r"Audio:\s*(\w+)")
 
 
-def probe_video(path: Path) -> tuple[int, int, float]:
-    """(width, height, duration_sec) parsed from `ffmpeg -i` stderr."""
+def probe_av(path: Path) -> tuple[int, int, float, str, Optional[str]]:
+    """(width, height, duration_sec, video_codec, audio_codec|None) parsed from
+    `ffmpeg -i` stderr — the same single invocation probe_video already made,
+    now also reading the codec names. audio_codec is None when the file has no
+    audio stream at all (the clip editor's §6.3 silent output) — this is what
+    Phase 8's X pre-validation warns on rather than rejects."""
     proc = subprocess.run([ffmpeg_exe(), "-hide_banner", "-i", str(path)],
                           capture_output=True, text=True, errors="replace")
     err = proc.stderr or ""
     dims = _RE_DIMS.search(err)
     dur = _RE_DUR.search(err)
-    if not dims or not dur:
+    vcodec = _RE_VCODEC.search(err)
+    if not dims or not dur or not vcodec:
         raise VideoError(f"Could not probe video {path.name}: {err[-200:]}")
     h, m, s = int(dur.group(1)), int(dur.group(2)), float(dur.group(3))
-    return int(dims.group(1)), int(dims.group(2)), h * 3600 + m * 60 + s
+    acodec = _RE_ACODEC.search(err)
+    return (int(dims.group(1)), int(dims.group(2)), h * 3600 + m * 60 + s,
+            vcodec.group(1), acodec.group(1) if acodec else None)
+
+
+def probe_video(path: Path) -> tuple[int, int, float]:
+    """(width, height, duration_sec) parsed from `ffmpeg -i` stderr."""
+    return probe_av(path)[:3]
 
 
 def aspect_fit_vf(src_w: int, src_h: int, out_w: int, out_h: int) -> str:

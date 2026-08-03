@@ -11,7 +11,7 @@ import pytest
 from services.tts import ffmpeg_exe
 from services.video.base import VideoError
 from services.video.normalize import (
-    concat_clips_sync, normalize_clip_sync, probe_video,
+    concat_clips_sync, normalize_clip_sync, probe_av, probe_video,
 )
 
 
@@ -20,6 +20,16 @@ def _clip(path: Path, seconds: float, size: str) -> Path:
                     "-i", f"testsrc=duration={seconds}:size={size}:rate=30",
                     "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset",
                     "ultrafast", str(path)], capture_output=True, check=True)
+    return path
+
+
+def _clip_with_audio(path: Path, seconds: float, size: str) -> Path:
+    subprocess.run([ffmpeg_exe(), "-hide_banner", "-y",
+                    "-f", "lavfi", "-i", f"testsrc=duration={seconds}:size={size}:rate=30",
+                    "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+                    "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-c:a", "aac", "-shortest", str(path)],
+                   capture_output=True, check=True)
     return path
 
 
@@ -136,3 +146,28 @@ def test_probe_garbage_raises(tmp_path):
     bad.write_bytes(b"not a video at all")
     with pytest.raises(VideoError):
         probe_video(bad)
+
+
+# ── probe_av (Phase 8 prep: X video pre-validation needs codec names) ───────
+
+def test_probe_av_reports_h264_and_aac_for_a_muxed_clip(tmp_path):
+    clip = _clip_with_audio(tmp_path / "av.mp4", 0.5, "320x180")
+    w, h, dur, vcodec, acodec = probe_av(clip)
+    assert (w, h) == (320, 180)
+    assert 0.4 < dur < 0.7
+    assert vcodec == "h264"
+    assert acodec == "aac"
+
+
+def test_probe_av_reports_none_audio_for_a_silent_clip(tmp_path):
+    """Mutation guard: a video-only file (the clip editor's §6.3 silent output)
+    must report audio_codec=None, not a false codec name."""
+    clip = _clip(tmp_path / "silent.mp4", 0.5, "320x180")
+    _w, _h, _dur, vcodec, acodec = probe_av(clip)
+    assert vcodec == "h264"
+    assert acodec is None
+
+
+def test_probe_video_still_returns_the_same_triple(tmp_path):
+    clip = _clip_with_audio(tmp_path / "av.mp4", 0.5, "320x180")
+    assert probe_video(clip) == probe_av(clip)[:3]
