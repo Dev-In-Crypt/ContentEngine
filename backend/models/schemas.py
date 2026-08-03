@@ -830,3 +830,37 @@ class EditVideoRequest(BaseModel):
         if self.transitions and len(self.clips) < 2:
             raise ValueError("transitions requires at least 2 clips")
         return self
+
+
+class PublishVideoToXRequest(BaseModel):
+    """Publish a standalone library video clip to X — no Post involved, so the
+    tweet text/thread comes straight from the request rather than from
+    build_x_text (which reads a Post's caption/hashtags/thread_parts)."""
+    text: str = Field("", max_length=4000)
+    thread_parts: Optional[list[str]] = Field(None, max_length=25)
+    alt_text: Optional[str] = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _needs_something_to_say(self):
+        if not (self.text.strip() or self.thread_parts):
+            raise ValueError("Write something to post with the video.")
+        return self
+
+
+class VideoPublishJobStatus(BaseModel):
+    """The state of a chunked X video publish (Phase 8) — what the SPA polls
+    while INIT/APPEND/FINALIZE/STATUS/tweet work through in the background."""
+    id: str
+    platform: str
+    status: str          # queued|uploading|processing|tweeting|published|failed
+    post_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    tweet_id: Optional[str] = None
+    permalink: Optional[str] = None
+    error: Optional[str] = None
+    progress_pct: Optional[int] = None
+    #: Set only on the 202 that creates the job — an advisory the user should
+    #: see once (e.g. the clip has no audio track), not a stored field.
+    warning: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None

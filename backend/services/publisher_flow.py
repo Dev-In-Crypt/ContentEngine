@@ -154,9 +154,13 @@ async def publish_reel_now(sessionmaker, post_id: str, video_url: str) -> str:
         if not post:
             raise PublishError(f"Post {post_id} not found")
 
-        # Reels are Instagram-only for now; other platforms have no video path here.
+        # Instagram pulls the MP4 from a public URL; X takes the bytes directly
+        # and has its own asynchronous path (services/x_video_publish.py, via
+        # POST /{post_id}/publish-video). This function stays the Instagram half.
         if (post.platform or "instagram") != "instagram":
-            raise PublishError("Reels are supported on Instagram only")
+            raise PublishError(
+                "This is an X post — publish its video with Publish to X, "
+                "not the Instagram reel path.")
 
         # Idempotency: already live → return the existing media id (mirrors
         # publish_now; guards double-click and manual+job races).

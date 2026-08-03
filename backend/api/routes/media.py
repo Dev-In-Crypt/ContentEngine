@@ -29,11 +29,13 @@ from api.deps import (
     get_current_user, get_db, get_effective_settings, get_image_provider, get_text_provider,
 )
 from api.ratelimit import limiter
+from api.routes.publish_jobs import build_job_status
 from config import Settings
 from models.database import MediaAsset as MediaAssetModel, User as UserModel
 from models.schemas import (
     EditVideoRequest, GenerateImageRequest, GenerateVideoRequest, MediaAssetDetail,
-    MediaAssetSummary, StagedUpload, SuggestVideoIdeaRequest, SuggestVideoIdeaResponse,
+    MediaAssetSummary, PublishVideoToXRequest, StagedUpload, SuggestVideoIdeaRequest,
+    SuggestVideoIdeaResponse, VideoPublishJobStatus,
 )
 from services import media_store, music_store, staging
 from services.ai.base import AIError
@@ -51,6 +53,7 @@ from services.video.genai.factory import get_gen_video_provider
 from services.video.normalize import (
     XFADE_SEC, align_to_duration, concat_clips, concat_clips_xfade, probe_video,
 )
+from services.x_video_publish import XVideoRejected, enqueue, validate_video_for_x
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 log = logging.getLogger(__name__)
@@ -653,3 +656,48 @@ async def edit_video_asset(
         return _detail(asset)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Publish — a standalone library video straight to X, no post involved
+# (Phase 8). Asynchronous like Kling generation: enqueues a job the poller in
+# services/x_video_publish.py drives through X's chunked upload.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/{asset_id}/publish-x", response_model=VideoPublishJobStatus, status_code=202)
+@limiter.limit("6/minute;30/hour")
+async def publish_video_to_x(
+    asset_id: str,
+    request: Request,
+    body: PublishVideoToXRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_effective_settings)],
+) -> VideoPublishJobStatus:
+    asset = await _owned_asset(db, asset_id, user)
+    if asset.kind != "video":
+        raise HTTPException(status_code=400,
+                            detail="Only a video asset can be published to X.")
+    if asset.status != "ready":
+        raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
+
+    if not all((settings.x_api_key, settings.x_api_secret,
+                settings.x_access_token, settings.x_access_token_secret)):
+        raise HTTPException(status_code=400,
+                            detail="X (Twitter) API credentials not configured")
+
+    path = media_store.path_for(asset.user_id, asset.id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Asset file not found on disk")
+    try:
+        warning = await validate_video_for_x(path)
+    except XVideoRejected as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+
+    job = await enqueue(
+        db, user_id=user.id, video_path=str(path), total_bytes=path.stat().st_size,
+        asset_id=asset.id, caption=body.text.strip(), thread_parts=body.thread_parts,
+        alt_text=body.alt_text, long_form=bool(getattr(user, "x_premium", False)),
+    )
+    await db.commit()
+    return build_job_status(job, warning=warning)

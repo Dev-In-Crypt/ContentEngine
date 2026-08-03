@@ -5,6 +5,7 @@ from models.schemas import (
     CaptionUpdate, ScheduleRequest, BrandConfigSchema,
     Platform, LengthTier, TemplateStyle, PostPreview, PostStatus,
     SlidePreview, NICHE_BOX_PALETTE, EditClipSpec, EditVideoRequest,
+    PublishVideoToXRequest,
 )
 from datetime import datetime, timezone
 
@@ -161,3 +162,18 @@ def test_edit_video_request_requires_at_least_one_clip():
 def test_edit_clip_spec_trim_end_must_be_positive():
     with pytest.raises(ValidationError):
         EditClipSpec(asset_id="a1", trim_end_sec=0.0)
+
+
+def test_publish_video_to_x_needs_text_or_a_thread():
+    with pytest.raises(ValidationError, match="Write something"):
+        PublishVideoToXRequest(text="")
+
+
+def test_publish_video_to_x_accepts_text_alone():
+    req = PublishVideoToXRequest(text="Check this out.")
+    assert req.thread_parts is None
+
+
+def test_publish_video_to_x_accepts_thread_parts_alone():
+    req = PublishVideoToXRequest(text="", thread_parts=["Hook.", "Follow-up."])
+    assert req.thread_parts == ["Hook.", "Follow-up."]

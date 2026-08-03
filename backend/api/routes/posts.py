@@ -41,7 +41,7 @@ from models.schemas import (
     PostInsightSchema, PostPreview, PostStatus, PostSummary, RegenFieldRequest,
     RegenFieldResponse, ReelRequest, ReplaceSlideRequest, ScheduleRequest, SlidePreview,
     PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
-    XPostMode,
+    VideoPublishJobStatus, XPostMode,
 )
 from services import media_store, staging
 from services.claims import find_claims
@@ -1529,6 +1529,75 @@ async def publish_reel(
         return PublishResult(success=True, instagram_media_id=media_id)
     except PublishError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.post("/{post_id}/publish-video", response_model=VideoPublishJobStatus,
+             status_code=202, dependencies=[Depends(require_verified)])
+@limiter.limit("10/minute;60/hour")
+async def publish_video_post(
+    post_id: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> VideoPublishJobStatus:
+    """Publish an X post's rendered Reel to X. Unlike publish_reel (Instagram,
+    which pulls the MP4 from a public URL), X takes the bytes directly and
+    processes asynchronously — this enqueues a job the poller in
+    services/x_video_publish.py drives, rather than publishing in-request."""
+    from api.routes.publish_jobs import build_job_status
+    from services.publisher_flow import build_x_text
+    from services.scheduler import cancel_publish
+    from services.user_settings import settings_for_post_owner
+    from services.x_video_publish import XVideoRejected, enqueue, validate_video_for_x
+
+    post = await owned_post(db, post_id, user)
+    if (post.platform or "instagram") != "x":
+        raise HTTPException(status_code=400,
+                            detail="This post is for Instagram — use Publish Reel.")
+    if not post.video_path:
+        raise HTTPException(status_code=409, detail="Render the reel first (Make Reel)")
+    if post.status == "published" and post.instagram_media_id:
+        raise HTTPException(status_code=409, detail="Already published.")
+
+    # Same two Business gates as publish_post: a human sign-off before
+    # anything goes out, and a cap so a channel isn't flooded.
+    if post.workspace_id and post.status not in ("approved", "failed"):
+        raise HTTPException(status_code=409,
+                            detail="This post must be approved before it can be published.")
+    if post.workspace_id:
+        from models.database import Workspace as WorkspaceModel
+        from services.workspace import within_frequency_cap
+        ws = await db.get(WorkspaceModel, post.workspace_id)
+        reason = await within_frequency_cap(db, ws, datetime.now(timezone.utc)) if ws else None
+        if reason:
+            raise HTTPException(status_code=409, detail=reason)
+
+    settings = await settings_for_post_owner(db, post)
+    if not all((settings.x_api_key, settings.x_api_secret,
+                settings.x_access_token, settings.x_access_token_secret)):
+        raise HTTPException(status_code=400,
+                            detail="X (Twitter) API credentials not configured")
+
+    path = Path(post.video_path)
+    try:
+        warning = await validate_video_for_x(path)
+    except XVideoRejected as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+
+    owner = await db.get(UserModel, post.user_id) if post.user_id else None
+    caption, thread_parts, long_form = build_x_text(post, owner)
+
+    # A pending scheduled (photo) publish for this post must not fire later
+    # and double-post now that a video publish is in flight.
+    cancel_publish(post_id)
+
+    job = await enqueue(
+        db, user_id=user.id, video_path=str(path), total_bytes=path.stat().st_size,
+        post_id=post.id, caption=caption, thread_parts=thread_parts or None,
+        alt_text=post.alt_text, long_form=long_form,
+    )
+    await db.commit()
+    return build_job_status(job, warning=warning)
 
 
 class VerifyPostRequest(BaseModel):

@@ -278,11 +278,12 @@ async def test_publish_reel_marks_failed_on_non_ig_error(sessionmaker, monkeypat
 
 
 async def test_publish_reel_rejects_non_instagram(sessionmaker, monkeypatch):
-    """Reels are Instagram-only; an X post must not go down the reel path."""
+    """publish_reel_now stays the Instagram-only half; an X post must go
+    through Publish to X (services/x_video_publish.py) instead."""
     pid = str(uuid.uuid4())
     await _seed(sessionmaker, id=pid, topic="t", format="reel", status="preview", platform="x")
     monkeypatch.setattr(pf, "settings_for_post_owner", AsyncMock(return_value=_fake_settings()))
-    with pytest.raises(pf.PublishError, match="Instagram only"):
+    with pytest.raises(pf.PublishError, match="Publish to X"):
         await pf.publish_reel_now(sessionmaker, pid, "https://x/v.mp4")
 
 
