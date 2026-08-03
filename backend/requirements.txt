@@ -10,7 +10,7 @@ aiosqlite==0.20.0
 httpx==0.28.1
 json-repair>=0.61,<1  # salvage near-JSON from the LLM (missing quotes, trailing commas)
 feedparser>=6.0        # RSS/Atom parsing for Business source fetchers (demo)
-beautifulsoup4>=4.12   # generic-page extraction for Business source fetchers (demo)
+beautifulsoup4>=4.15.0   # generic-page extraction for Business source fetchers (demo)
 certifi>=2024.0.0
 truststore>=0.10.0
 authlib>=1.3          # OAuth 1.0a signing for X/Twitter publishing
