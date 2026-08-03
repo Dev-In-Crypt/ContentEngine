@@ -28,7 +28,8 @@ from sqlalchemy import select
 
 from models.database import (
     AuditEntry, BrandRules, Lead, LLMUsage, ManagedAccount, MediaAsset, Post,
-    PostInsight, Slide, Source, SourceSnapshot, User, UserCredentials, Workspace,
+    PostInsight, Slide, Source, SourceSnapshot, User, UserCredentials,
+    VideoPublishJob, Workspace,
 )
 from services.scheduler import cancel_publish
 
@@ -124,6 +125,10 @@ async def collect_user_data(db, user: User) -> dict:
         "media_assets": [_row(a) for a in (await db.execute(
             select(MediaAsset).where(MediaAsset.user_id == user.id)
             .order_by(MediaAsset.created_at)
+        )).scalars().all()],
+        "video_publish_jobs": [_row(j) for j in (await db.execute(
+            select(VideoPublishJob).where(VideoPublishJob.user_id == user.id)
+            .order_by(VideoPublishJob.created_at)
         )).scalars().all()],
         "workspace": await _collect_workspace(db, user),
     }
@@ -298,6 +303,12 @@ async def delete_user_data(db, user: User, *, root: Path = UPLOADS_ROOT) -> dict
         await _delete(PostInsight, PostInsight.post_id.in_(post_ids), "insights")
     else:
         counts["slides"] = counts["insights"] = 0
+
+    # Before posts and media_assets: a job carries FKs to both (post_id CASCADE,
+    # asset_id SET NULL), and the rule here is children first, never leaning on
+    # a cascade being configured.
+    await _delete(VideoPublishJob, VideoPublishJob.user_id == user.id,
+                  "video_publish_jobs")
 
     for p in posts:
         await db.delete(p)

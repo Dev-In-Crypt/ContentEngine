@@ -54,6 +54,13 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     assert "media_asset_id" in slide_cols
     assert "video_asset_id" in post_cols
     assert "kling_api_key_enc" in cred_cols                         # video generation key
+    # Phase 8: resumable chunked X video publish jobs — the row IS the job.
+    assert "video_publish_jobs" in tables
+    job_cols = {r[1] for r in sqlite3.connect(db).execute(
+        "PRAGMA table_info(video_publish_jobs)")}
+    assert {"status", "media_id", "chunk_index", "video_path", "total_bytes",
+            "tweet_id", "thread_parts", "next_attempt_at", "post_id",
+            "asset_id"} <= job_cols
 
 
 def test_migrations_autostamp_preexisting_db(tmp_path):

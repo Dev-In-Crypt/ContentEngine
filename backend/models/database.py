@@ -265,6 +265,61 @@ class MediaAsset(Base):
     )
 
 
+class VideoPublishJob(Base):
+    """A video on its way to a platform. The row IS the job — same reasoning as
+    MediaAsset's docstring: a publish that takes minutes and must survive a
+    container restart needs to be a row, not state held in a process that can
+    die mid-upload.
+
+    Two entry points, one table: a post's rendered Reel (post_id set) and a
+    library clip published on its own (asset_id set). Neither is read for
+    bytes at upload time — video_path/total_bytes are resolved once, at
+    enqueue, so the poller never has to know which kind of thing this came
+    from. total_bytes doubles as a corruption guard: if the file on disk no
+    longer matches it mid-upload, the source was re-rendered or replaced under
+    us and chunks must not be spliced from two different files under one
+    media_id.
+    """
+    __tablename__ = "video_publish_jobs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    platform = Column(String(20), nullable=False, default="x")
+    # Provenance, not the byte source (see video_path below). SET NULL on the
+    # asset link so deleting a library clip mid-flight doesn't delete the
+    # audit trail of where the tweet came from.
+    post_id = Column(String(36), ForeignKey("posts.id", ondelete="CASCADE"), index=True)
+    asset_id = Column(String(36),
+                      ForeignKey("media_assets.id", ondelete="SET NULL"), index=True)
+
+    video_path = Column(Text, nullable=False)
+    total_bytes = Column(Integer, nullable=False, default=0)
+
+    status = Column(String(20), nullable=False, default="queued", index=True)
+    # queued -> uploading -> processing -> tweeting -> published; any -> failed
+    error = Column(Text)
+
+    media_id = Column(String(64))     # X's media_id_string from INIT; resumes APPEND
+    chunk_index = Column(Integer, nullable=False, default=0)   # next segment to send
+    tweet_id = Column(String(64))
+    permalink = Column(Text)
+
+    caption = Column(Text)            # single-tweet text, already tag-appended/fitted
+    thread_parts = Column(JSON)       # list[str] or NULL
+    alt_text = Column(Text)
+    long_form = Column(Boolean, nullable=False, default=False)
+
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    next_attempt_at = Column(DateTime(timezone=True))   # backoff gate; NULL = eligible now
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_video_publish_jobs_status_next", "status", "next_attempt_at"),
+    )
+
+
 class BrandConfig(Base):
     __tablename__ = "brand_configs"
 

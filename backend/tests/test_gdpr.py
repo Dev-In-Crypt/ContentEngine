@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from models.database import (
     AuditEntry, Base, Lead, LLMUsage, MediaAsset, Post, Slide, Source, User,
-    UserCredentials, Workspace,
+    UserCredentials, VideoPublishJob, Workspace,
 )
 from services import gdpr
 from services.auth import hash_password
@@ -65,8 +65,13 @@ async def _seed(db, email):
                        provider="kling", prompt="a loaf cooling on a rack",
                        file_path="/tmp/nope.mp4", mime="video/mp4", duration_sec=5.0)
     db.add(asset)
+    await db.flush()
+    job = VideoPublishJob(user_id=user.id, platform="x", asset_id=asset.id,
+                          video_path="/tmp/nope.mp4", total_bytes=1234,
+                          status="queued", caption="Fresh loaves")
+    db.add(job)
     await db.commit()
-    return {"user": user, "post": post, "ws": ws, "asset": asset}
+    return {"user": user, "post": post, "ws": ws, "asset": asset, "job": job}
 
 
 @pytest.fixture
@@ -193,6 +198,31 @@ def test_erase_removes_the_media_library(sm, two):
     # ...and leaves the bystander's library standing.
     assert len(_rows(sm, MediaAsset,
                      MediaAsset.user_id == two["theirs"]["user"].id)) == 1
+
+
+def test_export_carries_video_publish_jobs(sm, two):
+    """The tweet id and permalink are the part of a publish attempt the user
+    cannot reconstruct from anywhere else once it's gone."""
+    data = _collect(sm, two["mine"]["user"])
+    assert [j["caption"] for j in data["video_publish_jobs"]] == ["Fresh loaves"]
+    assert data["video_publish_jobs"][0]["status"] == "queued"
+
+
+def test_export_never_contains_another_tenants_publish_job(sm, two):
+    data = _collect(sm, two["mine"]["user"])
+    mine = {j["id"] for j in data["video_publish_jobs"]}
+    assert two["theirs"]["job"].id not in mine
+
+
+def test_erase_removes_video_publish_jobs(sm, two):
+    """Mutation guard: skip this _delete call and the row (which carries FKs to
+    both the deleted post and the deleted asset) survives erasure as an orphan."""
+    _erase(sm, two["mine"]["user"])
+    assert _rows(sm, VideoPublishJob,
+                VideoPublishJob.user_id == two["mine"]["user"].id) == []
+    # ...and leaves the bystander's job standing.
+    assert len(_rows(sm, VideoPublishJob,
+                     VideoPublishJob.user_id == two["theirs"]["user"].id)) == 1
 
 
 def test_media_paths_include_library_files(sm, two):
