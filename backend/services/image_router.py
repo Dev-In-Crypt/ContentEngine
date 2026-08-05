@@ -1,4 +1,3 @@
-import httpx
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
@@ -121,10 +120,3 @@ class ImageRouter:
         if not config.canva_template_id:
             raise ImageFetchError("canva_template_id is required for Canva image source")
         return await self.canva.export_design(config.canva_template_id, format="png")
-
-    @staticmethod
-    async def _download_url(url: str) -> bytes:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            return resp.content

@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 from services.http_utils import describe_request_error
+from services.url_guard import BlockedURL, guarded_get
+
+#: The CDN link comes out of a search response, not from us — guarded for the
+#: same reason as everything else in services/url_guard.py's docstring. Same
+#: ceiling as a user's own photo upload (api/routes/media.py).
+_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 log = logging.getLogger(__name__)
 
@@ -94,13 +100,15 @@ class UnsplashClient:
             raise StockError(f"Unsplash photo fetch failed: {e.response.status_code}") from e
 
         download_url = resp.json()["urls"][size]
-        async with httpx.AsyncClient(timeout=60.0, verify=self._ssl_verify) as dl:
-            try:
-                img = await dl.get(download_url)
-                img.raise_for_status()
-            except httpx.RequestError as e:
-                raise StockError(describe_request_error(e, "Unsplash download")) from e
-            return img.content
+        try:
+            img = await guarded_get(download_url, ssl_verify=self._ssl_verify,
+                                    timeout=60.0, max_bytes=_MAX_IMAGE_BYTES)
+            img.raise_for_status()
+        except BlockedURL as e:
+            raise StockError(str(e)) from e
+        except httpx.RequestError as e:
+            raise StockError(describe_request_error(e, "Unsplash download")) from e
+        return img.content
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
@@ -160,13 +168,15 @@ class PexelsClient:
             raise StockError(f"Pexels photo fetch failed: {e.response.status_code}") from e
 
         download_url = resp.json()["src"]["original"]
-        async with httpx.AsyncClient(timeout=60.0, verify=self._ssl_verify) as dl:
-            try:
-                img = await dl.get(download_url)
-                img.raise_for_status()
-            except httpx.RequestError as e:
-                raise StockError(describe_request_error(e, "Pexels download")) from e
-            return img.content
+        try:
+            img = await guarded_get(download_url, ssl_verify=self._ssl_verify,
+                                    timeout=60.0, max_bytes=_MAX_IMAGE_BYTES)
+            img.raise_for_status()
+        except BlockedURL as e:
+            raise StockError(str(e)) from e
+        except httpx.RequestError as e:
+            raise StockError(describe_request_error(e, "Pexels download")) from e
+        return img.content
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:

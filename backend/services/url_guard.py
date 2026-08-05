@@ -31,6 +31,8 @@ import asyncio
 import ipaddress
 import logging
 import socket
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -142,7 +144,8 @@ async def _check(url: str, *, allow_private: bool) -> None:
             raise BlockedURL(f"{host} resolves to {addr}")
 
 
-async def guarded_request(
+@asynccontextmanager
+async def guarded_stream(
     method: str,
     url: str,
     *,
@@ -150,14 +153,14 @@ async def guarded_request(
     timeout: float = 20.0,
     headers: Optional[dict] = None,
     params: Optional[dict] = None,
-    max_bytes: int = DEFAULT_MAX_BYTES,
     allow_private: Optional[bool] = None,
-) -> httpx.Response:
-    """Fetch `url`, checking the address at every redirect hop.
+) -> AsyncIterator[httpx.Response]:
+    """Walk the redirect chain, checking every hop, and yield the LIVE response
+    at the end of it — still unread, so the caller can iterate chunks.
 
-    Raises BlockedURL for anything the guard refuses (and logs why). Ordinary
-    HTTP failures are NOT raised: a 404 comes back as a 404 so the callers that
-    already word those nicely keep doing so.
+    This is the surface for downloads too big to hold in memory (a stock video
+    is tens of megabytes and gets written straight to disk). Callers that just
+    want the bytes should use guarded_request, which adds the size cap.
 
     `allow_private=None` reads Settings.allow_private_urls; pass a bool to
     decide explicitly (which is what the guard's own tests do).
@@ -184,29 +187,49 @@ async def guarded_request(
                     location = streamed.headers.get("location", "")
                     current = str(streamed.url.join(location))
                     continue
-
-                body = bytearray()
-                async for chunk in streamed.aiter_bytes(chunk_size=_CHUNK):
-                    body.extend(chunk)
-                    if len(body) > max_bytes:
-                        # Stop reading here — a cap that only checks after the
-                        # whole body has arrived does not cap anything.
-                        reason = f"body over {max_bytes} bytes from {current!r}"
-                        log.warning("Blocked outbound request: %s", reason)
-                        raise BlockedURL(reason)
-
-                safe = httpx.Headers([
-                    (k, v) for k, v in streamed.headers.multi_items()
-                    if k.lower() not in _DROP_HEADERS
-                ])
-                return httpx.Response(
-                    status_code=streamed.status_code, headers=safe,
-                    content=bytes(body), request=streamed.request,
-                )
+                yield streamed
+                return
 
     reason = f"more than {MAX_REDIRECTS} redirects from {url!r}"
     log.warning("Blocked outbound request: %s", reason)
     raise BlockedURL(reason)
+
+
+async def guarded_request(
+    method: str,
+    url: str,
+    *,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    **kwargs,
+) -> httpx.Response:
+    """Fetch `url`, checking the address at every redirect hop, and return the
+    whole body as an ordinary httpx.Response.
+
+    Raises BlockedURL for anything the guard refuses (and logs why). Ordinary
+    HTTP failures are NOT raised: a 404 comes back as a 404 so the callers that
+    already word those nicely keep doing so.
+    """
+    async with guarded_stream(method, url, **kwargs) as streamed:
+        body = bytearray()
+        async for chunk in streamed.aiter_bytes(chunk_size=_CHUNK):
+            body.extend(chunk)
+            if len(body) > max_bytes:
+                # Stop reading here — a cap that only checks once the whole
+                # body has arrived does not cap anything. Counting decoded
+                # bytes (not wire bytes) is what makes it a defence against a
+                # small payload that decompresses to gigabytes.
+                reason = f"body over {max_bytes} bytes from {url!r}"
+                log.warning("Blocked outbound request: %s", reason)
+                raise BlockedURL(reason)
+
+        safe = httpx.Headers([
+            (k, v) for k, v in streamed.headers.multi_items()
+            if k.lower() not in _DROP_HEADERS
+        ])
+        return httpx.Response(
+            status_code=streamed.status_code, headers=safe,
+            content=bytes(body), request=streamed.request,
+        )
 
 
 async def guarded_get(url: str, **kwargs) -> httpx.Response:

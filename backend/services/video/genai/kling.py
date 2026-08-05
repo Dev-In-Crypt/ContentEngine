@@ -31,9 +31,12 @@ from typing import Optional
 import httpx
 
 from services.http_utils import describe_request_error
+from services.url_guard import BlockedURL, guarded_get
 from services.video.genai.base import GenVideoStatus, VideoGenError
 
 _KINDS = {"text2video", "image2video"}
+#: Same ceiling as a user's own video upload (api/routes/media.py).
+_MAX_VIDEO_BYTES = 200 * 1024 * 1024
 
 
 class KlingVideoProvider:
@@ -114,10 +117,16 @@ class KlingVideoProvider:
         return GenVideoStatus(state="processing")
 
     async def download(self, url: str) -> bytes:
-        async with httpx.AsyncClient(timeout=120.0, verify=self._ssl_verify) as c:
-            r = await c.get(url)
+        # The result URL comes back inside Kling's poll response, so it is
+        # theirs to choose, not ours — guarded like every other address we
+        # didn't pick (services/url_guard.py).
+        try:
+            r = await guarded_get(url, ssl_verify=self._ssl_verify, timeout=120.0,
+                                  max_bytes=_MAX_VIDEO_BYTES)
             r.raise_for_status()
-            return r.content
+        except BlockedURL as e:
+            raise VideoGenError(str(e)) from e
+        return r.content
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:

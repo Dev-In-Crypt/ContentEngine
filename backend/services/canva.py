@@ -2,6 +2,11 @@ import asyncio
 
 import httpx
 
+from services.url_guard import BlockedURL, guarded_get
+
+#: Same ceiling as a user's own photo upload (api/routes/media.py).
+_MAX_EXPORT_BYTES = 20 * 1024 * 1024
+
 
 class CanvaError(Exception):
     pass
@@ -174,10 +179,15 @@ class CanvaClient:
         job = resp.json()["job"]
         export_url = await self._poll_export_job(job["id"])
 
-        async with httpx.AsyncClient(timeout=60.0) as dl:
-            img = await dl.get(export_url)
+        # export_url is whatever the export job named — Canva's choice, not
+        # ours, so it goes through the guard (services/url_guard.py).
+        try:
+            img = await guarded_get(export_url, timeout=60.0,
+                                    max_bytes=_MAX_EXPORT_BYTES)
             img.raise_for_status()
-            return img.content
+        except BlockedURL as e:
+            raise CanvaError(str(e)) from e
+        return img.content
 
     async def _poll_export_job(self, job_id: str, max_retries: int = 30, interval: float = 2.0) -> str:
         for _ in range(max_retries):

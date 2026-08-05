@@ -6,6 +6,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from services.http_utils import describe_request_error
+from services.url_guard import BlockedURL, guarded_get
+
+#: Same ceiling as a user's own photo upload (api/routes/media.py).
+_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 # ── LLM usage tracking ───────────────────────────────────────────────────────
@@ -208,13 +212,19 @@ class OpenRouterClient:
         return base64.b64decode(b64)
 
     async def _download_url(self, url: str) -> bytes:
-        async with httpx.AsyncClient(timeout=60.0, verify=self._ssl_verify) as c:
-            try:
-                r = await c.get(url)
-                r.raise_for_status()
-            except httpx.RequestError as e:
-                raise OpenRouterError(describe_request_error(e, "OpenRouter image download")) from e
-            return r.content
+        # Guarded: this URL comes out of a model response, not from us. A
+        # provider having a bad day — or a prompt that talked one into naming
+        # an address of its choosing — must not turn into a fetch of our own
+        # network. See services/url_guard.py.
+        try:
+            r = await guarded_get(url, ssl_verify=self._ssl_verify, timeout=60.0,
+                                  max_bytes=_MAX_IMAGE_BYTES)
+            r.raise_for_status()
+        except BlockedURL as e:
+            raise OpenRouterError(str(e)) from e
+        except httpx.RequestError as e:
+            raise OpenRouterError(describe_request_error(e, "OpenRouter image download")) from e
+        return r.content
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:

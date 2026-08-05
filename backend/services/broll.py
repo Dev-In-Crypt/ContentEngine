@@ -18,11 +18,15 @@ from typing import Optional
 
 import httpx
 
+from services.url_guard import BlockedURL, guarded_stream
+
 log = logging.getLogger(__name__)
 
 _SEARCH_URL = "https://api.pexels.com/videos/search"
 _JUDGE_MAX_CANDIDATES = 3
 _JUDGE_MIN_MEANING = 6
+#: A stock b-roll clip is seconds long. Anything this size is not one.
+_MAX_CLIP_BYTES = 200 * 1024 * 1024
 
 
 class PexelsAuthError(Exception):
@@ -151,12 +155,25 @@ class PexelsVideoSearch:
         return out
 
     async def download(self, url: str, dest: Path) -> None:
-        async with httpx.AsyncClient(timeout=120.0, verify=self._ssl_verify) as client:
-            async with client.stream("GET", url) as resp:
+        # guarded_stream, not guarded_get: the CDN link comes from a Pexels
+        # search response (theirs to choose, so it is guarded) but a stock clip
+        # is tens of megabytes and belongs on disk, not buffered in the RAM of
+        # a box that is also running ffmpeg.
+        written = 0
+        try:
+            async with guarded_stream("GET", url, ssl_verify=self._ssl_verify,
+                                      timeout=120.0) as resp:
                 resp.raise_for_status()
                 with dest.open("wb") as f:
                     async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
+                        written += len(chunk)
+                        if written > _MAX_CLIP_BYTES:
+                            raise BlockedURL(
+                                f"clip over {_MAX_CLIP_BYTES} bytes from {url!r}")
                         f.write(chunk)
+        except BlockedURL:
+            dest.unlink(missing_ok=True)     # never leave a half clip to be muxed
+            raise
 
 
 def _judge_prompt(segment_text: str, query: str, n_frames: int) -> str:
