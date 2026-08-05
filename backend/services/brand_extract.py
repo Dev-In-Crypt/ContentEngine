@@ -16,20 +16,46 @@ signed up.
 """
 from __future__ import annotations
 
+import io
+import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+from PIL import Image, UnidentifiedImageError
 
 from services.http_utils import describe_request_error
 from services.url_guard import BlockedURL, guarded_get
 
+log = logging.getLogger(__name__)
+
 _MAX_BYTES = 2 * 1024 * 1024
 _MAX_DESCRIPTION = 500
 _MAX_NAME = 120                    # matches ProfileUpdate.brand_name
+
+_MAX_LOGO_BYTES = 5 * 1024 * 1024
+#: Candidates are ranked guesses, and every one is a request to a host we have
+#: not vetted, made while somebody waits for a page to answer.
+_MAX_ICON_TRIES = 4
+
+#: Formats logo_store already accepts (logo_store.EXTENSIONS, duplicated in
+#: settings.py) — anything else Pillow can read is converted to PNG.
+_PASSTHROUGH_FORMATS = {"PNG": "image/png", "JPEG": "image/jpeg",
+                        "WEBP": "image/webp"}
+
+#: The palette is sampled at this size. Small enough to count every pixel,
+#: large enough that a mark occupying a few percent of the square survives.
+_SAMPLE_EDGE = 128
+_OPAQUE_ENOUGH = 128
+_NEAR_WHITE = 240
+_NEAR_BLACK = 15
+#: Below this spread between the strongest and weakest channel a colour reads
+#: as grey, and grey says nothing about a brand.
+_MIN_SATURATION = 25
 
 #: Splits "Acme | Industrial Anvils" into its halves. The dash forms require
 #: surrounding whitespace, without which every Coca-Cola loses its second half.
@@ -203,3 +229,103 @@ async def extract_brand(url: str, *, ssl_verify: bool = True) -> BrandInfo:
         theme_color=normalise_color(_meta(soup, name="theme-color")),
         icon_candidates=_icon_candidates(soup, final_url),
     )
+
+
+# --------------------------------------------------------------- logo & colour
+
+def dominant_colors(data: bytes, *, limit: int = 3) -> list[str]:
+    """The brand colours in an image, most used first.
+
+    Returns [] for anything unreadable — a logo we can't parse is a missing
+    nicety, never a failed extraction.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            sample = img.convert("RGBA").resize(
+                (_SAMPLE_EDGE, _SAMPLE_EDGE),
+                # NEAREST, not the default: a smooth resample invents blended
+                # pixels along every edge, and those blends are exactly the
+                # muddy in-between colours this function is meant to avoid.
+                Image.Resampling.NEAREST)
+            pixels = list(sample.getdata())
+    except (UnidentifiedImageError, OSError, ValueError) as e:
+        log.debug("Unreadable logo bytes: %s", e)
+        return []
+
+    # Bucket by the top 4 bits per channel so the hundreds of almost-equal
+    # blues in an anti-aliased logo count as one colour, then report the exact
+    # shade that occurred most inside the winning bucket rather than the
+    # rounded bucket centre — a brand's blue, not our approximation of it.
+    buckets: dict[tuple[int, int, int], Counter] = {}
+    for r, g, b, a in pixels:
+        if a < _OPAQUE_ENOUGH:
+            continue
+        if r > _NEAR_WHITE and g > _NEAR_WHITE and b > _NEAR_WHITE:
+            continue
+        if r < _NEAR_BLACK and g < _NEAR_BLACK and b < _NEAR_BLACK:
+            continue
+        if max(r, g, b) - min(r, g, b) < _MIN_SATURATION:
+            continue
+        buckets.setdefault((r >> 4, g >> 4, b >> 4), Counter())[(r, g, b)] += 1
+
+    ranked = sorted(buckets.values(), key=lambda c: -sum(c.values()))
+    return ["#{:02x}{:02x}{:02x}".format(*c.most_common(1)[0][0])
+            for c in ranked[:limit]]
+
+
+async def _fetch_icon(url: str, *, ssl_verify: bool) -> Optional[tuple[bytes, str]]:
+    """One icon candidate as (bytes, mime), or None if it isn't usable.
+
+    SVG is skipped rather than rasterised: Pillow can't, and cairosvg is a
+    native dependency in the Docker image for one edge case. An SVG-only site
+    gets no logo and keeps whatever theme-color it declared.
+    """
+    if urlparse(url).path.lower().endswith(".svg"):
+        return None
+    try:
+        resp = await guarded_get(url, ssl_verify=ssl_verify, timeout=20.0,
+                                 max_bytes=_MAX_LOGO_BYTES,
+                                 headers={"User-Agent": "ContentEngine"})
+        resp.raise_for_status()
+    except (BlockedURL, httpx.HTTPError) as e:
+        log.debug("Icon %s unavailable: %s", url, e)
+        return None
+
+    data = resp.content
+    try:
+        # Pillow is the only honest test of whether bytes are an image: plenty
+        # of sites answer 200 with an HTML "not found" page and a cheerful
+        # image/png header.
+        with Image.open(io.BytesIO(data)) as img:
+            fmt = img.format or ""
+            if fmt in _PASSTHROUGH_FORMATS:
+                return data, _PASSTHROUGH_FORMATS[fmt]
+            buf = io.BytesIO()
+            img.convert("RGBA").save(buf, format="PNG")
+    except (UnidentifiedImageError, OSError, ValueError) as e:
+        log.debug("Icon %s is not a readable image: %s", url, e)
+        return None
+    return buf.getvalue(), "image/png"
+
+
+async def fetch_brand_logo(info: BrandInfo, *,
+                           ssl_verify: bool = True) -> BrandInfo:
+    """Fill in `logo` and `colors` on a BrandInfo, in place.
+
+    Kept apart from extract_brand deliberately. Reading the page is one request
+    and always worth making; this is up to four more, to hosts named by that
+    page, and a caller that only wants a name shouldn't pay for them.
+    """
+    for url in info.icon_candidates[:_MAX_ICON_TRIES]:
+        found = await _fetch_icon(url, ssl_verify=ssl_verify)
+        if found is not None:
+            info.logo = found
+            info.colors = dominant_colors(found[0])
+            break
+
+    # A colour the brand states outright beats one quantised out of its pixels:
+    # the most common colour in a logo is often its outline, not its identity.
+    if info.theme_color:
+        info.colors = [info.theme_color] + [c for c in info.colors
+                                            if c != info.theme_color]
+    return info

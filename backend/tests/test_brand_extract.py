@@ -1,20 +1,26 @@
-"""Reading a brand off a website (phase 1.4).
+"""Reading a brand off a website (phases 1.4 and 1.5).
 
 HTML goes in as inline strings through pytest_httpx — the house convention
 (tests/test_sources.py does the same, and there is no fixtures directory).
+Images are generated with Pillow for the same reason.
 tests/conftest.py already points DNS at a public address, so the guard these
 calls run through is satisfied without each test saying so.
 """
+import io
+
 import pytest
+from PIL import Image
 from pytest_httpx import HTTPXMock
 
-from services import url_guard
+from services import brand_extract, url_guard
 from services.brand_extract import (
-    BrandExtractError, extract_brand, normalise_color,
+    BrandExtractError, BrandInfo, dominant_colors, extract_brand,
+    fetch_brand_logo, normalise_color,
 )
 from services.url_guard import BLOCKED_MESSAGE
 
 URL = "https://acme.example/"
+ICON = "https://acme.example/logo.png"
 
 
 def _html(head: str, body: str = "") -> str:
@@ -23,6 +29,20 @@ def _html(head: str, body: str = "") -> str:
 
 def _page(httpx_mock: HTTPXMock, head: str, **kw):
     httpx_mock.add_response(text=_html(head), headers={"content-type": "text/html"}, **kw)
+
+
+def _image(img: Image.Image, fmt: str = "PNG") -> bytes:
+    buf = io.BytesIO()
+    img.save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def _mark(background, foreground, *, span: int = 8) -> Image.Image:
+    """A 32×32 field of `background` with a `foreground` stripe down the left —
+    the shape of a real logo: a lot of backdrop, a little brand colour."""
+    img = Image.new("RGBA", (32, 32), background)
+    img.paste(foreground, (0, 0, span, 32))
+    return img
 
 
 # ------------------------------------------------------------------ name
@@ -213,3 +233,188 @@ async def test_a_page_that_is_not_html_still_yields_something(httpx_mock: HTTPXM
     httpx_mock.add_response(json={"hello": "world"})
     info = await extract_brand(URL)
     assert info.name is None and info.description is None
+
+
+# ================================================================== phase 1.5
+# ------------------------------------------------------------------ palette
+
+def test_a_white_logo_does_not_offer_white(httpx_mock: HTTPXMock):
+    """The commonest pixel in a logo is almost always its backdrop. Offering
+    white as the brand colour would make the accent invisible on the slide it
+    is painted on."""
+    colors = dominant_colors(_image(_mark((255, 255, 255, 255), (10, 37, 64, 255))))
+    assert colors == ["#0a2540"]
+
+
+def test_transparent_pixels_are_not_counted():
+    """Mutation guard: a logo is usually a small mark on a transparent square,
+    and the transparent part is often left some arbitrary colour by whatever
+    exported it. Count it and you return a colour nobody can see — here green
+    outnumbers red three to one and must still lose."""
+    colors = dominant_colors(_image(_mark((20, 200, 20, 0), (200, 30, 30, 255))))
+    assert colors == ["#c81e1e"]
+
+
+def test_near_black_and_grey_are_skipped():
+    """Neither says anything about a brand, and both read as "no colour chosen"
+    when painted on a slide."""
+    assert dominant_colors(_image(Image.new("RGBA", (32, 32), (128, 130, 132, 255)))) == []
+    assert dominant_colors(_image(Image.new("RGBA", (32, 32), (4, 4, 6, 255)))) == []
+
+
+def test_colors_come_back_most_used_first():
+    img = _mark((10, 37, 64, 255), (200, 30, 30, 255), span=8)   # 3:1 blue:red
+    assert dominant_colors(img and _image(img)) == ["#0a2540", "#c81e1e"]
+
+
+def test_near_identical_shades_collapse_into_one():
+    """Mutation guard: an anti-aliased or JPEG-compressed logo has hundreds of
+    almost-equal blues. Count them as distinct and the list is three shades of
+    the same colour instead of three colours."""
+    img = Image.new("RGBA", (32, 32), (10, 37, 64, 255))
+    img.paste((11, 38, 65, 255), (0, 0, 16, 32))
+    assert len(dominant_colors(img and _image(img))) == 1
+
+
+def test_the_list_is_capped():
+    img = Image.new("RGBA", (32, 32))
+    for i, c in enumerate([(200, 30, 30), (30, 200, 30), (30, 30, 200),
+                           (200, 200, 30), (200, 30, 200), (30, 200, 200)]):
+        img.paste(c + (255,), (0, i * 5, 32, i * 5 + 5))
+    assert len(dominant_colors(img and _image(img), limit=3)) == 3
+
+
+def test_unreadable_bytes_yield_no_colours():
+    assert dominant_colors(b"not an image at all") == []
+
+
+# ------------------------------------------------------------------ logo fetch
+
+async def test_the_first_icon_that_decodes_wins(httpx_mock: HTTPXMock):
+    """Candidates are ranked guesses, not promises — a declared apple-touch-icon
+    that 404s must not cost us the favicon behind it."""
+    httpx_mock.add_response(url=ICON, status_code=404)
+    httpx_mock.add_response(url="https://acme.example/favicon.ico",
+                            content=_image(_mark((255, 255, 255, 255), (10, 37, 64, 255))),
+                            headers={"content-type": "image/png"})
+    info = await fetch_brand_logo(BrandInfo(
+        source_url=URL, icon_candidates=[ICON, "https://acme.example/favicon.ico"]))
+    assert info.logo is not None and info.logo[1] == "image/png"
+    assert info.colors == ["#0a2540"]
+
+
+async def test_an_html_error_page_served_as_an_icon_is_skipped(httpx_mock: HTTPXMock):
+    """Plenty of sites answer 200 with their own 'not found' page. Pillow is the
+    only honest test of whether bytes are an image."""
+    httpx_mock.add_response(url=ICON, text="<html>Not found</html>",
+                            headers={"content-type": "image/png"})
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=[ICON]))
+    assert info.logo is None
+
+
+async def test_an_svg_icon_is_not_even_fetched(httpx_mock: HTTPXMock):
+    """Pillow doesn't rasterise SVG and cairosvg is a native dependency in the
+    Docker image for one edge case. Asserting only "no logo" would prove
+    nothing — Pillow rejects SVG bytes anyway — so this asserts the request
+    never happened, which is the whole value of recognising the extension: one
+    fewer round-trip to an unvetted host while a page waits to render. An
+    SVG-only site keeps whatever theme-color it declared."""
+    svg = "https://acme.example/logo.svg"
+    httpx_mock.add_response(url=svg, text="<svg xmlns='http://www.w3.org/2000/svg'/>",
+                            headers={"content-type": "image/svg+xml"}, is_optional=True)
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=[svg]))
+    assert info.logo is None
+    assert httpx_mock.get_requests() == []
+
+
+async def test_an_ico_is_converted_to_png(httpx_mock: HTTPXMock):
+    """logo_store's allow-list is png/webp/jpeg (logo_store.py, duplicated in
+    settings.py). Converting here means that list doesn't have to grow for the
+    one format every site still serves."""
+    httpx_mock.add_response(
+        url=ICON, content=_image(_mark((255, 255, 255, 255), (10, 37, 64, 255)), "ICO"),
+        headers={"content-type": "image/x-icon"})
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=[ICON]))
+    assert info.logo is not None
+    assert info.logo[1] == "image/png"
+    assert Image.open(io.BytesIO(info.logo[0])).format == "PNG"
+
+
+async def test_a_jpeg_is_kept_as_it_is(httpx_mock: HTTPXMock):
+    """Mutation guard: re-encoding every logo would turn a 40 KB JPEG into a
+    megabyte of PNG for no gain."""
+    httpx_mock.add_response(
+        url=ICON, content=_image(_mark((255, 255, 255), (10, 37, 64), span=8).convert("RGB"),
+                                 "JPEG"),
+        headers={"content-type": "image/jpeg"})
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=[ICON]))
+    assert info.logo is not None and info.logo[1] == "image/jpeg"
+    assert Image.open(io.BytesIO(info.logo[0])).format == "JPEG"
+
+
+async def test_the_logo_download_goes_through_the_guard(monkeypatch,
+                                                        httpx_mock: HTTPXMock):
+    """The icon URL comes off a page we have just been handed — the host is
+    chosen by whoever wrote that page, which is the whole criterion in
+    url_guard. The working response is registered so an unguarded
+    implementation gets a real PNG and fails on the assertion below."""
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: ["169.254.169.254"])
+    httpx_mock.add_response(
+        url=ICON, content=_image(_mark((255, 255, 255, 255), (10, 37, 64, 255))),
+        headers={"content-type": "image/png"}, is_optional=True)
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=[ICON]))
+    assert info.logo is None and info.colors == []
+
+
+async def test_an_oversized_logo_is_refused(monkeypatch, httpx_mock: HTTPXMock):
+    monkeypatch.setattr(brand_extract, "_MAX_LOGO_BYTES", 32)
+    httpx_mock.add_response(
+        url=ICON, content=_image(_mark((255, 255, 255, 255), (10, 37, 64, 255))),
+        headers={"content-type": "image/png"}, is_optional=True)
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=[ICON]))
+    assert info.logo is None
+
+
+async def test_only_a_few_candidates_are_tried(httpx_mock: HTTPXMock):
+    """Mutation guard: a page can declare a dozen icons, and every one is a
+    request to a host we have not vetted, made while somebody waits for a
+    landing page to answer."""
+    urls = [f"https://acme.example/i{i}.png" for i in range(10)]
+    for u in urls:
+        httpx_mock.add_response(url=u, status_code=404, is_optional=True)
+    await fetch_brand_logo(BrandInfo(source_url=URL, icon_candidates=urls))
+    assert len(httpx_mock.get_requests()) <= 4
+
+
+async def test_no_candidates_is_not_an_error():
+    info = await fetch_brand_logo(BrandInfo(source_url=URL))
+    assert info.logo is None and info.colors == []
+
+
+# ------------------------------------------------------------------ theme-color
+
+async def test_the_declared_theme_color_leads(httpx_mock: HTTPXMock):
+    """A colour the brand states outright beats one we quantised out of its
+    pixels — the logo's most common colour is often its outline, not its
+    identity."""
+    httpx_mock.add_response(
+        url=ICON, content=_image(_mark((255, 255, 255, 255), (200, 30, 30, 255))),
+        headers={"content-type": "image/png"})
+    info = await fetch_brand_logo(BrandInfo(
+        source_url=URL, theme_color="#0a2540", icon_candidates=[ICON]))
+    assert info.colors[0] == "#0a2540"
+    assert "#c81e1e" in info.colors
+
+
+async def test_the_theme_color_is_not_listed_twice(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(
+        url=ICON, content=_image(_mark((255, 255, 255, 255), (10, 37, 64, 255))),
+        headers={"content-type": "image/png"})
+    info = await fetch_brand_logo(BrandInfo(
+        source_url=URL, theme_color="#0a2540", icon_candidates=[ICON]))
+    assert info.colors.count("#0a2540") == 1
+
+
+async def test_a_theme_color_survives_a_site_with_no_usable_logo():
+    info = await fetch_brand_logo(BrandInfo(source_url=URL, theme_color="#0a2540"))
+    assert info.colors == ["#0a2540"]
