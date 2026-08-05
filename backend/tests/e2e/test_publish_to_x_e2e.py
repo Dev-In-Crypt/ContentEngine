@@ -147,9 +147,11 @@ def test_the_reel_button_label_follows_the_posts_platform(page, signed_in):
     """Mutation guard: hard-code the Instagram label and an X post would offer
     'Publish Reel', which hits the Instagram-only publish-reel route and 400s.
 
-    The network tab (not the generated post's own `platform` field) is what
-    drives S.network — generation always targets whichever tab is active, so
-    the test picks X on the tab before composing, same as a real user would.
+    The tab is deliberately left on Instagram. What the button follows is the
+    POST's own platform — the docstring used to say the opposite, and saying it
+    was what made the bug look intended: the chrome read the tab, so opening an
+    X post from the calendar while the tab sat on Instagram offered the wrong
+    button and, worse, sent the wrong endpoint.
     """
     import base64
     from datetime import datetime, timezone
@@ -158,7 +160,6 @@ def test_the_reel_button_label_follows_the_posts_platform(page, signed_in):
 
     signed_in()
     _route_jobs(page, [])
-    page.locator("#net-x").click()
     page.route("**/api/settings/ai", lambda r: r.fulfill(
         status=200, content_type="application/json",
         body=json.dumps(AISettingsResponse(
@@ -193,3 +194,77 @@ def test_the_reel_button_label_follows_the_posts_platform(page, signed_in):
     expect(page.locator("#step-4")).to_be_visible()
 
     expect(page.locator("#reel-publish-btn")).to_have_text("𝕏 Publish video to X")
+
+
+def test_the_reel_button_never_sends_an_instagram_post_to_x(page, signed_in):
+    """The label is cosmetic; this is the half that did damage.
+
+    publishReelOrToX dispatched on the active network TAB. The Reel card is
+    hidden for X posts, so the reachable combination was the mirror of what you
+    would guess: tab on X, post on Instagram, card visible, button offering
+    "Publish video to X" — and clicking it sent an INSTAGRAM post to the X
+    endpoint. Following the post instead makes that impossible.
+    """
+    import base64
+    from datetime import datetime, timezone
+
+    from models.schemas import AISettingsResponse, PostPreview, SlidePreview
+
+    signed_in()
+    _route_jobs(page, [])
+    page.locator("#net-x").click()          # the composer is aimed at X…
+    page.route("**/api/settings/ai", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps(AISettingsResponse(
+            text_provider="openrouter", text_model="anthropic/claude-sonnet-5",
+            image_provider="openrouter", image_model="google/gemini-image",
+            keys={"openrouter": {"set": True, "masked": "sk-…9f2c"}},
+        ).model_dump(mode="json"))))
+    pixel = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    page.route("**/slides/*/image", lambda r: r.fulfill(
+        status=200, content_type="image/png", body=pixel))
+
+    # …but the post that comes back is an Instagram one.
+    post = PostPreview(
+        id="e2e-post-ig", topic="t", format="single", status="preview",
+        caption="c", hashtags=[], seo_keywords=[], cta="c", hook="h",
+        platform="instagram", video_url="/api/posts/e2e-post-ig/reel/video",
+        slides=[SlidePreview(slide_number=1,
+                             image_url="/api/posts/e2e-post-ig/slides/1/image",
+                             image_source="stock", width=1080, height=1350)],
+        text_model_used="m", image_model_used=None,
+        created_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
+    ).model_dump(mode="json")
+    page.route("**/api/posts/generate", lambda r: r.fulfill(
+        status=200, content_type="text/event-stream",
+        body="data: " + json.dumps({"type": "complete", "post": post}) + "\n\n"))
+
+    hit = []
+
+    def _record(name):
+        # A one-argument handler on purpose: Playwright passes the Request as a
+        # second argument when the handler takes one, which would clobber a
+        # `name=name` default and record the request instead of the label.
+        def handler(route):
+            hit.append(name)
+            route.fulfill(status=200, content_type="application/json",
+                          body=json.dumps({"success": True, "instagram_media_id": "m1"}))
+        return handler
+
+    page.route("**/api/posts/*/publish-video", _record("video"))
+    page.route("**/api/posts/*/publish-reel", _record("reel"))
+
+    page.locator("#topic").fill("Sourdough starters")
+    page.get_by_role("button", name="Next →").click()
+    page.locator("#generate-btn").click()
+    expect(page.locator("#step-4")).to_be_visible()
+    expect(page.locator("#reel-publish-btn")).to_have_text("📤 Publish Reel")
+
+    # Called directly rather than clicked: #reel-preview, which holds the
+    # button, stays hidden until a reel has actually been rendered, and staging
+    # a real ffmpeg render here would test everything except the dispatch.
+    page.on("dialog", lambda d: d.accept())
+    with page.expect_response("**/api/posts/*/publish-*"):
+        page.evaluate("publishReelOrToX()")
+    assert hit == ["reel"], f"an Instagram post went to {hit or 'nowhere'}"

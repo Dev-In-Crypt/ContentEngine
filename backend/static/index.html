@@ -2351,7 +2351,7 @@ function _currentPreset(name) {
     length_tier: document.getElementById('length-tier').value,
     // 'upload' is per-post files, not a reusable setting — store stock instead.
     default_image_source: S.source === 'upload' ? 'stock' : S.source,
-    platform: S.network || 'instagram',
+    platform: S.platform || 'instagram',
     template_style: S.templateStyle,
     niche_box_color: S.nicheBoxColor || null,
     apply_branding: document.getElementById('apply-brand').checked,
@@ -2397,7 +2397,7 @@ function applySelectedPreset() {
   const name = document.getElementById('preset-select').value;
   const p = S.presets.find(x => x.name === name);
   if (!p) return;
-  if ((p.platform || 'instagram') !== (S.network || 'instagram')) setNetwork(p.platform);
+  if ((p.platform || 'instagram') !== (S.platform || 'instagram')) setNetwork(p.platform);
   _clickToggle('.fmt-btn', p.format);
   _clickToggle('.src-btn', p.default_image_source);
   _clickToggle('.tpl-btn', p.template_style);
@@ -2754,7 +2754,7 @@ function initToggleGroup(selector, stateKey, defaultVal, onChange) {
 
 /** How many images a post of the current format needs — mirrors _num_slides. */
 function slidesNeeded() {
-  if (S.network === 'x') return 1;          // X posts carry a single image
+  if (S.platform === 'x') return 1;         // X posts carry a single image
   return { carousel_3: 3, carousel_5: 5, carousel_10: 10 }[S.format] || 1;
 }
 
@@ -3008,13 +3008,31 @@ async function streamGenerate(body, onProgress) {
 }
 
 // ===== PREVIEW =====
-/** Which network a post targets — for gating Instagram-only preview surfaces
- *  (insights, reels, SEO keywords). Falls back to the active tab, then Instagram. */
+/** The network the post on screen targets.
+ *
+ *  The post's own field wins. The composer's choice (S.platform) is only the
+ *  fallback, for the moment before a post exists — while someone is still
+ *  filling in step 1 there is nothing else to go on.
+ *
+ *  This used to read the active network tab, which is the same thing only for
+ *  as long as you never leave the composer. Open an X post from the calendar
+ *  with the tab on Instagram and every piece of chrome lied about it: the
+ *  caption label, the character counter, and the Reel button — which then
+ *  posted to the Instagram-only endpoint. */
+function postPlatform() {
+  return (S.post && S.post.platform) || S.platform || 'instagram';
+}
+
+/** Whether a given post targets Instagram — for gating Instagram-only preview
+ *  surfaces (insights, reels, SEO keywords). */
 function postIsInstagram(p) {
-  return (((p && p.platform) || S.network || 'instagram') === 'instagram');
+  return (((p && p.platform) || postPlatform()) === 'instagram');
 }
 
 function renderPreview(post) {
+  // Keep the post itself: the editor chrome below needs its platform, and this
+  // used to be the point where that information was thrown away.
+  S.post = post;
   // Reset undo stack for this post (load any persisted one)
   try { S.undoStack = JSON.parse(localStorage.getItem('undo_' + post.id) || '[]'); } catch(e){ S.undoStack = []; }
   const undoBtn = document.getElementById('undo-btn');
@@ -3679,7 +3697,7 @@ function tweetLength(text) {
 /** Label + counter + split button reflect the network and whether it's a thread.
  *  For X the single-post box is the TWEET (not an Instagram "Caption"). */
 function updatePostEditorChrome() {
-  const isX = S.network === 'x';
+  const isX = postPlatform() === 'x';
   const isThread = (S.threadParts || []).length > 0;
   const label = document.getElementById('caption-label');
   if (label) label.textContent = isX ? '🐦 Post' : 'Caption';
@@ -3698,7 +3716,7 @@ function updatePostEditorChrome() {
 function updateReelPublishButton() {
   const btn = document.getElementById('reel-publish-btn');
   if (!btn) return;
-  const isX = S.network === 'x';
+  const isX = postPlatform() === 'x';
   const job = S.postId ? (S.publishJobs || {})[S.postId] : null;
   if (job && _PUB_JOB_ACTIVE.has(job.status)) {
     btn.disabled = true;
@@ -3716,7 +3734,7 @@ function updateReelPublishButton() {
 }
 
 function updateCaptionCount() {
-  if (S.network !== 'x') return;
+  if (postPlatform() !== 'x') return;
   const ta = document.getElementById('caption-edit');
   const count = document.getElementById('caption-count');
   if (!ta || !count || count.classList.contains('hidden')) return;
@@ -4206,7 +4224,7 @@ async function suggestPlan() {
         count: Math.min(14, Math.max(2, parseInt(document.getElementById('plan-count').value, 10) || 7)),
         start_date: document.getElementById('plan-start').value || _tomorrowISO(),
         cadence_days: parseInt(document.getElementById('plan-cadence').value, 10) || 1,
-        platform: S.network || 'instagram',
+        platform: S.platform || 'instagram',
       }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Planning failed'); }
@@ -4274,7 +4292,7 @@ async function runBatch() {
         tone: 'professional',
         apply_branding: true,
         default_image_source: 'stock',
-        platform: S.network || 'instagram',
+        platform: S.platform || 'instagram',
         length_tier: 'sweet_spot',
         template_style: 'branded_card',
         show_logo: true,
@@ -4370,7 +4388,7 @@ async function publishReel() {
 // synchronously (publishReel, above); X is asynchronous (a background job —
 // see services/x_video_publish.py), so it queues and polls instead.
 function publishReelOrToX() {
-  if (S.network === 'x') return publishVideoToX();
+  if (postPlatform() === 'x') return publishVideoToX();
   return publishReel();
 }
 
@@ -4448,7 +4466,6 @@ function initNicheSwatches() {
 // ===== VIEW SWITCH =====
 // ===== NETWORK TABS (Instagram / X) =====
 function setNetwork(net) {
-  S.network = net;
   S.platform = net;                 // generation + publish target follow the tab
   document.getElementById('net-instagram').classList.toggle('net-active', net === 'instagram');
   document.getElementById('net-instagram').classList.toggle('text-gray-400', net !== 'instagram');
@@ -5329,7 +5346,7 @@ async function loadAdmin() {
   const business = !!(S.user && S.user.account_type === 'business');
   const keysH = document.getElementById('keys-title');
   if (keysH) keysH.textContent = account ? 'Account keys'
-    : (business ? 'Connections' : ('' + (S.network === 'x' ? 'X' : 'Instagram') + ' keys'));
+    : (business ? 'Connections' : ('' + (S.platform === 'x' ? 'X' : 'Instagram') + ' keys'));
   document.getElementById('usage-section').classList.toggle('hidden', !account);
   document.getElementById('backup-section').classList.toggle('hidden', !(account && S.user && (S.user.is_admin || S.user.is_local)));
   // Export and erasure are about a cloud tenancy; local mode's data is already
@@ -5344,7 +5361,7 @@ async function loadAdmin() {
   const keysSec = document.getElementById('keys-section');
   if (S.user && !S.user.is_local) {
     keysSec.classList.remove('hidden');
-    const scope = account ? 'account' : (business ? 'all' : S.network);
+    const scope = account ? 'account' : (business ? 'all' : S.platform);
     await loadCredentials(scope);
     // Health is about publishing, so the account-only page has nothing to show.
     await loadConnections(scope === 'account' ? []
@@ -5356,7 +5373,7 @@ async function loadAdmin() {
   // one button per network.
   const canTest = !account && S.user && !S.user.is_local;
   const testBtn = document.getElementById('test-conn-btn');
-  if (testBtn) testBtn.classList.toggle('hidden', !(canTest && !business && (S.network === 'x' || S.network === 'instagram')));
+  if (testBtn) testBtn.classList.toggle('hidden', !(canTest && !business && (S.platform === 'x' || S.platform === 'instagram')));
   const txBtn = document.getElementById('test-x-btn');
   if (txBtn) txBtn.classList.toggle('hidden', !(canTest && business));
   const tigBtn = document.getElementById('test-ig-btn');
@@ -5524,7 +5541,7 @@ async function renewInstagramToken() {
 }
 
 async function testPublishConnection(network) {
-  network = network || S.network;                // 'x' | 'instagram'
+  network = network || S.platform;               // 'x' | 'instagram'
   const btn = document.getElementById('test-conn-btn');
   const out = document.getElementById('test-conn-result');
   const prev = btn ? btn.textContent : '';
