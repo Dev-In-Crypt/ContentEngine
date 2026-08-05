@@ -14,7 +14,21 @@ WIZARD = "#onboarding-modal"
 
 
 def _progress(page) -> str:
+    """A one-shot read, for asserting the wizard has NOT moved."""
     return page.locator("#onb-progress").inner_text()
+
+
+def _expect_step(page, n: int, total: int = 4) -> None:
+    """Wait until the wizard is really on step `n`.
+
+    The Continue handler is async: click() returns once the click is dispatched,
+    not once the save it fires has come back. It disables #onb-primary while it
+    waits, so clicking Continue again is naturally safe — but Skip is a separate
+    button that stays enabled, so clicking it straight after races the request in
+    flight. Waiting on the counter is what makes a sequence of steps
+    deterministic instead of a bet on how fast the machine is.
+    """
+    expect(page.locator("#onb-progress")).to_have_text(f"Step {n} of {total}")
 
 
 def test_the_wizard_greets_a_brand_new_creator(page, signup):
@@ -63,6 +77,7 @@ def test_the_publishing_step_swaps_fields_per_network(page, signup):
     signup()
     page.locator("#onb-niche").fill("Artisan bakery")
     page.locator("#onb-primary").click()
+    _expect_step(page, 2)                         # the brand save has landed
     page.locator("#onb-skip").click()             # past the AI key
     expect(page.locator("#onb-title")).to_contain_text("place to post")
     expect(page.locator('[data-wiz-cred="x_api_key"]')).to_be_visible()
@@ -75,9 +90,11 @@ def test_the_final_checklist_reports_only_what_is_true(page, signup):
     signup()
     page.locator("#onb-niche").fill("Artisan bakery")
     page.locator("#onb-primary").click()
+    _expect_step(page, 2)                         # the brand save has landed
     page.locator("#onb-skip").click()
+    _expect_step(page, 3)
     page.locator("#onb-skip").click()
-    assert _progress(page) == "Step 4 of 4"
+    _expect_step(page, 4)
     body = page.locator("#onb-body").inner_text()
     assert "✅ Brand profile" in body
     assert "○ AI key saved" in body               # skipped, so not claimed
