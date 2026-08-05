@@ -235,6 +235,40 @@ def test_media_paths_include_library_files(sm, two):
     assert "/tmp/nope.mp4" in asyncio.run(_go())
 
 
+def test_media_paths_include_every_brand_logo(sm, two):
+    """Only user.logo_path was walked, so a managed brand's logo was neither
+    exported nor erased. That was a narrow gap while brands were an agency
+    extra; since UX phase 2 every account has at least one, and the primary's
+    logo is the one on every slide."""
+    from models.database import ManagedAccount
+
+    uid = two["mine"]["user"].id
+
+    async def _go():
+        async with sm() as db:
+            user = await db.get(User, uid)
+            db.add(ManagedAccount(owner_user_id=uid, name="Client A",
+                                  logo_path="/tmp/client-a-logo.png"))
+            await db.commit()
+            return await gdpr.user_media_paths(db, user)
+    assert "/tmp/client-a-logo.png" in asyncio.run(_go())
+
+
+def test_media_paths_do_not_include_another_owners_logo(sm, two):
+    from models.database import ManagedAccount
+
+    uid, other = two["mine"]["user"].id, two["theirs"]["user"].id
+
+    async def _go():
+        async with sm() as db:
+            user = await db.get(User, uid)
+            db.add(ManagedAccount(owner_user_id=other, name="Theirs",
+                                  logo_path="/tmp/not-mine.png"))
+            await db.commit()
+            return await gdpr.user_media_paths(db, user)
+    assert "/tmp/not-mine.png" not in asyncio.run(_go())
+
+
 def test_export_does_not_leak_the_password_hash(sm, two):
     data = _collect(sm, two["mine"]["user"])
     assert "password_hash" not in data["account"]

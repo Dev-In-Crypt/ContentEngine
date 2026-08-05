@@ -132,7 +132,11 @@ def test_apply_brand_slide_style_overlays_colors():
     assert cfg.niche_box_color == BrandConfig().niche_box_color
 
 
-def test_profile_persists_on_user_row(cloud_client):
+def test_profile_persists_on_the_primary_profile(cloud_client):
+    """/api/settings/* edits the profile now. The User column is written too, as
+    a rollback snapshot, but it is no longer where the value lives."""
+    from models.database import ManagedAccount
+
     h = {"Authorization": f"Bearer {_reg(cloud_client)}"}
     cloud_client.put("/api/settings/profile", headers=h, json={"niche": "Coffee roasting"})
 
@@ -140,8 +144,86 @@ def test_profile_persists_on_user_row(cloud_client):
         async with cloud_client.SM() as s:
             u = (await s.execute(
                 select(UserModel).where(UserModel.email == "p@example.com"))).scalar_one()
-            return u.niche
-    assert asyncio.run(_read()) == "Coffee roasting"
+            acct = (await s.execute(select(ManagedAccount).where(
+                ManagedAccount.owner_user_id == u.id,
+                ManagedAccount.is_primary.is_(True)))).scalar_one()
+            return acct.niche, u.niche
+    assert asyncio.run(_read()) == ("Coffee roasting", "Coffee roasting")
+
+
+def test_settings_edit_the_primary_even_while_a_client_brand_is_active(cloud_client):
+    """Two screens, two objects: Account → Brand profile is "you",
+    /api/accounts/{id} is "this client". If settings followed the active brand,
+    an agency would overwrite a client's niche from their own account page, and
+    the User snapshot would hold whichever client was last selected — useless
+    for a rollback."""
+    from models.database import ManagedAccount
+
+    h = {"Authorization": f"Bearer {_reg(cloud_client)}"}
+    aid = cloud_client.post("/api/accounts", headers=h,
+                            json={"name": "Client A"}).json()["id"]
+    cloud_client.put(f"/api/accounts/{aid}", headers=h, json={"niche": "Client niche"})
+    cloud_client.post("/api/accounts/switch", headers=h, json={"account_id": aid})
+
+    cloud_client.put("/api/settings/profile", headers=h, json={"niche": "My own niche"})
+
+    async def _read():
+        async with cloud_client.SM() as s:
+            u = (await s.execute(
+                select(UserModel).where(UserModel.email == "p@example.com"))).scalar_one()
+            primary = (await s.execute(select(ManagedAccount).where(
+                ManagedAccount.owner_user_id == u.id,
+                ManagedAccount.is_primary.is_(True)))).scalar_one()
+            client = await s.get(ManagedAccount, aid)
+            return primary.niche, client.niche, u.niche
+    primary_niche, client_niche, snapshot = asyncio.run(_read())
+    assert primary_niche == "My own niche"
+    assert client_niche == "Client niche"        # untouched
+    assert snapshot == "My own niche"            # the snapshot follows the primary
+
+
+def test_editing_a_client_brand_leaves_the_user_snapshot_alone(cloud_client):
+    """The other half: only the primary mirrors. Mirror a client and the
+    rollback snapshot silently becomes someone else's brand."""
+    h = {"Authorization": f"Bearer {_reg(cloud_client)}"}
+    cloud_client.put("/api/settings/profile", headers=h, json={"niche": "My own niche"})
+    aid = cloud_client.post("/api/accounts", headers=h,
+                            json={"name": "Client A"}).json()["id"]
+    cloud_client.put(f"/api/accounts/{aid}", headers=h, json={"niche": "Client niche"})
+
+    async def _read():
+        async with cloud_client.SM() as s:
+            return (await s.execute(
+                select(UserModel).where(UserModel.email == "p@example.com"))).scalar_one().niche
+    assert asyncio.run(_read()) == "My own niche"
+
+
+def test_settings_read_back_what_the_profile_holds(cloud_client):
+    """Mutation guard: the GETs must move too, or the Account screen shows the
+    stale snapshot and every edit looks like it didn't save."""
+    from models.database import ManagedAccount
+
+    h = {"Authorization": f"Bearer {_reg(cloud_client)}"}
+    cloud_client.put("/api/settings/profile", headers=h, json={"niche": "Coffee roasting"})
+
+    async def _poison():
+        async with cloud_client.SM() as s:
+            u = (await s.execute(
+                select(UserModel).where(UserModel.email == "p@example.com"))).scalar_one()
+            u.niche = "STALE"
+            u.slide_accent_color = "#ff0000"
+            u.brand_voice_preset = "bold"
+            acct = (await s.execute(select(ManagedAccount).where(
+                ManagedAccount.owner_user_id == u.id,
+                ManagedAccount.is_primary.is_(True)))).scalar_one()
+            acct.slide_accent_color = "#0a2540"
+            acct.brand_voice_preset = "friendly"
+            await s.commit()
+    asyncio.run(_poison())
+
+    assert cloud_client.get("/api/settings/profile", headers=h).json()["niche"] == "Coffee roasting"
+    assert cloud_client.get("/api/settings/slide-style", headers=h).json()["accent_color"] == "#0a2540"
+    assert cloud_client.get("/api/settings/brand-voice", headers=h).json()["preset"] == "friendly"
 
 
 # ── X plan (PART XXIV) ──────────────────────────────────────────────────────

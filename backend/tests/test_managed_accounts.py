@@ -153,6 +153,28 @@ def test_register_creates_a_primary_profile(client):
     assert len(lst["accounts"]) == 1 and lst["accounts"][0]["is_primary"]
 
 
+def test_the_primary_reports_the_logo_settings_uploaded(client):
+    """has_logo used to be derived from a file named acct_<id>, while the logo
+    actually rendered comes from the logo_path column. For a seeded primary
+    those disagree by construction — its file is stored under the user's id —
+    so the Brands list said "no logo" while the slides carried one."""
+    import io
+
+    from PIL import Image
+
+    h = _register(client, "logo@ex.com")
+    primary = client.get("/api/accounts", headers=h).json()["active_account_id"]
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(buf, format="PNG")
+    r = client.post("/api/settings/logo", headers=h,
+                    files={"file": ("logo.png", buf.getvalue(), "image/png")})
+    assert r.status_code == 200, r.text
+
+    assert client.get(f"/api/accounts/{primary}", headers=h).json()["has_logo"] is True
+    assert client.get(f"/api/accounts/{primary}/logo/image",
+                      headers=h).status_code == 200
+
+
 def test_invalid_hex_rejected(client):
     h = _register(client, "hex@ex.com")
     aid = client.post("/api/accounts", headers=h, json={"name": "X"}).json()["id"]

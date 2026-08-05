@@ -193,7 +193,13 @@ async def user_media_paths(db, user: User) -> list[str]:
     """Every on-disk file this account owns, as raw DB strings."""
     post_ids = [p.id for p in (await db.execute(
         select(Post).where(Post.user_id == user.id))).scalars().all()]
-    paths: list[Optional[str]] = [user.logo_path]
+    # Every brand's logo, not just the User row's copy. That copy is only a
+    # rollback snapshot since UX phase 2, and an agency's client logos were
+    # never in this list at all — so they were neither exported nor erased.
+    paths: list[Optional[str]] = [a.logo_path for a in (await db.execute(
+        select(ManagedAccount).where(ManagedAccount.owner_user_id == user.id)
+    )).scalars().all()]
+    paths.append(user.logo_path)
     if post_ids:
         paths += [p.video_path for p in (await db.execute(
             select(Post).where(Post.id.in_(post_ids)))).scalars().all()]

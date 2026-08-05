@@ -278,6 +278,18 @@ def test_the_mirror_copies_the_profile_back_onto_the_user(sm):
         assert getattr(user, field) == value, field
 
 
+def test_the_mirror_is_the_only_writer_of_the_legacy_columns():
+    """Grep-enforced, not test-enforced, but worth stating: the eight columns on
+    User are a rollback snapshot, and the moment a second writer appears the
+    snapshot stops being trustworthy. This asserts the list itself, so adding a
+    brand field without extending BRAND_FIELDS is caught here rather than by a
+    downgrade that quietly loses it."""
+    from services.managed_account import BRAND_FIELDS
+    assert set(BRAND_FIELDS) == {
+        "brand_voice_preset", "brand_voice_custom", "niche", "target_audience",
+        "brand_name", "slide_accent_color", "slide_text_box_color", "logo_path"}
+
+
 def test_the_mirror_touches_nothing_but_the_brand(sm):
     """Mutation guard: `name` exists on the profile and not on User, and copying
     a wider set would drag profile-only fields onto the user row."""

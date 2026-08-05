@@ -23,7 +23,9 @@ from models.schemas import (
     AccountCreate, AccountListResponse, AccountOut, AccountSwitch, AccountUpdate,
 )
 from services import logo_store
-from services.managed_account import ensure_primary_profile, owned_account
+from services.managed_account import (
+    ensure_primary_profile, mirror_primary_to_user, owned_account,
+)
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -35,13 +37,24 @@ def _logo_key(account_id: str) -> str:
     return f"acct_{account_id}"
 
 
+def _account_logo(a: ManagedAccountModel):
+    """The brand's logo file, or None.
+
+    From the logo_path column, not from a filename guess. has_logo used to be
+    derived from a file named acct_<id> while the logo actually rendered came
+    from the column — two sources of truth that disagree by construction for a
+    profile seeded in UX phase 2, whose file is stored under the user's id.
+    """
+    return logo_store.resolve(a.logo_path)
+
+
 def _account_out(a: ManagedAccountModel) -> AccountOut:
     return AccountOut(
         id=a.id, name=a.name, brand_voice_preset=a.brand_voice_preset,
         brand_voice_custom=a.brand_voice_custom, niche=a.niche,
         target_audience=a.target_audience, brand_name=a.brand_name,
         slide_accent_color=a.slide_accent_color, slide_text_box_color=a.slide_text_box_color,
-        has_logo=bool(logo_store.path_for(_logo_key(a.id))))
+        has_logo=_account_logo(a) is not None)
 
 
 @router.get("", response_model=AccountListResponse)
@@ -98,6 +111,10 @@ async def update_account(
         value = getattr(body, field)
         if value is not None:                       # "" clears; None leaves unchanged
             setattr(acct, field, value.strip() or None if isinstance(value, str) else value)
+    if acct.is_primary:
+        # Only the primary mirrors. Mirror a client brand and User's rollback
+        # snapshot silently becomes somebody else's identity.
+        mirror_primary_to_user(acct, user)
     await db.commit()
     return _account_out(acct)
 
@@ -168,6 +185,8 @@ async def put_account_logo(
         raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
     path = logo_store.save(_logo_key(acct.id), data, file.content_type)
     acct.logo_path = str(path)
+    if acct.is_primary:
+        mirror_primary_to_user(acct, user)
     await db.commit()
     return {"has_logo": True}
 
@@ -181,6 +200,8 @@ async def delete_account_logo(
     acct = await owned_account(db, account_id, user)
     logo_store.delete(_logo_key(acct.id))
     acct.logo_path = None
+    if acct.is_primary:
+        mirror_primary_to_user(acct, user)
     await db.commit()
     return {"has_logo": False}
 
@@ -191,8 +212,8 @@ async def get_account_logo_image(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> FileResponse:
-    await owned_account(db, account_id, user)
-    path = logo_store.path_for(_logo_key(account_id))
+    acct = await owned_account(db, account_id, user)
+    path = _account_logo(acct)
     if not path:
         raise HTTPException(status_code=404, detail="No logo set")
     return FileResponse(path)

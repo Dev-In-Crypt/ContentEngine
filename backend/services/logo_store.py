@@ -53,6 +53,23 @@ def path_for(user_id: str, root: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
+def resolve(stored_path: Optional[str], root: Optional[Path] = None) -> Optional[Path]:
+    """A logo_path out of the database as a real file, or None.
+
+    Every value we store here came from save(), so it is contained by
+    construction — but it is still a database string reaching the filesystem,
+    and the containment check costs nothing. Same guard as path_for's, applied
+    to a full path rather than a key.
+    """
+    if not stored_path:
+        return None
+    directory = _root(root)
+    candidate = Path(stored_path).resolve()
+    if not candidate.is_relative_to(directory):
+        raise LogoError("Invalid logo path")
+    return candidate if candidate.exists() else None
+
+
 def delete(user_id: str, root: Optional[Path] = None) -> None:
     """Remove the tenant's logo if present. No error if there is none."""
     existing = path_for(user_id, root)

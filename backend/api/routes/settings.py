@@ -25,6 +25,7 @@ from services.ai.catalog import IMAGE, PROVIDERS, TEXT, is_valid_provider
 from services.brand_engine import BrandConfig
 from services.connection_health import days_left, estimate_expiry
 from services.brand_voice import DEFAULT_PRESET, is_valid_preset, list_presets
+from services.managed_account import ensure_primary_profile, mirror_primary_to_user
 from services.secrets import decrypt, encrypt
 
 # Same limits as the composer's photo uploads (api/routes/posts.py).
@@ -119,10 +120,12 @@ def _set_health(creds, platform: str, **fields) -> None:
 @router.get("/brand-voice", response_model=BrandVoiceResponse)
 async def get_brand_voice(
     user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BrandVoiceResponse:
+    brand = await ensure_primary_profile(db, user)
     return BrandVoiceResponse(
-        preset=user.brand_voice_preset or DEFAULT_PRESET,
-        custom=user.brand_voice_custom or "",
+        preset=brand.brand_voice_preset or DEFAULT_PRESET,
+        custom=brand.brand_voice_custom or "",
         presets=list_presets(),
     )
 
@@ -133,15 +136,17 @@ async def put_brand_voice(
     user: Annotated[UserModel, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    brand = await ensure_primary_profile(db, user)
     if body.preset is not None:
         if not is_valid_preset(body.preset):
             from fastapi import HTTPException
             raise HTTPException(status_code=422, detail="Unknown brand voice preset")
-        user.brand_voice_preset = body.preset
+        brand.brand_voice_preset = body.preset
     if body.custom is not None:            # "" clears the custom text
-        user.brand_voice_custom = body.custom.strip() or None
+        brand.brand_voice_custom = body.custom.strip() or None
     # A named preset means the custom text no longer applies; keep it stored but it's
     # only used when preset == "custom".
+    mirror_primary_to_user(brand, user)
     await db.commit()
     return {"status": "ok"}
 
@@ -151,11 +156,13 @@ async def put_brand_voice(
 @router.get("/profile", response_model=ProfileResponse)
 async def get_profile(
     user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProfileResponse:
+    brand = await ensure_primary_profile(db, user)
     return ProfileResponse(
-        niche=user.niche or "",
-        target_audience=user.target_audience or "",
-        brand_name=user.brand_name or "",
+        niche=brand.niche or "",
+        target_audience=brand.target_audience or "",
+        brand_name=brand.brand_name or "",
     )
 
 
@@ -165,12 +172,14 @@ async def put_profile(
     user: Annotated[UserModel, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    brand = await ensure_primary_profile(db, user)
     if body.niche is not None:                     # "" clears
-        user.niche = body.niche.strip() or None
+        brand.niche = body.niche.strip() or None
     if body.target_audience is not None:
-        user.target_audience = body.target_audience.strip() or None
+        brand.target_audience = body.target_audience.strip() or None
     if body.brand_name is not None:
-        user.brand_name = body.brand_name.strip() or None
+        brand.brand_name = body.brand_name.strip() or None
+    mirror_primary_to_user(brand, user)
     await db.commit()
     return {"status": "ok"}
 
@@ -180,10 +189,12 @@ async def put_profile(
 @router.get("/slide-style", response_model=SlideStyleResponse)
 async def get_slide_style(
     user: Annotated[UserModel, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SlideStyleResponse:
+    brand = await ensure_primary_profile(db, user)
     return SlideStyleResponse(
-        accent_color=user.slide_accent_color or "",
-        text_box_color=user.slide_text_box_color or "",
+        accent_color=brand.slide_accent_color or "",
+        text_box_color=brand.slide_text_box_color or "",
         default_accent_color=BrandConfig().niche_box_color,
         palette=NICHE_BOX_PALETTE,
     )
@@ -195,10 +206,12 @@ async def put_slide_style(
     user: Annotated[UserModel, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
+    brand = await ensure_primary_profile(db, user)
     if body.accent_color is not None:          # "" resets to the platform default
-        user.slide_accent_color = body.accent_color or None
+        brand.slide_accent_color = body.accent_color or None
     if body.text_box_color is not None:
-        user.slide_text_box_color = body.text_box_color or None
+        brand.slide_text_box_color = body.text_box_color or None
+    mirror_primary_to_user(brand, user)
     await db.commit()
     return {"status": "ok"}
 
@@ -275,8 +288,13 @@ async def put_logo(
     if len(data) > _LOGO_MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
 
+    # The file keeps its existing name (the user's id) — moving logos on disk is
+    # the one genuinely irreversible thing UX phase 2 could have done, so it
+    # doesn't. Only the pointer moves to the profile.
     path = logo_store.save(str(user.id), data, file.content_type)
-    user.logo_path = str(path)
+    brand = await ensure_primary_profile(db, user)
+    brand.logo_path = str(path)
+    mirror_primary_to_user(brand, user)
     await db.commit()
     return LogoSettingsResponse(set=True, url=_LOGO_URL)
 
@@ -287,7 +305,9 @@ async def delete_logo(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LogoSettingsResponse:
     logo_store.delete(str(user.id))
-    user.logo_path = None
+    brand = await ensure_primary_profile(db, user)
+    brand.logo_path = None
+    mirror_primary_to_user(brand, user)
     await db.commit()
     return LogoSettingsResponse(set=False, url=None)
 
