@@ -82,6 +82,27 @@ async def test_a_generic_half_is_skipped(httpx_mock: HTTPXMock):
     assert (await extract_brand(URL)).name == "Acme"
 
 
+async def test_og_title_is_split_like_any_other_page_title(httpx_mock: HTTPXMock):
+    """Found by the live check against stripe.com after 1.7 shipped: Stripe
+    sets no og:site_name, and its og:title carries the same "Page | Brand"
+    shape a <title> does. Taking it whole handed the user
+    "Online-Bezahldienst und Zahlungsdienstleister | Stripe" to delete by hand
+    — the exact typing this endpoint exists to remove."""
+    _page(httpx_mock, '<meta property="og:title" '
+                      'content="Online payments and financial services | Stripe">')
+    assert (await extract_brand(URL)).name == "Stripe"
+
+
+async def test_og_site_name_is_taken_whole_even_with_a_separator(
+        httpx_mock: HTTPXMock):
+    """The asymmetry is the point. og:site_name is a direct answer to "what is
+    this site called" — whatever is in it was chosen as the answer, separator
+    and all. og:title and <title> are page titles, and the convention there is
+    "Page | Brand"; guessing at those is what the heuristic is for."""
+    _page(httpx_mock, '<meta property="og:site_name" content="Ben & Jerry | Co">')
+    assert (await extract_brand(URL)).name == "Ben & Jerry | Co"
+
+
 async def test_a_page_with_no_name_at_all(httpx_mock: HTTPXMock):
     _page(httpx_mock, "")
     assert (await extract_brand(URL)).name is None

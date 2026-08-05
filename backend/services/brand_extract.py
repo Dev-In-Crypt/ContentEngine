@@ -216,9 +216,16 @@ async def extract_brand(url: str, *, ssl_verify: bool = True) -> BrandInfo:
     final_url = str(resp.url)
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    name = _meta(soup, prop="og:site_name") or _meta(soup, prop="og:title")
-    if not name and soup.title and soup.title.string:
-        name = _name_from_title(soup.title.string.strip())
+    # og:site_name is a direct answer to "what is this site called", so it is
+    # taken whole. og:title and <title> are page titles, where the convention
+    # is "Page | Brand" — those go through the heuristic. Stripe is the case
+    # that taught us the difference: no og:site_name, and an og:title carrying
+    # the separator, so taking it whole handed the user a sentence to delete.
+    name = _meta(soup, prop="og:site_name")
+    if not name:
+        title = _meta(soup, prop="og:title") or (
+            soup.title.string.strip() if soup.title and soup.title.string else "")
+        name = _name_from_title(title) if title else None
 
     description = (_meta(soup, prop="og:description")
                    or _meta(soup, name="description"))
