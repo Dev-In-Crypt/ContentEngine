@@ -1,9 +1,11 @@
-"""Managed accounts (Phase 7): CRUD + active-account switch + per-account logo.
+"""Brand profiles: CRUD + active-profile switch + per-profile logo.
 
-Every route is owner-scoped (owner_user_id == user.id, 404 on a miss). These edit a
-managed client brand's IDENTITY only; the owner's own /api/settings/* still edit the
-"Personal" account (the User row). Security stays on user_id — the active account
-only scopes the composer view + which brand generation uses.
+Every route is owner-scoped (owner_user_id == user.id, 404 on a miss) and edits a
+brand's IDENTITY only. Security stays on user_id — the active profile only scopes
+the composer view and supplies the brand generation uses.
+
+Since UX phase 2 every user owns one profile marked is_primary, which they cannot
+delete and which /api/settings/* edits. An agency has more rows beside it.
 """
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user, get_db
@@ -21,7 +23,7 @@ from models.schemas import (
     AccountCreate, AccountListResponse, AccountOut, AccountSwitch, AccountUpdate,
 )
 from services import logo_store
-from services.managed_account import owned_account
+from services.managed_account import ensure_primary_profile, owned_account
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -107,10 +109,25 @@ async def delete_account(
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> dict:
     acct = await owned_account(db, account_id, user)
+    if acct.is_primary:
+        raise HTTPException(
+            status_code=409, detail="Your main profile can't be deleted.")
+
+    primary = await ensure_primary_profile(db, user)
+    # Move the work, don't untag it. NULL used to mean "Personal" and was
+    # visible; since UX phase 2 it is visible to nobody, so leaving posts
+    # behind here would silently destroy everything made under this brand.
+    # Explicit because the database wouldn't do it anyway: posts has no foreign
+    # key to managed_accounts, so the model's ondelete="SET NULL" is fiction.
+    await db.execute(text(
+        "UPDATE posts SET managed_account_id = :primary "
+        "WHERE managed_account_id = :deleted"),
+        {"primary": primary.id, "deleted": acct.id})
+
     logo_store.delete(_logo_key(acct.id))
-    if user.active_account_id == acct.id:           # was active → fall back to Personal
-        user.active_account_id = None
-    await db.delete(acct)                            # Post.managed_account_id → NULL (SET NULL)
+    if user.active_account_id == acct.id:
+        user.active_account_id = primary.id
+    await db.delete(acct)
     await db.commit()
     return {"status": "deleted"}
 
@@ -122,10 +139,14 @@ async def switch_account(
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> dict:
     if body.account_id is None:
-        user.active_account_id = None
+        # null used to mean "Personal", which no longer exists as an absence. A
+        # browser on a cached index.html keeps sending it, so it is read as "my
+        # own profile" — what the person meant by Personal anyway. A 422 here
+        # would turn a stale cache into a broken switcher.
+        acct = await ensure_primary_profile(db, user)
     else:
         acct = await owned_account(db, body.account_id, user)   # 404 if not owned
-        user.active_account_id = acct.id
+    user.active_account_id = acct.id
     await db.commit()
     return {"active_account_id": user.active_account_id}
 

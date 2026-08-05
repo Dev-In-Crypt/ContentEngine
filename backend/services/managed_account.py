@@ -29,16 +29,32 @@ BRAND_FIELDS = (
 )
 
 
-async def resolve_active_account(db: AsyncSession, user: UserModel):
-    """The user's active managed account, or None for Personal. Defensive: returns
-    None if the stored id doesn't resolve to an account this user owns."""
+async def resolve_active_account(db: AsyncSession,
+                                 user: UserModel) -> ManagedAccountModel:
+    """The brand profile this user is working in. Never None.
+
+    A pointer at a deleted or foreign brand used to resolve to None, which meant
+    "Personal" and was a working state. Since UX phase 2 it isn't: the caller
+    would render with no brand and list no posts. So an unresolvable pointer
+    falls back to the primary and is repaired on the way, rather than being
+    re-resolved on every subsequent request.
+
+    The fallback never widens ownership — an id belonging to someone else lands
+    on the caller's own profile, not on theirs.
+    """
     account_id = getattr(user, "active_account_id", None)
-    if not account_id:
-        return None
-    acct = await db.get(ManagedAccountModel, account_id)
-    if acct is None or acct.owner_user_id != user.id:
-        return None
-    return acct
+    if account_id:
+        acct = await db.get(ManagedAccountModel, account_id)
+        if acct is not None and acct.owner_user_id == user.id:
+            return acct
+    profile = await ensure_primary_profile(db, user)
+    # Repaired here rather than inside ensure_primary_profile, which must stay
+    # free to hand back the primary — for the User-columns mirror in 2.5 —
+    # without moving whichever brand the user is actually working in.
+    if user.active_account_id != profile.id:
+        user.active_account_id = profile.id
+        await db.commit()
+    return profile
 
 
 async def primary_profile(db: AsyncSession, user: UserModel):

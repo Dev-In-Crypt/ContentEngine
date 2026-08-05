@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from api.deps import get_db, get_settings
 from config import Settings
 from main import app
-from models.database import Base
+from models.database import Base, Post
 
 
 @pytest.fixture
@@ -97,6 +97,52 @@ def test_delete_falls_back_to_the_primary(client):
     client.delete(f"/api/accounts/{aid}", headers=h)
     assert client.get("/api/auth/me", headers=h).json()["active_account_id"] == primary
     assert client.get(f"/api/accounts/{aid}", headers=h).status_code == 404
+
+
+def test_the_primary_profile_cannot_be_deleted(client):
+    """It is the one row the legacy User columns mirror and the fallback every
+    other invariant leans on. Nothing in the product offers this, so a 409 here
+    is a backstop against a hand-rolled request, not a UI affordance."""
+    h = _register(client, "keep@ex.com")
+    primary = client.get("/api/accounts", headers=h).json()["active_account_id"]
+    assert client.delete(f"/api/accounts/{primary}", headers=h).status_code == 409
+    assert client.get(f"/api/accounts/{primary}", headers=h).status_code == 200
+
+
+def test_deleting_a_brand_moves_its_posts_to_the_primary(client, sm):
+    """NULL used to mean "Personal" and was visible. Now it is visible to
+    nobody, so a delete that merely untags is a delete that silently destroys
+    the work done under that brand."""
+    h = _register(client, "move@ex.com")
+    uid = client.get("/api/auth/me", headers=h).json()["id"]
+    primary = client.get("/api/accounts", headers=h).json()["active_account_id"]
+    aid = client.post("/api/accounts", headers=h, json={"name": "Client A"}).json()["id"]
+
+    async def _seed():
+        async with sm() as db:
+            db.add(Post(id="p-client", user_id=uid, managed_account_id=aid,
+                        topic="client-work", format="single", status="preview"))
+            await db.commit()
+    asyncio.run(_seed())
+
+    assert client.delete(f"/api/accounts/{aid}", headers=h).status_code == 200
+    client.post("/api/accounts/switch", headers=h, json={"account_id": primary})
+    assert {p["topic"] for p in client.get("/api/posts", headers=h).json()} == {
+        "client-work"}
+
+
+def test_switching_to_nothing_selects_the_primary(client):
+    """A browser holding a cached index.html keeps posting {"account_id": null}
+    for as long as its cache lives. Reading it as "my own profile" is what the
+    person meant by Personal anyway; a 422 would turn a stale cache into a
+    broken switcher."""
+    h = _register(client, "null@ex.com")
+    primary = client.get("/api/accounts", headers=h).json()["active_account_id"]
+    aid = client.post("/api/accounts", headers=h, json={"name": "Client A"}).json()["id"]
+    client.post("/api/accounts/switch", headers=h, json={"account_id": aid})
+
+    r = client.post("/api/accounts/switch", headers=h, json={"account_id": None})
+    assert r.status_code == 200 and r.json()["active_account_id"] == primary
 
 
 def test_register_creates_a_primary_profile(client):

@@ -143,7 +143,41 @@ def test_resolve_active_account_unit(ctx):
             user.active_account_id = aid
             acct = await resolve_active_account(db, user)
             assert acct is not None and acct.id == aid
-            # a foreign/stale id must never resolve to another user's account
+    asyncio.run(_check())
+
+
+def test_a_stale_active_id_falls_back_to_the_primary_and_is_repaired(ctx):
+    """A pointer at a deleted or foreign brand used to resolve to None, which
+    meant "Personal" and was a working state. It no longer is — the caller
+    would render with no brand and list no posts. So it falls back to the
+    primary, and repairs the pointer on the way rather than leaving a bad id to
+    be resolved again on every subsequent request."""
+    c, SM = ctx
+    h = _register(c, "stale@ex.com")
+    uid = _me_id(c, h)
+    own = _primary(c, h)
+
+    async def _check():
+        async with SM() as db:
+            user = await db.get(User, uid)
             user.active_account_id = "does-not-exist"
-            assert await resolve_active_account(db, user) is None
+            assert (await resolve_active_account(db, user)).id == own
+            assert user.active_account_id == own
+    asyncio.run(_check())
+
+
+def test_another_owners_brand_is_never_resolved(ctx):
+    """The fallback must not become a way to read someone else's brand: an id
+    owned by another user resolves to the caller's own profile, not to it."""
+    c, SM = ctx
+    ha, hb = _register(c, "own@ex.com"), _register(c, "other@ex.com")
+    mine = _primary(c, ha)
+    theirs = c.post("/api/accounts", headers=hb, json={"name": "Theirs"}).json()["id"]
+    uid = _me_id(c, ha)
+
+    async def _check():
+        async with SM() as db:
+            user = await db.get(User, uid)
+            user.active_account_id = theirs
+            assert (await resolve_active_account(db, user)).id == mine
     asyncio.run(_check())
