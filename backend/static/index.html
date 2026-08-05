@@ -1152,7 +1152,7 @@
   <div id="view-analytics" class="hidden space-y-4">
     <div class="ce-card p-5">
       <h2 class="text-lg font-semibold" style="color:var(--accent)">Analytics</h2>
-      <p class="text-xs text-gray-400 mt-1">Your published <span class="analytics-net">Instagram</span> posts — open each to view it on the network. (In-app metrics are Instagram-only.)</p>
+      <p class="text-xs text-gray-400 mt-1">Everything you've published, on every network — open each to view it where it lives. (In-app metrics are Instagram-only.)</p>
       <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
     </div>
   </div>
@@ -4085,9 +4085,16 @@ function calShift(delta) {
 }
 function _todayRef() { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; }
 
-// Posts belonging to the active network (Feed/Calendar are per-network, like Analytics).
-function postsForNetwork() {
-  return S.posts.filter(p => (p.platform || 'instagram') === S.network);
+// The network a post was written for, as a glyph. Calendar, Queue and Results
+// show every network at once now, so each row has to say which one it is.
+//
+// This replaces postsForNetwork(), which filtered those screens on `p.platform`
+// — a field /api/posts did not send. `undefined || 'instagram'` made the filter
+// a no-op on Instagram and a match against nothing on X, so switching networks
+// emptied the calendar, the feed grid and analytics. The field is sent now.
+function netBadge(p) {
+  const x = (p.platform || 'instagram') === 'x';
+  return `<span title="${x ? 'X' : 'Instagram'}" class="text-[10px]">${x ? '𝕏' : '📸'}</span>`;
 }
 
 async function renderCalendar() {
@@ -4101,7 +4108,7 @@ async function renderCalendar() {
   await ensurePosts();
   // Map posts to day keys
   const byDay = {};
-  postsForNetwork().forEach(p => {
+  S.posts.forEach(p => {
     const when = p.scheduled_at || p.published_at;
     if (!when) return;
     const d = new Date(when);
@@ -4122,7 +4129,7 @@ async function renderCalendar() {
     cell.className = 'min-h-[64px] bg-gray-800 rounded-lg p-1 text-left';
     let html = `<div class="text-[10px] text-gray-500">${day}</div>`;
     (byDay[day] || []).forEach(p => {
-      html += `<div class="text-[10px] truncate cursor-pointer hover:text-purple-300" onclick="openPost('${p.id}')">${dot[p.status] || '⚪'} ${p.topic.slice(0,14)}</div>`;
+      html += `<div class="text-[10px] truncate cursor-pointer hover:text-purple-300" onclick="openPost('${p.id}')">${dot[p.status] || '⚪'}${netBadge(p)} ${esc(p.topic.slice(0,14))}</div>`;
     });
     cell.innerHTML = html;
     grid.appendChild(cell);
@@ -4132,7 +4139,11 @@ async function renderCalendar() {
 // ===== GRID =====
 async function loadGrid() {
   await ensurePosts();
-  const posts = postsForNetwork();
+  // Instagram only, and deliberately so: this screen simulates an Instagram
+  // profile page — a 4:5 ring grid. A tweet in it wouldn't be "unfiltered",
+  // it would be wrong. So it is a property of the view, not of a global
+  // active-network setting.
+  const posts = S.posts.filter(p => (p.platform || 'instagram') === 'instagram');
   const c = document.getElementById('grid-container');
   document.getElementById('grid-empty').classList.toggle('hidden', posts.length > 0);
   c.innerHTML = '';
@@ -4444,7 +4455,7 @@ function setNetwork(net) {
   document.getElementById('net-x').classList.toggle('net-active', net === 'x');
   document.getElementById('net-x').classList.toggle('text-gray-400', net !== 'x');
   const isIG = net === 'instagram';
-  document.querySelectorAll('.analytics-net').forEach(e => e.textContent = isIG ? 'Instagram' : 'X');
+  // (Results names no single network any more — it lists every one, badged.)
   // Prominent composer network toggle (the left rail is hidden in the Business shell,
   // so this is the discoverable — and in Business the only — way to choose the target).
   const igT = document.getElementById('net-toggle-ig');
@@ -4592,11 +4603,10 @@ async function loadAnalytics() {
   box.innerHTML = 'Loading…';
   try {
     const res = await apiFetch(`${API}/api/posts`);
-    const posts = (await res.json()).filter(p =>
-      p.status === 'published' && ((p.platform || 'instagram') === S.network));
-    if (!posts.length) { box.innerHTML = '<span class="text-gray-500">No published posts on this network yet.</span>'; return; }
+    const posts = (await res.json()).filter(p => p.status === 'published');
+    if (!posts.length) { box.innerHTML = '<span class="text-gray-500">Nothing published yet.</span>'; return; }
     box.innerHTML = posts.map(p => `<div class="ce-card p-3 flex items-center gap-3">
-      <div class="flex-1 min-w-0"><div class="text-sm text-gray-200 truncate">${esc(p.topic || 'post')}</div>
+      <div class="flex-1 min-w-0"><div class="text-sm text-gray-200 truncate">${netBadge(p)} ${esc(p.topic || 'post')}</div>
       <div class="text-xs text-gray-500">${p.published_at ? new Date(p.published_at).toLocaleString() : ''}</div></div>
       ${p.published_url ? `<a href="${esc(safeUrl(p.published_url))}" target="_blank" class="ce-btn-ghost px-3 py-1 text-xs">View post ↗</a>` : ''}
     </div>`).join('');

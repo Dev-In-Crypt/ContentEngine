@@ -681,6 +681,39 @@ def test_list_posts_filters_by_status(client):
     assert [p["id"] for p in body] == [failed]      # mutation guard: drop the where
 
 
+def test_list_posts_carries_the_platform_and_the_permalink(client):
+    """Both were missing, and both were already being read.
+
+    `postsForNetwork()` in the SPA filtered the calendar, the feed grid and
+    analytics on `p.platform` — a field the list never sent. `undefined ||
+    'instagram'` meant the filter was a no-op on Instagram and matched NOTHING
+    on X, so switching networks emptied three screens. Analytics likewise
+    rendered its "View post" link only `if (p.published_url)`, which was never
+    there, so a published post never linked anywhere.
+    """
+    import asyncio
+
+    pid = str(uuid.uuid4())
+
+    async def _s():
+        async with client.app.state.sessionmaker() as db:
+            db.add(PostModel(id=pid, topic="t", format="single", status="published",
+                             platform="x", published_url="https://x.com/i/status/1"))
+            await db.commit()
+    asyncio.run(_s())
+
+    row = client.get("/api/posts").json()[0]
+    assert row["platform"] == "x"
+    assert row["published_url"] == "https://x.com/i/status/1"
+
+
+def test_list_posts_defaults_the_platform_for_a_legacy_row(client):
+    """Posts predating the platform column read as Instagram, which is what they
+    were — the SPA must not have to guess."""
+    _seed_status(client, "draft")
+    assert client.get("/api/posts").json()[0]["platform"] == "instagram"
+
+
 def test_list_posts_rejects_an_unknown_status(client):
     """A typo must not silently look like "you have no failures"."""
     assert client.get("/api/posts?status=fialed").status_code == 400

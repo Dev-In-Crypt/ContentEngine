@@ -312,9 +312,17 @@ class PostSummary(BaseModel):
     topic: str
     format: PostFormat
     status: PostStatus
+    #: Which network this post was written for. Defaulted rather than Optional:
+    #: a row predating the column really was Instagram, and a caller that has to
+    #: guess ends up writing `p.platform || 'instagram'` at every call site —
+    #: which is exactly how the SPA came to filter on a field nobody sent.
+    platform: str = "instagram"
     thumb_url: Optional[str] = None      # first slide image, for grid/calendar
     scheduled_at: Optional[datetime] = None
     published_at: Optional[datetime] = None
+    #: Permalink once published. In the LIST because that is where the "view it
+    #: on the network" link lives; without it the link could never render.
+    published_url: Optional[str] = None
     created_at: datetime
     # Why the last publish failed. Carried in the LIST so a failures view can show
     # the reason without fetching every post individually.

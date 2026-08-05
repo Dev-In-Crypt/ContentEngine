@@ -411,9 +411,11 @@ async def list_posts(
             topic=p.topic,
             format=p.format,
             status=PostStatus(p.status),
+            platform=p.platform or "instagram",
             thumb_url=thumb,
             scheduled_at=p.scheduled_at,
             published_at=p.published_at,
+            published_url=p.published_url,
             created_at=p.created_at or datetime.now(timezone.utc),
             schedule_error=p.schedule_error,
         ))
