@@ -25,6 +25,8 @@ from playwright.sync_api import expect
 
 from models.schemas import LeadOut
 
+from tests.e2e.nav import open_rules, open_section, open_settings
+
 pytestmark = pytest.mark.e2e
 
 
@@ -67,24 +69,6 @@ def _serve(page, pattern: str, payload):
         status=200, content_type="application/json", body=json.dumps(payload)))
 
 
-def _open(page, section: str):
-    page.locator(f'[data-section="{section}"]').click()
-
-
-def _open_rules(page):
-    """Open Rules and wait for it to finish filling itself in.
-
-    The screen loads its four fields from two requests after the click, and
-    whatever is typed before the second one lands gets overwritten by it. That
-    is a real (if narrow) window for a user on a slow link; here it is simply a
-    race the test must not run into. `limits` is fetched last, so its response
-    is the signal that the screen has settled.
-    """
-    with page.expect_response("**/api/business/limits") as res:
-        _open(page, "biz-rules")
-    assert res.value.ok
-
-
 # ── The Business shell ───────────────────────────────────────────────────────
 
 def test_a_business_account_gets_the_business_navigation(page, signed_in):
@@ -104,6 +88,25 @@ def test_a_creator_account_is_not_shown_the_business_screens(page, signed_in):
         expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
 
 
+def test_an_agency_account_gets_the_creator_shell(page, signed_in):
+    """account_type has accepted "agency" since UX phase 2.1, and the SPA maps it
+    to the creator shell on purpose — its own navigation arrives with the Team
+    screen. Nothing tested that, in any browser test, until now.
+
+    It matters because of how the gating CSS is built: there is exactly one rule,
+    `body[data-account-type="business"] .creator-only { display:none }`. Creator
+    is the DEFAULT, not a positive match. The moment renderUserChrome starts
+    emitting a third value, the natural "symmetric" fix is one keystroke away
+    from hiding the entire application for a whole class of account. This test
+    passes today and costs nothing; it exists to fail on that day.
+    """
+    signed_in(account_type="agency")
+    expect(page.locator('[data-section="create"]')).to_be_visible()
+    expect(page.locator("#view-create")).to_be_visible()
+    for section in ("biz-sources", "biz-leads", "biz-drafts", "biz-rules"):
+        expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
+
+
 # ── Sources ──────────────────────────────────────────────────────────────────
 
 def test_a_url_without_a_scheme_never_reaches_the_server(page, signed_in):
@@ -115,7 +118,7 @@ def test_a_url_without_a_scheme_never_reaches_the_server(page, signed_in):
     page.on("request",
             lambda r: calls.append(r.url) if r.method == "POST" and "sources" in r.url else None)
 
-    _open(page, "biz-sources")
+    open_settings(page, "sources")
     page.locator("#biz-source-url").fill("example.com/feed")
     page.locator("#biz-source-add").click()
 
@@ -130,7 +133,7 @@ def test_an_added_source_is_listed(page, signed_in, live_server):
     can actually fetch without this suite touching the internet.
     """
     signed_in(account_type="business")
-    _open(page, "biz-sources")
+    open_settings(page, "sources")
     expect(page.locator("#biz-sources-list")).to_contain_text("No sources yet")
 
     page.locator("#biz-source-url").fill(f"{live_server}/terms")
@@ -143,7 +146,7 @@ def test_an_added_source_is_listed(page, signed_in, live_server):
 
 def test_a_deleted_source_leaves_the_list(page, signed_in, live_server):
     signed_in(account_type="business")
-    _open(page, "biz-sources")
+    open_settings(page, "sources")
     page.locator("#biz-source-url").fill(f"{live_server}/terms")
     page.locator("#biz-source-add").click()
     expect(page.locator("#biz-sources-list")).to_contain_text("/terms")
@@ -158,7 +161,7 @@ def test_a_deleted_source_leaves_the_list(page, signed_in, live_server):
 def test_a_lead_shows_its_strength_and_its_source(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*", [_lead()])
-    _open(page, "biz-leads")
+    open_section(page, "leads")
 
     row = page.locator("#biz-leads-list .ce-card").first
     expect(row).to_contain_text("v4.2 ships incremental builds")
@@ -173,7 +176,7 @@ def test_a_sensitive_lead_is_flagged_before_it_is_drafted(page, signed_in):
     it, and it has to be on the row, not in a tooltip."""
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*", [_lead(sensitive=True)])
-    _open(page, "biz-leads")
+    open_section(page, "leads")
     expect(page.locator("#biz-leads-list")).to_contain_text("Sensitive")
 
 
@@ -183,7 +186,7 @@ def test_the_digest_button_appears_only_once_two_leads_are_picked(page, signed_i
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*",
            [_lead(id="lead-1"), _lead(id="lead-2", what_happened="v4.3 adds caching")])
-    _open(page, "biz-leads")
+    open_section(page, "leads")
 
     checks = page.locator(".biz-lead-check")
     expect(page.locator("#biz-digest-btn")).to_be_hidden()
@@ -200,7 +203,7 @@ def test_the_digest_button_appears_only_once_two_leads_are_picked(page, signed_i
 def test_choosing_x_reveals_the_post_shape_and_instagram_hides_it(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*", [_lead()])
-    _open(page, "biz-leads")
+    open_section(page, "leads")
 
     row = page.locator("#biz-leads-list .ce-card").first
     expect(row.locator('[data-role="xmode"]')).to_be_hidden()
@@ -215,7 +218,7 @@ def test_choosing_x_reveals_the_post_shape_and_instagram_hides_it(page, signed_i
 def test_a_fresh_draft_can_only_be_submitted(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/drafts", [_draft()])
-    _open(page, "biz-drafts")
+    open_section(page, "queue")
 
     row = page.locator("#biz-drafts-list .ce-card").first
     expect(row).to_contain_text("Draft")
@@ -228,7 +231,7 @@ def test_a_fresh_draft_can_only_be_submitted(page, signed_in):
 def test_a_draft_in_review_offers_approve_and_reject(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/drafts", [_draft(status="in_review")])
-    _open(page, "biz-drafts")
+    open_section(page, "queue")
 
     row = page.locator("#biz-drafts-list .ce-card").first
     expect(row).to_contain_text("In review")
@@ -245,7 +248,7 @@ def test_a_brand_rule_breach_blocks_approval(page, signed_in):
         caption="Guaranteed returns on every build.",
         brand_flags={"forbidden": ["guaranteed returns"], "missing_disclaimers": []},
     )])
-    _open(page, "biz-drafts")
+    open_section(page, "queue")
 
     row = page.locator("#biz-drafts-list .ce-card").first
     expect(row.locator('[data-act="approve"]')).to_be_disabled()
@@ -259,7 +262,7 @@ def test_a_missing_disclaimer_blocks_approval_too(page, signed_in):
         status="in_review",
         brand_flags={"forbidden": [], "missing_disclaimers": ["Not financial advice."]},
     )])
-    _open(page, "biz-drafts")
+    open_section(page, "queue")
     expect(page.locator('#biz-drafts-list [data-act="approve"]')).to_be_disabled()
 
 
@@ -269,7 +272,7 @@ def test_a_published_draft_is_read_only_and_says_so(page, signed_in):
     out, and for one that failed on the way."""
     signed_in(account_type="business")
     _serve(page, "**/api/business/drafts", [_draft(status="published")])
-    _open(page, "biz-drafts")
+    open_section(page, "queue")
 
     row = page.locator("#biz-drafts-list .ce-card").first
     expect(row).to_contain_text("Published")
@@ -281,7 +284,7 @@ def test_a_failed_publish_shows_the_reason_on_the_draft(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/drafts",
            [_draft(status="failed", schedule_error="Instagram rejected the media.")])
-    _open(page, "biz-drafts")
+    open_section(page, "queue")
 
     row = page.locator("#biz-drafts-list .ce-card").first
     expect(row).to_contain_text("Failed")
@@ -292,14 +295,14 @@ def test_a_failed_publish_shows_the_reason_on_the_draft(page, signed_in):
 
 def test_brand_rules_survive_leaving_the_screen(page, signed_in):
     signed_in(account_type="business")
-    _open_rules(page)
+    open_rules(page)
     page.locator("#rules-forbidden").fill("guaranteed returns\nbest in the world")
     page.locator("#rules-disclaimers").fill("Not financial advice.")
     page.get_by_role("button", name="Save rules").click()
     expect(page.locator("#rules-status")).to_contain_text("Saved.")
 
-    _open(page, "biz-sources")
-    _open_rules(page)
+    open_settings(page, "sources")
+    open_rules(page)
     expect(page.locator("#rules-forbidden")).to_have_value(
         "guaranteed returns\nbest in the world")
     expect(page.locator("#rules-disclaimers")).to_have_value("Not financial advice.")
@@ -309,27 +312,27 @@ def test_blank_lines_in_the_rules_are_not_saved_as_rules(page, signed_in):
     """An empty forbidden phrase matches every caption, so a stray blank line
     would block every approval in the workspace."""
     signed_in(account_type="business")
-    _open_rules(page)
+    open_rules(page)
     page.locator("#rules-forbidden").fill("guaranteed returns\n\n   \nbest in the world")
     page.get_by_role("button", name="Save rules").click()
     expect(page.locator("#rules-status")).to_contain_text("Saved.")
 
-    _open(page, "biz-sources")
-    _open_rules(page)
+    open_settings(page, "sources")
+    open_rules(page)
     expect(page.locator("#rules-forbidden")).to_have_value(
         "guaranteed returns\nbest in the world")
 
 
 def test_publishing_limits_persist(page, signed_in):
     signed_in(account_type="business")
-    _open_rules(page)
+    open_rules(page)
     page.locator("#limit-day").fill("2")
     page.locator("#limit-week").fill("10")
     page.get_by_role("button", name="Save limits").click()
     expect(page.locator("#limits-status")).to_contain_text("Saved.")
 
-    _open(page, "biz-sources")
-    _open_rules(page)
+    open_settings(page, "sources")
+    open_rules(page)
     expect(page.locator("#limit-day")).to_have_value("2")
     expect(page.locator("#limit-week")).to_have_value("10")
 
@@ -338,7 +341,7 @@ def test_a_limit_out_of_range_is_reported_not_swallowed(page, signed_in):
     """The server caps these at 100. Without the message the save looks like it
     worked and the cap silently isn't there."""
     signed_in(account_type="business")
-    _open_rules(page)
+    open_rules(page)
     page.locator("#limit-day").fill("999")
     page.get_by_role("button", name="Save limits").click()
     expect(page.locator("#limits-status")).to_contain_text("must be 1–100")

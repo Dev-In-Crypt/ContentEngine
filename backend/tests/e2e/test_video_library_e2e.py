@@ -14,6 +14,8 @@ from playwright.sync_api import expect
 
 from models.schemas import MediaAssetDetail
 
+from tests.e2e.nav import open_create
+
 pytestmark = pytest.mark.e2e
 
 _VIDEO_ID = "33333333-3333-4333-8333-333333333333"
@@ -65,11 +67,6 @@ def _route_catalog(page):
         status=200, content_type="application/json", body=json.dumps(_providers_body())))
 
 
-def _open_video_tab(page):
-    page.locator('[data-section="library-video"]').click()
-    expect(page.locator("#view-library-video")).to_be_visible()
-
-
 def test_the_video_tab_is_hidden_from_a_business_account(page, signed_in):
     signed_in(account_type="business")
     expect(page.locator('[data-section="library-video"]')).to_be_hidden()
@@ -80,9 +77,9 @@ def test_switching_to_video_hides_every_other_view(page, signed_in):
     _route_catalog(page)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#view-create")).to_be_hidden()
-    page.locator('[data-section="create"]').click()
+    open_create(page, "post")
     expect(page.locator("#view-library-video")).to_be_hidden()
 
 
@@ -91,7 +88,7 @@ def test_an_empty_library_shows_an_empty_state(page, signed_in):
     _route_catalog(page)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#library-video-grid")).to_contain_text("Nothing here yet")
 
 
@@ -100,7 +97,7 @@ def test_the_model_dropdown_is_populated_from_the_catalog(page, signed_in):
     _route_catalog(page)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#lib-vid-model option")).to_have_count(2)
     expect(page.locator("#lib-vid-model")).to_contain_text("Kling 3.0 Turbo")
 
@@ -110,7 +107,7 @@ def test_the_cost_estimate_scales_with_duration(page, signed_in):
     _route_catalog(page)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
-    _open_video_tab(page)
+    open_create(page, "video")
     page.locator("#lib-vid-duration").select_option("5")
     expect(page.locator("#lib-vid-cost")).to_contain_text("$")
     five_sec_text = page.locator("#lib-vid-cost").inner_text()
@@ -127,7 +124,7 @@ def test_a_short_prompt_never_reaches_the_server(page, signed_in):
     page.on("request", lambda r: calls.append(r.url) if "media/videos" in r.url else None)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#lib-vid-prompt").fill("ok")
     page.locator("#lib-vid-generate-btn").click()
@@ -143,7 +140,7 @@ def test_generating_without_a_key_offers_the_way_to_set_one_up(page, signed_in):
     page.route("**/api/media/videos", lambda r: r.fulfill(
         status=400, content_type="application/json",
         body=json.dumps({"detail": "No Kling key configured. Add one in Account → API keys."})))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#lib-vid-prompt").fill("a cat walking on a windowsill")
     page.locator("#lib-vid-generate-btn").click()
@@ -159,7 +156,7 @@ def test_a_provider_error_is_shown_inline(page, signed_in):
     page.route("**/api/media/videos", lambda r: r.fulfill(
         status=502, content_type="application/json",
         body=json.dumps({"detail": "Kling rejected the request."})))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#lib-vid-prompt").fill("a cat walking on a windowsill")
     page.locator("#lib-vid-generate-btn").click()
@@ -180,7 +177,7 @@ def test_a_successful_generation_clears_the_prompt_and_refreshes_the_grid(page, 
     page.route("**/api/media/videos", lambda r: r.fulfill(
         status=200, content_type="application/json",
         body=json.dumps(_video_asset(status="pending", url=None))))
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#library-video-grid")).to_contain_text("Nothing here yet")
 
     page.locator("#lib-vid-prompt").fill("a cat walking on a windowsill")
@@ -195,7 +192,7 @@ def test_a_ready_video_renders_a_video_element_not_an_image(page, signed_in):
     _route_catalog(page)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps([_video_asset()])))
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#library-video-grid video")).to_have_count(1)
     expect(page.locator("#library-video-grid img")).to_have_count(0)
 
@@ -208,7 +205,7 @@ def test_suggest_idea_fills_the_prompt(page, signed_in):
     page.route("**/api/media/videos/suggest-idea", lambda r: r.fulfill(
         status=200, content_type="application/json",
         body=json.dumps({"prompt": "A paper boat drifting down a rain-soaked gutter."})))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#lib-vid-idea-btn").click()
     expect(page.locator("#lib-vid-prompt")).to_have_value(
@@ -227,7 +224,7 @@ def test_animate_a_photo_picks_a_seed_without_any_network_call(page, signed_in):
     calls = []
     page.on("request", lambda r: calls.append(r.url)
             if r.method in ("POST", "PUT") and "from-library" in r.url else None)
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#lib-vid-seed-btn").click()
     expect(page.locator("#library-picker-modal")).to_be_visible()
@@ -245,7 +242,7 @@ def test_clearing_the_seed_hides_the_preview(page, signed_in):
         status=200, content_type="application/json", body="[]"))
     page.route("**/api/media?kind=image", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps([_image_asset()])))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#lib-vid-seed-btn").click()
     page.locator("#library-picker-grid button").first.click()

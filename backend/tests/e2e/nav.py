@@ -1,0 +1,96 @@
+"""How a browser test reaches a screen.
+
+Every navigating test used to carry its own one-line helper — seven of them,
+three byte-identical copies of `_open_video_tab` among them. That is fine while
+the navigation is stable and awful the moment it isn't: UX phase 3 collapses
+fourteen top-level sections into four, moves half of them into a tabbed Settings
+screen, and folds Photos and Video into Create. Spread across seven files that
+is a sixty-seven-test sweep; here it is a few lines.
+
+So the rule is: **a test says where it wants to be, never how to get there.**
+Nothing outside this module should contain `[data-section=...]`.
+
+The names below are the destinations as the product will describe them after
+phase 3. Today several of them are still separate top-level buttons, and the
+mapping says so — when the nav is rewritten, only the mapping moves.
+"""
+from playwright.sync_api import expect
+
+#: Destination → the nav button that currently reaches it.
+#: Collapses to four entries in 3.8; `open_settings` and `open_create` take
+#: over the rest.
+_SECTION_BUTTON = {
+    "create": "create",
+    "calendar": "calendar",
+    "feed": "feed",
+    "results": "analytics",
+    "queue": "biz-drafts",
+    "leads": "biz-leads",
+}
+
+#: Settings tab → today's button. Both halves currently live behind two
+#: top-level buttons that share one container (`#view-admin`), split only by a
+#: comparison on the section name.
+_SETTINGS_BUTTON = {
+    "profiles": "account",
+    "connections": "keys",
+    "keys": "account",
+    "sources": "biz-sources",
+    "rules": "biz-rules",
+    "team": "account",
+}
+
+#: Create mode → today's button. Becomes a mode switch inside Create in 3.5.
+_CREATE_BUTTON = {
+    "post": "create",
+    "photo": "library-images",
+    "video": "library-video",
+}
+
+#: Create mode → the container that must be on screen once we arrive. Kept
+#: separate from the button map because after 3.5 the two stop coinciding.
+_CREATE_VIEW = {
+    "post": "#view-create",
+    "photo": "#view-library-images",
+    "video": "#view-library-video",
+}
+
+
+def _click(page, section: str) -> None:
+    page.locator(f'[data-section="{section}"]').click()
+
+
+def open_section(page, name: str) -> None:
+    """Go to a top-level section by its destination name."""
+    _click(page, _SECTION_BUTTON[name])
+
+
+def open_settings(page, tab: str = "profiles") -> None:
+    """Open Settings on a given tab."""
+    _click(page, _SETTINGS_BUTTON[tab])
+
+
+def open_create(page, mode: str = "post") -> None:
+    """Open Create in one of its three modes, and wait for it to be on screen.
+
+    The wait is not politeness: the photo and video screens fetch their grids on
+    entry, and a test that starts asserting before the container is visible races
+    the first render.
+    """
+    _click(page, _CREATE_BUTTON[mode])
+    expect(page.locator(_CREATE_VIEW[mode])).to_be_visible()
+
+
+def open_rules(page) -> None:
+    """Open the brand-rules screen and wait for it to finish filling itself in.
+
+    It loads its four fields from two requests after the click, and anything
+    typed before the second lands gets overwritten by it — a real, if narrow,
+    window for a user on a slow link, and a race a test must not run into.
+    `limits` is fetched last, so its response is the signal the screen settled.
+    Phase 3.4 splits rules and limits onto different tabs, which removes the
+    second request and with it the reason this helper exists.
+    """
+    with page.expect_response("**/api/business/limits") as res:
+        open_settings(page, "rules")
+    assert res.value.ok

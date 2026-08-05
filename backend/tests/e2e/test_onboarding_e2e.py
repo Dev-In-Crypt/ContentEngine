@@ -8,6 +8,8 @@ checklist claiming more than it knew.
 import pytest
 from playwright.sync_api import expect
 
+from tests.e2e.nav import open_settings
+
 pytestmark = pytest.mark.e2e
 
 WIZARD = "#onboarding-modal"
@@ -108,7 +110,7 @@ def test_closing_the_wizard_keeps_it_closed_but_setup_guide_reopens_it(page, sig
     page.reload()
     expect(page.locator(WIZARD)).to_be_hidden()   # dismissal is remembered
 
-    page.locator('[data-section="keys"]').click()
+    open_settings(page, "connections")
     page.get_by_role("button", name="Setup guide").click()
     expect(page.locator(WIZARD)).to_be_visible()
 

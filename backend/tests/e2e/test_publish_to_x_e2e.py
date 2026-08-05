@@ -10,6 +10,8 @@ from playwright.sync_api import expect
 
 from models.schemas import MediaAssetDetail, VideoPublishJobStatus
 
+from tests.e2e.nav import open_create
+
 pytestmark = pytest.mark.e2e
 
 _READY_ID = "33333333-3333-4333-8333-333333333333"
@@ -63,17 +65,12 @@ def _route_jobs(page, jobs):
         status=200, content_type="application/json", body=json.dumps(jobs)))
 
 
-def _open_video_tab(page):
-    page.locator('[data-section="library-video"]').click()
-    expect(page.locator("#view-library-video")).to_be_visible()
-
-
 def test_the_publish_to_x_button_shows_on_a_ready_video_card(page, signed_in):
     signed_in()
     _route_catalog(page)
     _route_video_list(page, [_video_asset()])
     _route_jobs(page, [])
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#library-video-grid button:has-text('Publish to X')")).to_have_count(1)
 
 
@@ -82,7 +79,7 @@ def test_the_button_is_absent_on_a_pending_card(page, signed_in):
     _route_catalog(page)
     _route_video_list(page, [_video_asset(_PENDING_ID, status="pending", url=None)])
     _route_jobs(page, [])
-    _open_video_tab(page)
+    open_create(page, "video")
     expect(page.locator("#library-video-grid button:has-text('Publish to X')")).to_have_count(0)
 
 
@@ -94,7 +91,7 @@ def test_missing_x_credentials_opens_the_needKey_prompt(page, signed_in):
     page.route(f"**/api/media/{_READY_ID}/publish-x", lambda r: r.fulfill(
         status=400, content_type="application/json",
         body=json.dumps({"detail": "X (Twitter) API credentials not configured"})))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#library-video-grid button:has-text('Publish to X')").click()
     expect(page.locator("#publish-x-modal")).to_be_visible()
@@ -112,7 +109,7 @@ def test_a_successful_queue_closes_the_modal(page, signed_in):
     _route_jobs(page, [])   # nothing in flight yet — the click is what creates the job
     page.route(f"**/api/media/{_READY_ID}/publish-x", lambda r: r.fulfill(
         status=202, content_type="application/json", body=json.dumps(_job(status="queued"))))
-    _open_video_tab(page)
+    open_create(page, "video")
 
     page.locator("#library-video-grid button:has-text('Publish to X')").click()
     page.locator("#publish-x-text").fill("Check this out.")
@@ -127,7 +124,7 @@ def test_a_finished_job_shows_a_view_on_x_link(page, signed_in):
     _route_video_list(page, [_video_asset()])
     _route_jobs(page, [_job(status="published", tweet_id="tw1",
                             permalink="https://x.com/i/web/status/tw1")])
-    _open_video_tab(page)
+    open_create(page, "video")
 
     link = page.locator("#library-video-grid a:has-text('View on X')")
     expect(link).to_be_visible()
@@ -139,7 +136,7 @@ def test_a_failed_job_shows_a_retry_button(page, signed_in):
     _route_catalog(page)
     _route_video_list(page, [_video_asset()])
     _route_jobs(page, [_job(status="failed", error="X rejected the video")])
-    _open_video_tab(page)
+    open_create(page, "video")
 
     expect(page.locator("#library-video-grid button:has-text('Retry')")).to_be_visible()
 

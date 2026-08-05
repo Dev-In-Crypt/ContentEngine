@@ -7,12 +7,14 @@ import pytest
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import expect
 
+from tests.e2e.nav import open_settings
+
 pytestmark = pytest.mark.e2e
 
 
 def _open_account(page):
     _dismiss_wizard(page)
-    page.locator('[data-section="account"]').click()
+    open_settings(page, "profiles")
 
 
 def _dismiss_wizard(page):
@@ -93,7 +95,7 @@ def test_the_escape_key_closes_the_delete_dialog(page, signup):
 def test_the_connections_page_shows_the_key_fields(page, signup):
     signup()
     page.get_by_text("Close setup").click()
-    page.locator('[data-section="keys"]').click()
+    open_settings(page, "connections")
     expect(page.locator("#keys-section")).to_be_visible()
     expect(page.locator('#keys-form input[data-cred]').first).to_be_visible()
 
@@ -103,7 +105,7 @@ def test_the_account_page_offers_a_kling_key_for_video(page, signup):
     and Pexels, not a per-network publishing credential."""
     signup()
     page.get_by_text("Close setup").click()
-    page.locator('[data-section="account"]').click()
+    open_settings(page, "keys")
     expect(page.locator('#keys-form input[data-cred="kling_api_key"]')).to_be_visible()
 
 
