@@ -29,6 +29,7 @@ from bs4 import BeautifulSoup
 from PIL import Image, UnidentifiedImageError
 
 from services.http_utils import describe_request_error
+from services.lead_builder import _loads
 from services.url_guard import BlockedURL, guarded_get
 
 log = logging.getLogger(__name__)
@@ -329,3 +330,78 @@ async def fetch_brand_logo(info: BrandInfo, *,
         info.colors = [info.theme_color] + [c for c in info.colors
                                             if c != info.theme_color]
     return info
+
+
+# ------------------------------------------------------------------- the niche
+
+NICHE_SYSTEM_PROMPT = """\
+You are filling in a social-media marketing profile for a company, from nothing
+but its own website blurb.
+
+Return ONLY a JSON object, no markdown:
+{"niche": "...", "target_audience": "..."}
+
+RULES:
+- "niche": what the company actually sells or does, as a marketer would file it.
+  Three to six words, lowercase, no company name, no slogan.
+- "target_audience": who buys it. Three to six words, plain and concrete.
+- Work ONLY from the text given. If it says too little to tell, use "" for that
+  field rather than a guess that sounds plausible.
+"""
+
+_MAX_PROFILE_FIELD = 120           # matches User.niche / User.target_audience
+
+
+@dataclass
+class NicheGuess:
+    niche: str = ""
+    target_audience: str = ""
+
+
+def _one_line(value: object) -> str:
+    """A model that answers with a list or a number gets nothing through."""
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:_MAX_PROFILE_FIELD]
+
+
+async def guess_niche(text_provider, *, name: Optional[str],
+                      description: Optional[str],
+                      text_model: str = "") -> NicheGuess:
+    """Guess the profile fields a website doesn't state outright.
+
+    Separate from extract_brand on purpose: the whole page read stays testable
+    without an LLM in sight, and this stays one call with one job.
+
+    Never raises. Unlike claim_check, whose second failure has to block a post,
+    a niche is a pre-filled form field — the user is looking at one, and
+    throwing away the name, the colours and the logo we already have because
+    the optional extra didn't work would be the wrong trade every time.
+    """
+    name, description = (name or "").strip(), (description or "").strip()
+    if not name and not description:
+        # Nothing to reason from, and the call is somebody's money.
+        return NicheGuess()
+
+    user = f"COMPANY: {name or '(not stated)'}\nWEBSITE SAYS: {description or '(nothing)'}"
+
+    async def _call() -> Optional[dict]:
+        raw, _cit = await text_provider.generate_text(
+            model=text_model, system_prompt=NICHE_SYSTEM_PROMPT,
+            user_prompt=user, max_tokens=200)
+        data = _loads(raw)
+        return data if isinstance(data, dict) else None
+
+    try:
+        data = await _call()
+        if data is None:
+            log.warning("Niche guess came back unparseable; retrying once")
+            data = await _call()
+    except Exception as e:  # noqa: BLE001 — a dead key must not cost the rest
+        log.warning("Niche guess unavailable: %s", e)
+        return NicheGuess()
+
+    if data is None:
+        return NicheGuess()
+    return NicheGuess(niche=_one_line(data.get("niche")),
+                      target_audience=_one_line(data.get("target_audience")))

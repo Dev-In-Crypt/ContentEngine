@@ -15,7 +15,7 @@ from pytest_httpx import HTTPXMock
 from services import brand_extract, url_guard
 from services.brand_extract import (
     BrandExtractError, BrandInfo, dominant_colors, extract_brand,
-    fetch_brand_logo, normalise_color,
+    fetch_brand_logo, guess_niche, normalise_color,
 )
 from services.url_guard import BLOCKED_MESSAGE
 
@@ -418,3 +418,110 @@ async def test_the_theme_color_is_not_listed_twice(httpx_mock: HTTPXMock):
 async def test_a_theme_color_survives_a_site_with_no_usable_logo():
     info = await fetch_brand_logo(BrandInfo(source_url=URL, theme_color="#0a2540"))
     assert info.colors == ["#0a2540"]
+
+
+# ================================================================== phase 1.6
+# guess_niche — the one LLM call in this module. Shape follows
+# services/claim_check.py: parse, retry once, give up.
+
+class StubProvider:
+    """Same shape as tests/test_claim_check.py's — the house convention for a
+    text provider that returns a canned answer."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.calls: list[dict] = []
+
+    async def generate_text(self, **kwargs):
+        self.calls.append(kwargs)
+        reply = self.replies[min(len(self.calls) - 1, len(self.replies) - 1)]
+        if isinstance(reply, Exception):
+            raise reply
+        return (reply, [])
+
+
+_GUESS = '{"niche": "industrial tooling", "target_audience": "factory buyers"}'
+
+
+async def test_a_clean_answer_is_parsed():
+    guess = await guess_niche(StubProvider(_GUESS), name="Acme",
+                              description="We make anvils.")
+    assert guess.niche == "industrial tooling"
+    assert guess.target_audience == "factory buyers"
+
+
+async def test_a_fenced_answer_is_parsed():
+    """Models wrap JSON in ```json fences constantly; _loads already strips
+    them, and this pins that guess_niche goes through it."""
+    guess = await guess_niche(StubProvider(f"```json\n{_GUESS}\n```"),
+                              name="Acme", description="We make anvils.")
+    assert guess.niche == "industrial tooling"
+
+
+async def test_broken_json_is_repaired():
+    guess = await guess_niche(StubProvider('{"niche": "anvils", '),
+                              name="Acme", description="We make anvils.")
+    assert guess.niche == "anvils"
+
+
+async def test_an_unusable_answer_is_retried_once():
+    provider = StubProvider("sorry, I can't help with that", _GUESS)
+    guess = await guess_niche(provider, name="Acme", description="We make anvils.")
+    assert len(provider.calls) == 2
+    assert guess.niche == "industrial tooling"
+
+
+async def test_two_unusable_answers_give_an_empty_guess_not_an_error():
+    """Mutation guard, and the one real deviation from claim_check's shape:
+    that module RAISES on a second failure, because an unverified claim must
+    block the post. A niche is a pre-filled form field. Raising here would
+    throw away the name, the colours and the logo we already have because the
+    optional extra didn't work."""
+    provider = StubProvider("nope", "still nope")
+    guess = await guess_niche(provider, name="Acme", description="We make anvils.")
+    assert len(provider.calls) == 2
+    assert guess.niche == "" and guess.target_audience == ""
+
+
+async def test_a_provider_failure_gives_an_empty_guess():
+    """Same reasoning: a dead key or a 429 must not cost the user the rest of
+    the extraction."""
+    guess = await guess_niche(StubProvider(RuntimeError("429 slow down")),
+                              name="Acme", description="We make anvils.")
+    assert guess.niche == ""
+
+
+async def test_nothing_to_go_on_costs_nothing():
+    """Mutation guard: a page with neither name nor description gives the model
+    literally nothing to work from, and the call is somebody's money."""
+    provider = StubProvider(_GUESS)
+    guess = await guess_niche(provider, name=None, description=None)
+    assert provider.calls == []
+    assert guess.niche == ""
+
+
+async def test_the_name_and_description_reach_the_model():
+    provider = StubProvider(_GUESS)
+    await guess_niche(provider, name="Acme", description="We make anvils.")
+    prompt = provider.calls[0]["user_prompt"]
+    assert "Acme" in prompt and "We make anvils." in prompt
+
+
+async def test_long_answers_are_capped_to_the_column():
+    """niche and target_audience are String(120) (models/database.py). A model
+    that writes a paragraph must not fail the INSERT two layers later."""
+    long = '{{"niche": "{}", "target_audience": "{}"}}'.format("x" * 500, "y" * 500)
+    guess = await guess_niche(StubProvider(long), name="Acme", description="Anvils.")
+    assert len(guess.niche) <= 120 and len(guess.target_audience) <= 120
+
+
+async def test_non_string_values_are_ignored():
+    guess = await guess_niche(StubProvider('{"niche": ["a", "b"], "target_audience": 7}'),
+                              name="Acme", description="Anvils.")
+    assert guess.niche == "" and guess.target_audience == ""
+
+
+async def test_a_list_reply_is_not_mistaken_for_an_answer():
+    guess = await guess_niche(StubProvider('["industrial tooling"]', '["still a list"]'),
+                              name="Acme", description="Anvils.")
+    assert guess.niche == ""
