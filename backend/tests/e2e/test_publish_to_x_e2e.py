@@ -141,130 +141,177 @@ def test_a_failed_job_shows_a_retry_button(page, signed_in):
     expect(page.locator("#library-video-grid button:has-text('Retry')")).to_be_visible()
 
 
-# ------------------------------------------------------------------ composer: platform-aware button
+# ------------------------------------------------------------------ composer: the video card
+#
+# The card is `#reel-card`. It is shown on BOTH networks — its render button
+# turns the post's slides into an MP4, and each network has somewhere to send
+# that MP4: Instagram publish-reel, X publish-video. It hid on X until the fix
+# below, which is what made publishReelOrToX's X branch unreachable: the button
+# that dispatches to it lives inside the card.
+#
+# The network tab and the post's platform are deliberately crossed wherever it
+# matters: what the card follows is the POST's own platform, and a test where
+# the two agree cannot tell that apart from following the tab.
 
-def test_the_reel_button_label_follows_the_posts_platform(page, signed_in):
-    """Mutation guard: hard-code the Instagram label and an X post would offer
-    'Publish Reel', which hits the Instagram-only publish-reel route and 400s.
+_PIXEL = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 
-    The tab is deliberately left on Instagram. What the button follows is the
-    POST's own platform — the docstring used to say the opposite, and saying it
-    was what made the bug look intended: the chrome read the tab, so opening an
-    X post from the calendar while the tab sat on Instagram offered the wrong
-    button and, worse, sent the wrong endpoint.
-    """
-    import base64
+
+def _composer_post(post_id: str, platform: str, *, slides: bool = True) -> dict:
     from datetime import datetime, timezone
 
-    from models.schemas import AISettingsResponse, PostPreview, SlidePreview
+    from models.schemas import PostPreview, SlidePreview
 
-    signed_in()
-    _route_jobs(page, [])
-    page.route("**/api/settings/ai", lambda r: r.fulfill(
-        status=200, content_type="application/json",
-        body=json.dumps(AISettingsResponse(
-            text_provider="openrouter", text_model="anthropic/claude-sonnet-5",
-            image_provider="openrouter", image_model="google/gemini-image",
-            keys={"openrouter": {"set": True, "masked": "sk-…9f2c"}},
-        ).model_dump(mode="json"))))
-    pixel = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
-    page.route("**/slides/*/image", lambda r: r.fulfill(
-        status=200, content_type="image/png", body=pixel))
-
-    def _post(platform):
-        return PostPreview(
-            id="e2e-post-x", topic="t", format="single", status="preview",
-            caption="c", hashtags=[], seo_keywords=[], cta="c", hook="h",
-            platform=platform,
-            slides=[SlidePreview(slide_number=1, image_url="/api/posts/e2e-post-x/slides/1/image",
-                                 image_source="stock", width=1080, height=1350)],
-            text_model_used="m", image_model_used=None,
-            created_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
-        ).model_dump(mode="json")
-
-    page.route("**/api/posts/generate", lambda r: r.fulfill(
-        status=200, content_type="text/event-stream",
-        body="".join(f"data: {json.dumps(f)}\n\n" for f in
-                     [{"type": "complete", "post": _post("x")}])))
-
-    page.locator("#topic").fill("Sourdough starters")
-    page.get_by_role("button", name="Next →").click()
-    page.locator("#generate-btn").click()
-    expect(page.locator("#step-4")).to_be_visible()
-
-    expect(page.locator("#reel-publish-btn")).to_have_text("𝕏 Publish video to X")
-
-
-def test_the_reel_button_never_sends_an_instagram_post_to_x(page, signed_in):
-    """The label is cosmetic; this is the half that did damage.
-
-    publishReelOrToX dispatched on the active network TAB. The Reel card is
-    hidden for X posts, so the reachable combination was the mirror of what you
-    would guess: tab on X, post on Instagram, card visible, button offering
-    "Publish video to X" — and clicking it sent an INSTAGRAM post to the X
-    endpoint. Following the post instead makes that impossible.
-    """
-    import base64
-    from datetime import datetime, timezone
-
-    from models.schemas import AISettingsResponse, PostPreview, SlidePreview
-
-    signed_in()
-    _route_jobs(page, [])
-    page.locator("#net-x").click()          # the composer is aimed at X…
-    page.route("**/api/settings/ai", lambda r: r.fulfill(
-        status=200, content_type="application/json",
-        body=json.dumps(AISettingsResponse(
-            text_provider="openrouter", text_model="anthropic/claude-sonnet-5",
-            image_provider="openrouter", image_model="google/gemini-image",
-            keys={"openrouter": {"set": True, "masked": "sk-…9f2c"}},
-        ).model_dump(mode="json"))))
-    pixel = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
-    page.route("**/slides/*/image", lambda r: r.fulfill(
-        status=200, content_type="image/png", body=pixel))
-
-    # …but the post that comes back is an Instagram one.
-    post = PostPreview(
-        id="e2e-post-ig", topic="t", format="single", status="preview",
+    return PostPreview(
+        id=post_id, topic="t", format="single", status="preview",
         caption="c", hashtags=[], seo_keywords=[], cta="c", hook="h",
-        platform="instagram", video_url="/api/posts/e2e-post-ig/reel/video",
+        platform=platform,
         slides=[SlidePreview(slide_number=1,
-                             image_url="/api/posts/e2e-post-ig/slides/1/image",
-                             image_source="stock", width=1080, height=1350)],
+                             image_url=f"/api/posts/{post_id}/slides/1/image",
+                             image_source="stock", width=1080, height=1350)]
+        if slides else [],
         text_model_used="m", image_model_used=None,
         created_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
     ).model_dump(mode="json")
+
+
+def _reach_step4(page, post: dict) -> None:
+    """Generate `post` through the wizard and land on the editor."""
+    import base64
+
+    from models.schemas import AISettingsResponse
+
+    _route_jobs(page, [])
+    page.route("**/api/settings/ai", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps(AISettingsResponse(
+            text_provider="openrouter", text_model="anthropic/claude-sonnet-5",
+            image_provider="openrouter", image_model="google/gemini-image",
+            keys={"openrouter": {"set": True, "masked": "sk-…9f2c"}},
+        ).model_dump(mode="json"))))
+    page.route("**/slides/*/image", lambda r: r.fulfill(
+        status=200, content_type="image/png", body=base64.b64decode(_PIXEL)))
     page.route("**/api/posts/generate", lambda r: r.fulfill(
         status=200, content_type="text/event-stream",
         body="data: " + json.dumps({"type": "complete", "post": post}) + "\n\n"))
 
-    hit = []
-
-    def _record(name):
-        # A one-argument handler on purpose: Playwright passes the Request as a
-        # second argument when the handler takes one, which would clobber a
-        # `name=name` default and record the request instead of the label.
-        def handler(route):
-            hit.append(name)
-            route.fulfill(status=200, content_type="application/json",
-                          body=json.dumps({"success": True, "instagram_media_id": "m1"}))
-        return handler
-
-    page.route("**/api/posts/*/publish-video", _record("video"))
-    page.route("**/api/posts/*/publish-reel", _record("reel"))
-
     page.locator("#topic").fill("Sourdough starters")
     page.get_by_role("button", name="Next →").click()
     page.locator("#generate-btn").click()
     expect(page.locator("#step-4")).to_be_visible()
+
+
+def _record_publish_routes(page) -> list:
+    """Route both publish endpoints, recording which one the SPA reaches for.
+
+    The two answer differently on purpose, because the SPA reads the bodies:
+    Instagram publishes in-request, X returns 202 and a job the poller drives.
+    """
+    hit: list[str] = []
+
+    def _reel(route):
+        hit.append("reel")
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"success": True, "instagram_media_id": "m1"}))
+
+    def _video(route):
+        hit.append("video")
+        # .../api/posts/<id>/publish-video — the job has to name the post it is
+        # for, or the SPA files it under `undefined` and the button never
+        # switches to the job's status.
+        post_id = route.request.url.rsplit("/", 2)[-2]
+        route.fulfill(status=202, content_type="application/json",
+                      body=json.dumps(_job(status="queued", post_id=post_id,
+                                           asset_id=None, progress_pct=0)))
+
+    page.route("**/api/posts/*/publish-video", _video)
+    page.route("**/api/posts/*/publish-reel", _reel)
+    return hit
+
+
+def _render_a_reel(page, post_id: str) -> None:
+    """Fake the render so #reel-preview — and the publish button inside it —
+    appears without staging a real ffmpeg run."""
+    page.route(f"**/api/posts/{post_id}/reel", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"video_url": f"/api/posts/{post_id}/reel/video?t=1",
+                         "broll_fallbacks": 0, "broll_clips": 0})))
+    page.locator("#make-reel-btn").click()
+    expect(page.locator("#reel-preview")).to_be_visible()
+
+
+def test_the_video_card_is_offered_on_an_x_post(page, signed_in):
+    """The regression this file's composer half exists for.
+
+    renderPreview hid #reel-card whenever the post wasn't Instagram's, so an X
+    post had no way to reach publishVideoToX — the backend route, the job table
+    and the poller all worked and nothing in the UI could start them.
+    """
+    signed_in()
+    _reach_step4(page, _composer_post("e2e-post-x", "x"))
+    expect(page.locator("#reel-card")).to_be_visible()
+
+
+def test_a_text_only_post_still_has_no_video_card(page, signed_in):
+    """Slides are the render's input; without them the card is an error waiting
+    to happen (POST /reel 400s with "No slides to build a reel from")."""
+    signed_in()
+    _reach_step4(page, _composer_post("e2e-post-x", "x", slides=False))
+    expect(page.locator("#reel-card")).to_be_hidden()
+
+
+def test_the_card_copy_follows_the_posts_platform(page, signed_in):
+    """Mutation guard: hard-code the Instagram labels and an X post would offer
+    'Publish Reel', which hits the Instagram-only publish-reel route and 400s.
+    "Reel" is also Instagram's word — X just takes an MP4."""
+    signed_in()
+    _reach_step4(page, _composer_post("e2e-post-x", "x"))
+    expect(page.locator("#make-reel-btn")).to_have_text("Make video")
+    expect(page.locator("#reel-publish-btn")).to_have_text("𝕏 Publish video to X")
+
+
+def test_an_instagram_post_keeps_the_reel_wording(page, signed_in):
+    signed_in()
+    page.locator("#net-x").click()
+    _reach_step4(page, _composer_post("e2e-post-ig", "instagram"))
+    expect(page.locator("#make-reel-btn")).to_have_text("Make Reel")
     expect(page.locator("#reel-publish-btn")).to_have_text("📤 Publish Reel")
 
-    # Called directly rather than clicked: #reel-preview, which holds the
-    # button, stays hidden until a reel has actually been rendered, and staging
-    # a real ffmpeg render here would test everything except the dispatch.
+
+def test_clicking_publish_on_an_x_post_reaches_the_video_route(page, signed_in):
+    """The whole point of the fix: a real click, on the real button, from the
+    composer. Asserting the dispatch by calling publishReelOrToX() directly —
+    as this file used to have to — passes just as happily when the button the
+    user needs is unreachable."""
+    signed_in()
+    _reach_step4(page, _composer_post("e2e-post-x", "x"))
+    hit = _record_publish_routes(page)
+    _render_a_reel(page, "e2e-post-x")
+
     page.on("dialog", lambda d: d.accept())
-    with page.expect_response("**/api/posts/*/publish-*"):
-        page.evaluate("publishReelOrToX()")
+    with page.expect_response("**/api/posts/*/publish-video"):
+        page.locator("#reel-publish-btn").click()
+
+    assert hit == ["video"], f"an X post went to {hit or 'nowhere'}"
+
+
+def test_clicking_publish_on_an_instagram_post_reaches_the_reel_route(page, signed_in):
+    """The mirror, and the half that did damage before 3.2: publishReelOrToX
+    dispatched on the active network TAB, so this exact pair — tab on X, post
+    on Instagram — sent an Instagram post to X's endpoint.
+
+    It is also the one crossed pair that was reachable back then, because the
+    card hid on X posts. Now that it doesn't, the click is a real one on both
+    sides of the dispatch rather than a page.evaluate() standing in for it.
+    """
+    signed_in()
+    page.locator("#net-x").click()          # the composer is aimed at X…
+    _reach_step4(page, _composer_post("e2e-post-ig", "instagram"))  # …the post isn't
+    hit = _record_publish_routes(page)
+    _render_a_reel(page, "e2e-post-ig")
+
+    page.on("dialog", lambda d: d.accept())
+    with page.expect_response("**/api/posts/*/publish-reel"):
+        page.locator("#reel-publish-btn").click()
+
     assert hit == ["reel"], f"an Instagram post went to {hit or 'nowhere'}"
