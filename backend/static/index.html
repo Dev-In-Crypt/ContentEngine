@@ -1343,7 +1343,7 @@
         </div>
         <div class="flex gap-2">
           <button onclick="saveBrand()" class="ce-btn px-4 py-2 text-sm">Save brand</button>
-          <button onclick="deleteBrand()" class="ce-btn-ghost px-4 py-2 text-sm">Delete</button>
+          <button id="brand-delete" onclick="deleteBrand()" class="ce-btn-ghost px-4 py-2 text-sm">Delete</button>
         </div>
         <p id="brand-editor-status" class="hidden text-xs text-gray-400"></p>
       </div>
@@ -2171,8 +2171,12 @@ function renderAcctSwitcher() {
   if (manage) manage.classList.toggle('hidden', !show);
   if (!show) return;
   const active = (S.user && S.user.active_account_id) || '';
-  sel.innerHTML = `<option value="">Personal</option>` +
-    S.accounts.map(a => `<option value="${esc(a.id)}"${a.id === active ? ' selected' : ''}>${esc(a.name || 'Brand')}</option>`).join('');
+  // No hardcoded "Personal" row: since the profile rework every user owns a
+  // profile and it is always in this list, primary first (the API orders it).
+  // An empty value would now mean "switch to my primary", which is what the
+  // list's first entry already does.
+  sel.innerHTML = S.accounts.map(a =>
+    `<option value="${esc(a.id)}"${a.id === active ? ' selected' : ''}>${esc(a.name || 'Brand')}</option>`).join('');
 }
 
 async function onAcctSwitch() {
@@ -2185,7 +2189,7 @@ async function onAcctSwitch() {
     });
     if (!res.ok) { toast('Couldn\'t switch brand', 'error'); return; }
     S.user.active_account_id = (await res.json()).active_account_id || null;
-    toast(id ? 'Switched brand' : 'Personal account', 'success');
+    toast('Switched brand', 'success');
     // refresh the current view + composer prefill for the new brand
     if (S.section) setSection(S.section);
     await prefillFromActiveBrand();
@@ -2242,7 +2246,8 @@ async function renderBrandsList() {
   S.accounts.forEach(a => {
     const row = document.createElement('div');
     row.className = 'flex items-center gap-2 ce-card px-3 py-2';
-    row.innerHTML = `<span class="text-sm flex-1">${esc(a.name || 'Brand')}</span><button class="ce-btn-ghost px-2 py-1 text-xs">Edit</button>`;
+    const tag = a.is_primary ? ' <span class="text-xs text-gray-500">· main</span>' : '';
+    row.innerHTML = `<span class="text-sm flex-1">${esc(a.name || 'Brand')}${tag}</span><button class="ce-btn-ghost px-2 py-1 text-xs">Edit</button>`;
     row.querySelector('button').onclick = () => editBrand(a.id);
     box.appendChild(row);
   });
@@ -2279,6 +2284,10 @@ async function editBrand(id) {
     document.getElementById('brand-f-voice').value = a.brand_voice_preset || '';
     document.getElementById('brand-f-accent').value = a.slide_accent_color || '';
     document.getElementById('brand-logo-state').textContent = a.has_logo ? 'logo set' : 'no logo';
+    // The main profile can't be deleted (the API returns 409). Hide the button
+    // rather than offer an action that always fails.
+    const primary = (S.accounts.find(x => x.id === id) || {}).is_primary;
+    document.getElementById('brand-delete').classList.toggle('hidden', !!primary);
   } catch { /* non-fatal */ }
 }
 
@@ -2314,9 +2323,10 @@ async function uploadBrandLogo() {
 }
 
 async function deleteBrand() {
-  if (!S.editingBrandId || !confirm('Delete this brand? Its posts stay but lose the brand tag.')) return;
+  if (!S.editingBrandId || !confirm('Delete this brand? Its posts move to your main profile.')) return;
   try {
-    await apiFetch(`${API}/api/accounts/${encodeURIComponent(S.editingBrandId)}`, { method: 'DELETE' });
+    const res = await apiFetch(`${API}/api/accounts/${encodeURIComponent(S.editingBrandId)}`, { method: 'DELETE' });
+    if (!res.ok) { toast('Couldn\'t delete that brand', 'error'); return; }
     S.editingBrandId = null;
     document.getElementById('brand-editor').classList.add('hidden');
     await loadAccounts();

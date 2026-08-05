@@ -105,3 +105,51 @@ def test_the_account_page_offers_a_kling_key_for_video(page, signup):
     page.get_by_text("Close setup").click()
     page.locator('[data-section="account"]').click()
     expect(page.locator('#keys-form input[data-cred="kling_api_key"]')).to_be_visible()
+
+
+# ── brand profiles (UX phase 2) ─────────────────────────────────────────────
+
+def test_the_brand_switcher_starts_with_the_users_own_profile(page, signup):
+    """"Personal" used to be a hardcoded option meaning "no brand row". Every
+    user owns a profile now, so the switcher lists real rows only — and it must
+    not be empty, which is what a stale hardcoded option was hiding."""
+    signup()
+    _dismiss_wizard(page)
+    switcher = page.locator("#acct-switcher")
+    expect(switcher).to_be_visible()
+    expect(switcher.locator("option")).to_have_count(1)
+    assert switcher.input_value()          # a real id, not ""
+
+
+def test_a_new_brand_joins_the_switcher_below_the_main_one(page, signup):
+    signup()
+    _dismiss_wizard(page)
+    page.locator("#acct-manage").click()
+    page.fill("#brand-new-name", "Client A")
+    page.locator("#brands-modal").get_by_role("button", name="Add").click()
+    expect(page.locator("#brand-editor")).to_be_visible()
+    page.locator("#brands-modal").get_by_text("✕").click()
+
+    options = page.locator("#acct-switcher option")
+    expect(options).to_have_count(2)
+    expect(options.nth(1)).to_have_text("Client A")   # primary stays first
+
+
+def test_the_main_profile_offers_no_delete_button(page, signup):
+    """The API answers 409. Offering a button that always fails is worse than
+    not offering it."""
+    signup()
+    _dismiss_wizard(page)
+    page.locator("#acct-manage").click()
+    page.locator("#brands-list button", has_text="Edit").first.click()
+    expect(page.locator("#brand-editor")).to_be_visible()
+    expect(page.locator("#brand-delete")).to_be_hidden()
+
+
+def test_a_client_brand_does_offer_delete(page, signup):
+    signup()
+    _dismiss_wizard(page)
+    page.locator("#acct-manage").click()
+    page.fill("#brand-new-name", "Client A")
+    page.locator("#brands-modal").get_by_role("button", name="Add").click()
+    expect(page.locator("#brand-delete")).to_be_visible()
