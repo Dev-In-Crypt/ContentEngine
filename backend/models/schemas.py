@@ -864,3 +864,39 @@ class VideoPublishJobStatus(BaseModel):
     warning: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+# --- Brand extraction (phase 1.7): one pasted link instead of eight fields ---
+
+class BrandExtractRequest(BaseModel):
+    url: str
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        # Same shape as SourceCreate's: the real address policy lives in
+        # services/url_guard.py, which checks every hop and not just the string.
+        s = (v or "").strip()
+        if not (s.startswith("http://") or s.startswith("https://")):
+            raise ValueError("Enter a public http(s) URL")
+        if len(s) > 500:
+            raise ValueError("URL is too long")
+        return s
+
+
+class BrandExtractResponse(BaseModel):
+    """Everything a website was willing to tell us about its brand.
+
+    Every field is a guess from markup nobody is obliged to get right, so the
+    UI shows these for editing and never saves them silently. The logo travels
+    as a data URL: it hasn't been stored anywhere yet — the user has to accept
+    it first — and a temporary file plus a serving route for something that is
+    usually under 20 KB would be the more expensive way to say the same thing.
+    """
+    source_url: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    niche: str = ""
+    target_audience: str = ""
+    colors: list[str] = []
+    logo_data_url: Optional[str] = None

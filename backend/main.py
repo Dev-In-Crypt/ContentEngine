@@ -23,8 +23,8 @@ from services.http_utils import setup_logging, setup_tls
 from api.deps import LOCAL_USER_EMAIL
 from api.ratelimit import limiter
 from api.routes import (
-    accounts, business, demo, media, posts, models, publish_jobs, stock, admin, auth,
-    settings as settings_routes,
+    accounts, brand, business, demo, media, posts, models, publish_jobs, stock, admin,
+    auth, settings as settings_routes,
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -229,6 +229,7 @@ app.include_router(business.router)
 app.include_router(accounts.router)
 app.include_router(media.router)
 app.include_router(publish_jobs.router)
+app.include_router(brand.router)
 
 # Serve built frontend assets (images, fonts, etc.) at /static/*
 if STATIC_DIR.exists():
