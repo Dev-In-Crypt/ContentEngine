@@ -69,11 +69,6 @@
     .net-btn{ color:var(--muted); transition:all .15s; }
     .net-btn.net-active{ background:var(--accent); color:var(--on-accent); }
     .net-btn[disabled]{ opacity:.55; cursor:not-allowed; }
-    /* left vertical network rail */
-    .rail-net{ width:44px; height:44px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:18px; line-height:1; background:var(--panel); border:1px solid var(--border); color:var(--text); transition:all .15s; }
-    .rail-net:hover:not([disabled]){ border-color:var(--accent); }
-    .rail-net.net-active{ background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
-    .rail-soon{ opacity:.4; cursor:not-allowed; }
     .sec-btn{ color:var(--muted); transition:background .12s,color .12s; }
     .sec-btn:hover{ background:var(--accent-dim); color:var(--text); }
     .sec-btn.sec-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
@@ -81,7 +76,6 @@
     .business-only{ display:none; }
     body[data-account-type="business"] .business-only{ display:block; }
     body[data-account-type="business"] .creator-only{ display:none; }
-    body[data-account-type="business"] .rail-net{ display:none; }
     body[data-account-type="business"] #section-nav .business-only{ display:inline-block; }
     .soon-badge{ font-size:9px; font-weight:700; letter-spacing:.04em; padding:1px 4px; border-radius:5px; background:var(--accent-dim); color:var(--muted); text-transform:uppercase; }
     /* muted status dot (fits the monochrome look) */
@@ -383,18 +377,6 @@
 
 <main class="max-w-7xl mx-auto px-3 py-5">
  <div class="flex gap-5">
-  <!-- ===== LEFT NETWORK RAIL (switch active network) ===== -->
-  <aside class="shrink-0">
-    <nav class="flex flex-col gap-2 items-center sticky top-20">
-      <button id="net-instagram" onclick="setNetwork('instagram')" title="Instagram" aria-label="Instagram" class="rail-net">📸</button>
-      <button id="net-x" onclick="setNetwork('x')" title="X" aria-label="X (Twitter)" class="rail-net">𝕏</button>
-      <button disabled onclick="soonNetwork('TikTok')" title="TikTok — coming soon" class="rail-net rail-soon"></button>
-      <button disabled onclick="soonNetwork('LinkedIn')" title="LinkedIn — coming soon" class="rail-net rail-soon text-sm font-bold">in</button>
-      <button disabled onclick="soonNetwork('Facebook')" title="Facebook — coming soon" class="rail-net rail-soon font-bold">f</button>
-      <button disabled onclick="soonNetwork('YouTube')" title="YouTube — coming soon" class="rail-net rail-soon">▶</button>
-      <button onclick="soonNetwork('More networks')" title="Add network" class="rail-net" style="color:var(--muted)">+</button>
-    </nav>
-  </aside>
 
   <!-- ===== CONTENT ===== -->
   <div id="app-content" class="flex-1 min-w-0 space-y-5">
@@ -1523,7 +1505,6 @@ function applyTheme(t) {
 function toggleTheme() {
   applyTheme((localStorage.getItem('theme') || 'light') === 'dark' ? 'light' : 'dark');
 }
-function soonNetwork(name) { toast((name || 'That network') + ' publishing is coming soon', 'info'); }
 
 // ===== AUTH =====
 function authHeader() {
@@ -4466,15 +4447,11 @@ function initNicheSwatches() {
 // ===== VIEW SWITCH =====
 // ===== NETWORK TABS (Instagram / X) =====
 function setNetwork(net) {
-  S.platform = net;                 // generation + publish target follow the tab
-  document.getElementById('net-instagram').classList.toggle('net-active', net === 'instagram');
-  document.getElementById('net-instagram').classList.toggle('text-gray-400', net !== 'instagram');
-  document.getElementById('net-x').classList.toggle('net-active', net === 'x');
-  document.getElementById('net-x').classList.toggle('text-gray-400', net !== 'x');
+  S.platform = net;                 // what the next generation targets
   const isIG = net === 'instagram';
   // (Results names no single network any more — it lists every one, badged.)
-  // Prominent composer network toggle (the left rail is hidden in the Business shell,
-  // so this is the discoverable — and in Business the only — way to choose the target).
+  // The composer's own toggle — the only network control in the product now
+  // that the rail is gone. It always was the only one in the Business shell.
   const igT = document.getElementById('net-toggle-ig');
   const xT = document.getElementById('net-toggle-x');
   if (igT) { igT.classList.toggle('bg-purple-600', isIG); igT.classList.toggle('text-white', isIG);
@@ -4493,6 +4470,13 @@ function setNetwork(net) {
   const xGroup = document.getElementById('xmode-group');
   if (fmtGroup) fmtGroup.classList.toggle('hidden', !isIG);
   if (xGroup) xGroup.classList.toggle('hidden', isIG);
+  // Hiding the picker used to leave S.format alone, so a carousel chosen for
+  // Instagram was still in the request after switching to X — a shape X has no
+  // concept of, sent from an invisible control.
+  if (!isIG && (S.format || '').startsWith('carousel')) {
+    const single = document.querySelector('#format-group [data-val="single"]');
+    if (single) single.click(); else S.format = 'single';
+  }
   // Text-only is X-only (Instagram needs media). Show the button on X; if the user
   // switches to Instagram while it's picked, fall back to Stock photos.
   const textBtn = document.getElementById('src-text-only');
@@ -4504,11 +4488,6 @@ function setNetwork(net) {
   if (!isIG) applyXPremiumGate();
   renderOwnPhotos();          // X takes one image, Instagram may take up to 10
   updatePostEditorChrome();   // "Post" vs "Caption", X char counter + split button
-  // "Feed grid" is an Instagram profile-grid concept — hide the nav on X, and
-  // bounce off it if it's the active section.
-  const feedBtn = document.querySelector('#section-nav [data-section="feed"]');
-  if (feedBtn) feedBtn.classList.toggle('hidden', !isIG);
-  if (!isIG && S.section === 'feed') S.section = 'create';
   // Plan-a-week: X has no carousels (one image per tweet), so offer Single only.
   const planFmt = document.getElementById('plan-format');
   if (planFmt) {

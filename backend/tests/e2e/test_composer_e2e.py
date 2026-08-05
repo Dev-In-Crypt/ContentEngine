@@ -366,6 +366,58 @@ def test_an_x_post_is_generated_as_x_not_as_the_default_network(
     expect(page.locator("#reel-card")).to_be_hidden()
 
 
+def test_switching_to_x_drops_a_carousel_format(page, signed_in, keyed):
+    """Hiding #format-group left S.format alone, so picking a carousel and then
+    switching to X shipped `format: 'carousel_10'` with `platform: 'x'` — a
+    shape X has no concept of. The picker was invisible by then, so there was
+    no way to notice, let alone undo it."""
+    signed_in()
+    sent = {}
+
+    def _capture(route):
+        sent.update(route.request.post_data_json)
+        route.fulfill(status=200, content_type="text/event-stream",
+                      body=_sse({"type": "complete",
+                                 "post": _generated_post(platform="x", slides=[])}))
+
+    page.route("**/api/posts/generate", _capture)
+
+    _compose(page)
+    page.locator('#format-group [data-val="carousel_10"]').click()
+    assert page.evaluate("S.format") == "carousel_10"
+
+    page.get_by_role("button", name="← Back").click()
+    page.locator("#net-toggle-x").click()
+    _compose(page)
+    page.locator("#generate-btn").click()
+    expect(page.locator("#step-4")).to_be_visible()
+
+    assert sent["platform"] == "x"
+    assert sent["format"] == "single"
+
+
+def test_the_network_rail_is_gone(page, signed_in):
+    """It was a second control for a choice the composer already owns, sitting
+    on every screen including the ones with no composer. The Business shell has
+    run without it since it shipped."""
+    signed_in()
+    expect(page.locator("#net-instagram")).to_have_count(0)
+    expect(page.locator("#net-x")).to_have_count(0)
+    expect(page.locator(".rail-net")).to_have_count(0)
+    # …and the composer's own toggle still does the job.
+    expect(page.locator("#net-toggle-x")).to_be_visible()
+
+
+def test_the_feed_section_is_reachable_whatever_the_composer_targets(page, signed_in):
+    """The rail used to hide the Feed button on X and shove you off the section
+    if you were standing on it. The grid is Instagram-only by its own nature
+    now, so which network the composer is aimed at has nothing to do with
+    whether you may look at your profile grid."""
+    signed_in()
+    page.locator("#net-toggle-x").click()
+    expect(page.locator('[data-section="feed"]')).to_be_visible()
+
+
 # ── The media library picker, reached from an already-rendered post ─────────
 #
 # These fakes are built from MediaAssetSummary, the same discipline as the rest

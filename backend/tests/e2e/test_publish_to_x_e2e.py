@@ -212,7 +212,7 @@ def test_the_reel_button_never_sends_an_instagram_post_to_x(page, signed_in):
 
     signed_in()
     _route_jobs(page, [])
-    page.locator("#net-x").click()          # the composer is aimed at X…
+    page.locator("#net-toggle-x").click()   # the composer is aimed at X…
     page.route("**/api/settings/ai", lambda r: r.fulfill(
         status=200, content_type="application/json",
         body=json.dumps(AISettingsResponse(
