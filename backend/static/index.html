@@ -1724,7 +1724,12 @@ async function refreshSource(id) {
   try {
     const res = await apiFetch(`${API}/api/business/sources/${encodeURIComponent(id)}/refresh`, { method: 'POST' });
     if (res.ok) { const d = await res.json(); toast(`Found ${d.leads_found} new lead(s)`, 'success'); }
-    else toast('Couldn\'t reach that source', 'warn');
+    else {
+      // Say what the server said. A hardcoded "couldn't reach" told someone
+      // whose source was merely over quota that it was broken.
+      const e = await res.json().catch(() => ({}));
+      toast(e.detail || 'Couldn\'t reach that source', 'warn');
+    }
     await loadSources();
   } catch { toast('Refresh failed', 'error'); }
 }

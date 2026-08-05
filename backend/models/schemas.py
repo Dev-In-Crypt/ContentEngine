@@ -576,6 +576,10 @@ class PublishTestResponse(BaseModel):
 class SourceStatus(str, Enum):
     OK = "ok"
     UNREACHABLE = "unreachable"
+    #: Over the source's request quota, not broken. Written by the poller and
+    #: by both /sources routes, and rendered with its own badge in the SPA —
+    #: the vocabulary just never made it into this enum.
+    RATE_LIMITED = "rate_limited"
     FORMAT_CHANGED = "format_changed"
 
 

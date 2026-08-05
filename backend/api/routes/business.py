@@ -41,7 +41,9 @@ from models.schemas import (
 from services.claim_check import apply_brand_rules, verify_claims
 from services.content_engine import ContentEngine
 from services.source_poller import poll_source
-from services.sources import SourceFetchError, detect_source_type
+from services.sources import (
+    SourceFetchError, SourceRateLimited, detect_source_type,
+)
 from services.user_settings import resolve_ai_choice
 from services.workspace import (
     get_or_create_workspace, owned_business_post, owned_lead, owned_source,
@@ -86,6 +88,13 @@ async def add_source(
     leads_found = 0
     try:
         leads_found = await poll_source(db, source, ssl_verify=settings.ssl_verify)
+        await db.commit()
+    except SourceRateLimited as e:
+        # Before SourceFetchError, its parent. Being over quota is temporary, and
+        # recording it as "unreachable" invites the user to delete a source that
+        # works — the SPA already has a badge for this, it was just never set here.
+        log.warning("Rate limited on first poll of %s: %s", body.url, e)
+        source.status = "rate_limited"
         await db.commit()
     except SourceFetchError as e:
         log.warning("Initial poll failed for %s: %s", body.url, e)
@@ -132,6 +141,17 @@ async def refresh_source(
     try:
         leads_found = await poll_source(db, source, ssl_verify=settings.ssl_verify)
         await db.commit()
+    except SourceRateLimited as e:
+        log.warning("Rate limited refreshing %s: %s", source.url, e)
+        source.status = "rate_limited"
+        await db.commit()
+        # 503, not 429: our own limiter already answers 429 to mean "you are
+        # clicking too fast", and reusing it for "the source's quota" would put
+        # two different problems behind one code — the confusion this fixes.
+        raise HTTPException(
+            status_code=503,
+            detail="That source is over its request quota. It'll be retried "
+                   "automatically — nothing to fix.") from e
     except SourceFetchError as e:
         log.warning("Refresh failed for %s: %s", source.url, e)
         source.status = "unreachable"

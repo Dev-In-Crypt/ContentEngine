@@ -124,6 +124,82 @@ def test_refresh_triggers_poll(client):
     assert r.status_code == 200 and r.json()["leads_found"] == 1
 
 
+# ── over quota is not the same as broken ─────────────────────────────────────
+#
+# SourceRateLimited subclasses SourceFetchError so every existing handler keeps
+# working, which is exactly why these two routes swallowed it: they catch the
+# parent and write "unreachable". Being over GitHub's hourly quota then looks
+# identical to a dead URL, and the screen invites the user to delete a source
+# that works perfectly.
+
+def _raises(exc):
+    async def _poll(db, source, ssl_verify=True):
+        raise exc
+    return _poll
+
+
+def _add(client, h):
+    return client.post("/api/business/sources", headers=h,
+                       json={"url": "https://github.com/o/r"}).json()["source"]
+
+
+def test_a_rate_limited_source_is_not_marked_unreachable(client, monkeypatch):
+    from services.sources.base import SourceRateLimited
+
+    h = _register(client, "rl-add@ex.com")
+    monkeypatch.setattr(business_routes, "poll_source",
+                        _raises(SourceRateLimited("GitHub: 60/hour")))
+    src = _add(client, h)
+    assert src["status"] == "rate_limited"
+
+
+def test_a_genuinely_dead_source_is_still_unreachable(client, monkeypatch):
+    """The other half: catching the subclass first must not swallow the parent."""
+    from services.sources.base import SourceFetchError
+
+    h = _register(client, "dead-add@ex.com")
+    monkeypatch.setattr(business_routes, "poll_source",
+                        _raises(SourceFetchError("404")))
+    assert _add(client, h)["status"] == "unreachable"
+
+
+def test_refreshing_a_rate_limited_source_says_so(client, monkeypatch):
+    from services.sources.base import SourceRateLimited
+
+    h = _register(client, "rl-ref@ex.com")
+    src = _add(client, h)
+    monkeypatch.setattr(business_routes, "poll_source",
+                        _raises(SourceRateLimited("GitHub: 60/hour")))
+    r = client.post(f"/api/business/sources/{src['id']}/refresh", headers=h)
+
+    # Distinguishable from a dead source, in the status AND in the answer —
+    # 503, because our own 429 already means "you are clicking too fast", and
+    # reusing it for "GitHub's quota" would recreate the confusion being fixed.
+    assert r.status_code == 503
+    assert "quota" in r.json()["detail"].lower()
+    listed = client.get("/api/business/sources", headers=h).json()[0]
+    assert listed["status"] == "rate_limited"
+
+
+def test_refreshing_a_dead_source_still_reports_unreachable(client, monkeypatch):
+    from services.sources.base import SourceFetchError
+
+    h = _register(client, "dead-ref@ex.com")
+    src = _add(client, h)
+    monkeypatch.setattr(business_routes, "poll_source", _raises(SourceFetchError("404")))
+    r = client.post(f"/api/business/sources/{src['id']}/refresh", headers=h)
+    assert r.status_code == 502
+    assert client.get("/api/business/sources", headers=h).json()[0]["status"] == "unreachable"
+
+
+def test_the_status_enum_knows_every_status_the_poller_writes(client):
+    """source_poller.py writes "rate_limited" and the SPA renders a badge for it,
+    but the enum that documents the vocabulary never learned the word."""
+    from models.schemas import SourceStatus
+    assert {s.value for s in SourceStatus} >= {
+        "ok", "unreachable", "rate_limited", "format_changed"}
+
+
 def test_brand_rules_round_trip_and_isolation(client):
     ha = _register(client, "br-a@ex.com")
     hb = _register(client, "br-b@ex.com")
