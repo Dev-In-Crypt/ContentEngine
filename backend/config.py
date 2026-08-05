@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     # It is a last resort, not the fix for TLS-inspecting security software.
     ssl_verify: bool = True
 
+    # Outbound fetches to a host somebody else chose (a Business source, a site
+    # we read a brand off) are refused when the name resolves into private
+    # space — see services/url_guard.py. Turning this on lets a self-hoster
+    # watch an internal wiki; on a public deployment it re-opens the server as
+    # a window into its own network, so it stays off.
+    allow_private_urls: bool = False
+
     # OpenRouter
     openrouter_api_key: str = ""
     openrouter_referer: str = "https://localhost"
