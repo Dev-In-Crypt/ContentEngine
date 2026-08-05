@@ -49,10 +49,15 @@ async def list_accounts(
 ) -> AccountListResponse:
     rows = (await db.execute(
         select(ManagedAccountModel).where(ManagedAccountModel.owner_user_id == user.id)
-        .order_by(ManagedAccountModel.created_at.asc())
+        # Primary first, so the SPA can render the list in order without knowing
+        # which row that is. created_at alone would not do it: an existing
+        # agency's client brands predate the profile seeded for them.
+        .order_by(ManagedAccountModel.is_primary.desc(),
+                  ManagedAccountModel.created_at.asc())
     )).scalars().all()
     return AccountListResponse(
-        accounts=[{"id": a.id, "name": a.name} for a in rows],
+        accounts=[{"id": a.id, "name": a.name, "is_primary": bool(a.is_primary)}
+                  for a in rows],
         active_account_id=user.active_account_id)
 
 

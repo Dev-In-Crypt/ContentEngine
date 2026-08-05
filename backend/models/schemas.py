@@ -737,12 +737,17 @@ class AccountOut(BaseModel):
 
 
 class AccountListResponse(BaseModel):
-    accounts: list[dict] = []            # [{id, name}]
+    accounts: list[dict] = []            # [{id, name, is_primary}], primary first
+    #: Always set since UX phase 2 — every user owns a profile, and one of them
+    #: is always active. Kept Optional so a cached client that has never seen a
+    #: value doesn't break on the type.
     active_account_id: Optional[str] = None
 
 
 class AccountSwitch(BaseModel):
-    account_id: Optional[str] = None     # None → Personal
+    #: None used to mean "Personal", which no longer exists as an absence; it is
+    #: now read as "my own profile" so a cached SPA keeps working.
+    account_id: Optional[str] = None
 
 
 # --- Media library (standalone assets, not tied to a post) ---

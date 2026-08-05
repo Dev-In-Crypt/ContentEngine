@@ -125,9 +125,13 @@ async def _seed_local_user(sessionmaker) -> None:
         )
         if result.scalar_one_or_none():
             return
-        session.add(UserModel(email=LOCAL_USER_EMAIL, is_local=True, is_active=True,
-                              email_verified=True))
+        user = UserModel(email=LOCAL_USER_EMAIL, is_local=True, is_active=True,
+                         email_verified=True)
+        session.add(user)
         await session.commit()
+        # The desktop owner gets a brand profile like everyone else (UX phase 2).
+        from services.managed_account import ensure_primary_profile
+        await ensure_primary_profile(session, user)
 
 
 @asynccontextmanager

@@ -129,6 +129,7 @@ async def get_current_user(
     Cloud mode → decode the Bearer JWT; 401 if missing/invalid/inactive."""
     if settings.app_mode != "cloud":
         user = await _get_or_create_local_user(db)
+        await _ensure_profile(db, user)
         current_user_id.set(user.id)
         return user
 
@@ -143,8 +144,26 @@ async def get_current_user(
     # reset / logout-all) no longer authenticates.
     if int(claims.get("tv", 0)) != int(user.token_version or 0):
         raise HTTPException(status_code=401, detail="Session expired")
+    await _ensure_profile(db, user)
     current_user_id.set(user.id)
     return user
+
+
+async def _ensure_profile(db: AsyncSession, user: UserModel) -> None:
+    """Give the user a brand profile if they somehow don't have one.
+
+    Steady state is one attribute read and no query. It fires for a user the
+    data migration never saw — the deploy window on a rolling restart, a restore
+    from a pg_dump predating the migration, the lazily created local desktop
+    owner — and for one whose active brand was just deleted.
+
+    Cheap insurance for something expensive: since UX phase 2 the post list
+    filters on the active profile, so a user without one sees an empty app.
+    """
+    if user.active_account_id:
+        return
+    from services.managed_account import ensure_primary_profile
+    await ensure_primary_profile(db, user)
 
 
 async def get_effective_settings(

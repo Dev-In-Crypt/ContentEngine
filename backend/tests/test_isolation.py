@@ -60,8 +60,19 @@ def _hdr(token):
 
 
 async def _seed_post(sm, user_id, pid, topic="t"):
+    """Tagged with the owner's active profile, as a real post is since UX phase
+    2 — the composer list filters on it, so an untagged post is not the shape
+    this file means to test."""
+    from sqlalchemy import select
+
     async with sm() as s:
-        s.add(PostModel(id=pid, user_id=user_id, topic=topic, format="single", status="preview"))
+        # or_none: one test deliberately seeds a post for an owner who doesn't
+        # exist, to prove the local desktop user sees posts whoever owns them.
+        active = (await s.execute(
+            select(UserModel.active_account_id).where(UserModel.id == user_id)
+        )).scalar_one_or_none()
+        s.add(PostModel(id=pid, user_id=user_id, topic=topic, format="single",
+                        status="preview", managed_account_id=active))
         await s.commit()
 
 

@@ -25,6 +25,7 @@ from services.auth import (
     hash_password, verify_password,
 )
 from services.email import send_reset_email, send_verify_email
+from services.managed_account import ensure_primary_profile
 from services.gdpr import UPLOADS_ROOT
 
 log = logging.getLogger(__name__)
@@ -104,6 +105,10 @@ async def register(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    # Every user owns a brand profile from their first second (UX phase 2). Done
+    # here rather than left to the lazy repair in get_current_user so the row
+    # exists before anything can read it.
+    await ensure_primary_profile(db, user)
     await send_verify_email(email, create_purpose_token(user.id, "verify", _VERIFY_TTL))
     return TokenResponse(access_token=create_access_token(user.id, user.token_version))
 
