@@ -9,6 +9,7 @@ an access grant.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
@@ -19,8 +20,25 @@ from services.http_utils import describe_rate_limit, describe_request_error
 from services.sources.base import (
     FetchedItem, SourceFetchError, SourceRateLimited, parse_iso,
 )
+from services.url_guard import BlockedURL, guarded_get
 
 _API = "https://api.github.com"
+_MAX_BYTES = 5 * 1024 * 1024        # 30 releases with full bodies
+
+#: What GitHub actually allows in an owner or repo name. The segments are
+#: interpolated straight into the API path below, and this request carries our
+#: GITHUB_TOKEN — so a segment like '..' would aim an authenticated call at an
+#: endpoint nobody asked for: '/repos/../user/releases' normalises to '/user',
+#: which answers with the token owner's profile. Not SSRF (the host is fixed),
+#: but the same class of "somebody else chose part of this URL".
+_SEGMENT_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def _is_name(segment: str) -> bool:
+    """A real owner/repo name. The charset alone is not enough: '.' and '..'
+    match it (a period is legal in 'repo.js') and are exactly the two segments
+    that turn a path into a traversal."""
+    return bool(_SEGMENT_RE.fullmatch(segment)) and any(c.isalnum() for c in segment)
 
 
 class GitHubReleasesFetcher:
@@ -40,7 +58,10 @@ class GitHubReleasesFetcher:
         parts = [p for p in urlparse(url).path.split("/") if p]
         if len(parts) < 2:
             raise SourceFetchError(f"Not a GitHub repository URL: {url!r}")
-        return parts[0], parts[1]
+        owner, repo = parts[0], parts[1]
+        if not (_is_name(owner) and _is_name(repo)):
+            raise SourceFetchError(f"Not a GitHub repository URL: {url!r}")
+        return owner, repo
 
     async def fetch(self, url: str, since: Optional[datetime] = None) -> list[FetchedItem]:
         owner, repo = self._owner_repo(url)
@@ -50,14 +71,15 @@ class GitHubReleasesFetcher:
         if self._token:                       # a blank Bearer is worse than none: GitHub 401s
             headers["Authorization"] = f"Bearer {self._token}"
         try:
-            async with httpx.AsyncClient(
-                timeout=20.0, verify=self._ssl_verify, follow_redirects=True,
-                headers=headers,
-            ) as client:
-                resp = await client.get(
-                    f"{_API}/repos/{owner}/{repo}/releases", params={"per_page": 30})
-                resp.raise_for_status()
-                data = resp.json()
+            resp = await guarded_get(
+                f"{_API}/repos/{owner}/{repo}/releases",
+                ssl_verify=self._ssl_verify, timeout=20.0, headers=headers,
+                params={"per_page": 30}, max_bytes=_MAX_BYTES,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except BlockedURL as e:
+            raise SourceFetchError(str(e)) from e
         except httpx.HTTPStatusError as e:
             limited = describe_rate_limit(e.response)
             if limited:

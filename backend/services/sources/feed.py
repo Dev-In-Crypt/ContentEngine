@@ -13,6 +13,10 @@ import httpx
 
 from services.http_utils import describe_request_error
 from services.sources.base import FetchedItem, SourceFetchError, strip_html
+from services.url_guard import BlockedURL, guarded_get
+
+#: Feeds carry full post bodies, so they run larger than a changelog page.
+_MAX_BYTES = 5 * 1024 * 1024
 
 
 class FeedFetcher:
@@ -21,13 +25,14 @@ class FeedFetcher:
 
     async def fetch(self, url: str, since: Optional[datetime] = None) -> list[FetchedItem]:
         try:
-            async with httpx.AsyncClient(
-                timeout=20.0, verify=self._ssl_verify, follow_redirects=True,
-                headers={"User-Agent": "ContentEngine"},
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                content = resp.content
+            resp = await guarded_get(
+                url, ssl_verify=self._ssl_verify, timeout=20.0,
+                headers={"User-Agent": "ContentEngine"}, max_bytes=_MAX_BYTES,
+            )
+            resp.raise_for_status()
+            content = resp.content
+        except BlockedURL as e:
+            raise SourceFetchError(str(e)) from e
         except httpx.HTTPStatusError as e:
             raise SourceFetchError(f"Feed returned {e.response.status_code}") from e
         except httpx.RequestError as e:

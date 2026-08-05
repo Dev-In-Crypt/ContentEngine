@@ -25,9 +25,13 @@ from bs4 import BeautifulSoup
 
 from services.http_utils import describe_request_error
 from services.sources.base import FetchedItem, SourceFetchError
+from services.url_guard import BlockedURL, guarded_get
 
 _MAX_ITEMS = 30
 _MAX_BODY = 600
+#: A changelog is text. Anything larger is not a page we can use, and reading it
+#: to find that out is the cost we're declining to pay.
+_MAX_BYTES = 2 * 1024 * 1024
 _HEADINGS = ("h1", "h2", "h3")
 
 #: Elements that are never content, wherever they appear.
@@ -92,13 +96,14 @@ class GenericPageFetcher:
 
     async def fetch(self, url: str, since: Optional[datetime] = None) -> list[FetchedItem]:
         try:
-            async with httpx.AsyncClient(
-                timeout=20.0, verify=self._ssl_verify, follow_redirects=True,
-                headers={"User-Agent": "ContentEngine"},
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                html = resp.text
+            resp = await guarded_get(
+                url, ssl_verify=self._ssl_verify, timeout=20.0,
+                headers={"User-Agent": "ContentEngine"}, max_bytes=_MAX_BYTES,
+            )
+            resp.raise_for_status()
+            html = resp.text
+        except BlockedURL as e:
+            raise SourceFetchError(str(e)) from e
         except httpx.HTTPStatusError as e:
             raise SourceFetchError(f"Page returned {e.response.status_code}") from e
         except httpx.RequestError as e:

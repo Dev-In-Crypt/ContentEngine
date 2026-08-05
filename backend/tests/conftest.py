@@ -28,6 +28,20 @@ def _disable_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
+def _no_real_dns(monkeypatch):
+    """Never let a test reach a real resolver.
+
+    services/url_guard.py resolves every outbound host to check it isn't in
+    private space, so the moment a fetcher is guarded, its tests start doing
+    DNS. They fetch invented domains through pytest_httpx, and whether 'ex.com'
+    resolves today is neither deterministic nor ours to depend on. Point every
+    name at one public address; the guard's own tests override this per test.
+    """
+    from services import url_guard
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: ["93.184.216.34"])
+
+
+@pytest.fixture(autouse=True)
 def _restore_ssl_context():
     """Undo any TLS injection a test performed.
 

@@ -373,3 +373,100 @@ async def test_page_dedupes_repeated_headings(httpx_mock: HTTPXMock):
         headers={"content-type": "text/html"})
     items = await GenericPageFetcher().fetch("https://ex.com/changelog")
     assert [i.title for i in items] == ["Version 3.0 released"]
+
+
+# ── the SSRF guard, from the fetchers' side (phase 1.2) ─────────────────────
+#
+# The guard itself is covered in tests/test_url_guard.py. These pin that each
+# fetcher actually goes through it — a fetcher that quietly kept its own
+# httpx.AsyncClient would pass every other test in this file.
+#
+# tests/conftest.py points all DNS at a public address by default, so each of
+# these has to redirect its own name into private space.
+#
+# Each one also registers a WORKING response as is_optional. That is what makes
+# them non-vacuous: an unguarded fetcher gets a clean 200 and raises nothing, so
+# the test fails on its own assertion. Without the mock, an unguarded fetcher
+# would fail anyway (real DNS can't resolve 'ex.com' from a test box) and the
+# test would pass while proving nothing — which is exactly what the first
+# version of these did.
+
+def _resolves_private(monkeypatch, addr="169.254.169.254"):
+    from services import url_guard
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: [addr])
+
+
+@pytest.mark.asyncio
+async def test_page_fetcher_refuses_a_private_address(
+        httpx_mock: HTTPXMock, monkeypatch):
+    _resolves_private(monkeypatch)
+    httpx_mock.add_response(
+        text=_page("<main><h2>Version 9</h2><p>Shipped.</p></main>"),
+        headers={"content-type": "text/html"}, is_optional=True)
+    with pytest.raises(SourceFetchError):
+        await GenericPageFetcher().fetch("https://ex.com/changelog")
+
+
+@pytest.mark.asyncio
+async def test_feed_fetcher_refuses_a_private_address(
+        httpx_mock: HTTPXMock, monkeypatch):
+    _resolves_private(monkeypatch)
+    httpx_mock.add_response(content=_RSS.encode(),
+                            headers={"content-type": "application/rss+xml"},
+                            is_optional=True)
+    with pytest.raises(SourceFetchError):
+        await FeedFetcher().fetch("https://ex.com/feed.xml")
+
+
+@pytest.mark.asyncio
+async def test_github_fetcher_refuses_a_private_address(
+        httpx_mock: HTTPXMock, monkeypatch):
+    """api.github.com is a fixed host, so this can only fire if DNS itself is
+    poisoned — but the fetcher must still refuse rather than trust the name."""
+    _resolves_private(monkeypatch)
+    httpx_mock.add_response(json=[{"id": 1, "tag_name": "v1",
+                                   "published_at": "2026-07-01T12:00:00Z"}],
+                            is_optional=True)
+    with pytest.raises(SourceFetchError):
+        await GitHubReleasesFetcher(token="").fetch("https://github.com/o/r")
+
+
+@pytest.mark.asyncio
+async def test_the_refusal_does_not_say_why(httpx_mock: HTTPXMock, monkeypatch):
+    """Mutation guard: put the reason in the message and this fails. Callers
+    echo it — services/fact_check.py puts str(e)[:200] in an API response and
+    the demo streams it to anonymous visitors, so "refused" vs "blocked" would
+    report which internal ports are open."""
+    from services.url_guard import BLOCKED_MESSAGE
+    _resolves_private(monkeypatch)
+    httpx_mock.add_response(
+        text=_page("<main><h2>Version 9</h2><p>Shipped.</p></main>"),
+        headers={"content-type": "text/html"}, is_optional=True)
+    with pytest.raises(SourceFetchError) as err:
+        await GenericPageFetcher().fetch("https://ex.com/changelog")
+    assert str(err.value) == BLOCKED_MESSAGE
+
+
+@pytest.mark.parametrize("bad", [
+    "https://github.com/../../owner/repo",
+    "https://github.com/../user/octocat",   # /repos/../user/releases -> /user
+    "https://github.com/./repo",
+    "https://github.com/o%2F../r",
+    "https://github.com/ow ner/repo",
+])
+def test_github_rejects_a_path_segment_that_is_not_a_name(bad):
+    """Mutation guard: drop the check and these segments go straight into the
+    API path — on a request carrying our GITHUB_TOKEN.
+
+    The dotted cases are why the charset alone is not the check: a period is
+    legal in 'repo.js', so '..' matches `[A-Za-z0-9._-]+` quite happily. That
+    is what the first version of this guard missed, and what this test caught.
+    """
+    with pytest.raises(SourceFetchError):
+        GitHubReleasesFetcher(token="")._owner_repo(bad)
+
+
+def test_github_still_accepts_ordinary_names():
+    fetcher = GitHubReleasesFetcher(token="")
+    assert fetcher._owner_repo("https://github.com/pallets/flask") == ("pallets", "flask")
+    assert fetcher._owner_repo("https://github.com/o-n_e/repo.js") == ("o-n_e", "repo.js")

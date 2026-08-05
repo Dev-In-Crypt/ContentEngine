@@ -74,6 +74,21 @@ def _resolve(host: str) -> list[str]:
     return [info[4][0] for info in infos]
 
 
+def _allow_private_default() -> bool:
+    """Whether a self-hoster opted out of the guard (Settings.allow_private_urls).
+
+    Resolved here rather than threaded through every fetcher: the policy has one
+    owner, and adding a parameter to get_source_fetcher() would break the test
+    doubles that stub it as `lambda kind, ssl_verify=True: ...`. Fails closed if
+    settings can't be read at all.
+    """
+    try:
+        from config import get_settings
+        return bool(get_settings().allow_private_urls)
+    except Exception:                       # noqa: BLE001 — no config, no exemption
+        return False
+
+
 def _is_forbidden(raw: str) -> bool:
     try:
         ip = ipaddress.ip_address(raw)
@@ -136,14 +151,19 @@ async def guarded_request(
     headers: Optional[dict] = None,
     params: Optional[dict] = None,
     max_bytes: int = DEFAULT_MAX_BYTES,
-    allow_private: bool = False,
+    allow_private: Optional[bool] = None,
 ) -> httpx.Response:
     """Fetch `url`, checking the address at every redirect hop.
 
     Raises BlockedURL for anything the guard refuses (and logs why). Ordinary
     HTTP failures are NOT raised: a 404 comes back as a 404 so the callers that
     already word those nicely keep doing so.
+
+    `allow_private=None` reads Settings.allow_private_urls; pass a bool to
+    decide explicitly (which is what the guard's own tests do).
     """
+    if allow_private is None:
+        allow_private = _allow_private_default()
     async with httpx.AsyncClient(
         timeout=timeout, verify=ssl_verify, follow_redirects=False,
         headers=headers or {},
