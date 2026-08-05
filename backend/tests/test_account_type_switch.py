@@ -62,6 +62,14 @@ def test_switch_creator_to_business_and_back(client):
     assert client.get("/api/business/sources", headers=h).status_code == 403
 
 
+def test_switch_to_agency(client):
+    h = _register(client, "agency@ex.com")
+    r = client.put("/api/auth/account-type", headers=h, json={"account_type": "agency"})
+    assert r.status_code == 200 and r.json()["account_type"] == "agency"
+    # agency is the creator engine with several brands — not the Business product
+    assert client.get("/api/business/sources", headers=h).status_code == 403
+
+
 def test_unknown_type_rejected(client):
     h = _register(client, "bad@ex.com")
     assert client.put("/api/auth/account-type", headers=h,

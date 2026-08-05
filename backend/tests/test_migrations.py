@@ -38,6 +38,10 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     assert "managed_accounts" in tables                             # Phase 7
     assert "managed_account_id" in post_cols                        # Phase 7
     assert "active_account_id" in cols                              # Phase 7 (users)
+    # UX phase 2: every user owns exactly one primary profile.
+    acct_cols = {r[1] for r in sqlite3.connect(db).execute(
+        "PRAGMA table_info(managed_accounts)")}
+    assert "is_primary" in acct_cols
     cred_cols = {r[1] for r in sqlite3.connect(db).execute(
         "PRAGMA table_info(user_credentials)")}
     assert "elevenlabs_api_key_enc" in cred_cols                    # Reels R1 (voiceover)

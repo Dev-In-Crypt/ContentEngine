@@ -94,6 +94,15 @@ def test_require_business_exempts_local_user():
     assert require_business(_user(account_type="creator", is_local=True)) is None
 
 
+def test_require_business_blocks_agency_account():
+    """An agency runs client brands through managed profiles, which is the
+    creator engine — it is not the sources-to-approval Business product, and
+    the gate must not widen just because a third value exists."""
+    with pytest.raises(HTTPException) as exc:
+        require_business(_user(account_type="agency", is_local=False))
+    assert exc.value.status_code == 403
+
+
 # ── endpoints (cloud mode) ───────────────────────────────────────────────────
 
 @pytest.fixture

@@ -34,7 +34,12 @@ _VERIFY_TTL = timedelta(hours=24)
 _RESET_TTL = timedelta(hours=1)
 
 
-_ACCOUNT_TYPES = {"creator", "business"}
+#: "creator" — one channel of your own. "business" — the sources → leads →
+#: approval product. "agency" — several client brands, which is the creator
+#: engine over many profiles, so it is deliberately NOT let through
+#: require_business. The SPA still gates on == "business", which lands an agency
+#: in the creator shell; its own navigation arrives with UX phase 3.
+_ACCOUNT_TYPES = {"creator", "business", "agency"}
 
 
 class RegisterRequest(BaseModel):

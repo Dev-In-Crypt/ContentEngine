@@ -152,6 +152,16 @@ def test_register_business_account_type_persists(cloud_client):
     assert me["account_type"] == "business"
 
 
+def test_register_agency_account_type_persists(cloud_client):
+    """The third door (UX phase 2.3): someone running several client brands.
+    Backend-only this phase — the SPA still lands them in the creator shell."""
+    cloud_client.post("/api/auth/register",
+                      json={"email": "agency@example.com", "password": "password123",
+                            "account_type": "agency"})
+    me = _login_me(cloud_client, "agency@example.com")
+    assert me["account_type"] == "agency"
+
+
 def test_register_garbage_account_type_falls_back_to_creator(cloud_client):
     """A stray/garbage account_type must not 422 the registration — it degrades
     to 'creator' so a bad query-param never blocks sign-up."""

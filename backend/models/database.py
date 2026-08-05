@@ -5,7 +5,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
+from sqlalchemy.sql import false as sa_false
 
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -512,15 +513,24 @@ class AuditEntry(Base):
 
 
 class ManagedAccount(Base):
-    """A managed client brand (Phase 7, Creators-side agency MVP). One owner can have
-    many. Holds only brand IDENTITY — deliberately the SAME column names as User so the
-    existing resolvers (resolve_user_profile / resolve_user_brand_voice /
-    apply_user_slide_style) work on it via duck typing. Keys stay on the owning User."""
+    """A brand profile. Holds only brand IDENTITY — deliberately the SAME column
+    names as User so the resolvers (resolve_user_profile / resolve_user_brand_voice
+    / apply_brand_slide_style) work on it via duck typing. Keys stay on the owning
+    User.
+
+    Started life as the agency multi-account feature (Phase 7), where it was
+    optional and "Personal" meant no row at all. Since UX phase 2 every user owns
+    exactly one row with is_primary set, and brand identity is read from here and
+    nowhere else; an agency simply has more rows alongside it."""
     __tablename__ = "managed_accounts"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     owner_user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name = Column(String(120))
+    #: The one profile a user cannot delete, and the one User's legacy brand
+    #: columns mirror. Not "the oldest": an existing agency's client brands
+    #: predate their seeded profile, so a timestamp would pick the wrong row.
+    is_primary = Column(Boolean, nullable=False, server_default=sa_false(), default=False)
     brand_voice_preset = Column(String(30))
     brand_voice_custom = Column(Text)
     niche = Column(String(120))
@@ -530,3 +540,12 @@ class ManagedAccount(Base):
     slide_text_box_color = Column(String(7))
     logo_path = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Partial, so an agency can still hold many non-primary brands. Turns the
+        # select-then-insert race inside ensure_primary_profile into an
+        # IntegrityError instead of two primaries and a silently wrong mirror.
+        Index("ux_managed_accounts_primary", "owner_user_id", unique=True,
+              sqlite_where=text("is_primary = 1"),
+              postgresql_where=text("is_primary")),
+    )
