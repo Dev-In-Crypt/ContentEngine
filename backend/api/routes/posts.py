@@ -26,9 +26,9 @@ from api.ratelimit import limiter
 from api.routes.media import _owned_asset as _owned_media_asset
 from services.brand_engine import PillowBrandEngine
 from services.brand_voice import resolve_brand_voice
-from services.managed_account import resolve_active_account
+from services.managed_account import brand_for_post, resolve_active_account
 from services.user_settings import (
-    apply_user_slide_style, build_settings_for_user, resolve_ai_choice,
+    apply_brand_slide_style, build_settings_for_user, resolve_ai_choice,
     resolve_user_brand_voice, resolve_user_profile,
 )
 from config import Settings
@@ -286,24 +286,24 @@ async def generate_post(
 
         async def run() -> None:
             try:
-                # Agency multi-account (Phase 7): brand identity comes from the active
-                # managed account when one is selected, else the user's own settings.
-                # Keys / x_premium stay on `user` (the agency's own).
+                # Brand identity comes from the active profile — always a row
+                # since UX phase 2, never the User's own columns. Keys and
+                # x_premium stay on `user` (the owner's).
                 acct = await resolve_active_account(db, user)
-                bsrc = acct or user
-                brand_cfg = apply_user_slide_style(
-                    await load_brand_config(db, body.brand_config_id), bsrc)
+                brand_cfg = apply_brand_slide_style(
+                    await load_brand_config(db, body.brand_config_id), acct,
+                    is_local=bool(user.is_local))
                 engine.brand_engine = PillowBrandEngine(brand_cfg)
                 # Brand voice: the active brand's saved preset, optionally overridden for
                 # this one post by body.brand_voice_preset (custom uses its saved text).
                 if body.brand_voice_preset:
-                    _custom = bsrc.brand_voice_custom if body.brand_voice_preset == "custom" else None
+                    _custom = acct.brand_voice_custom if body.brand_voice_preset == "custom" else None
                     brand_voice = resolve_brand_voice(body.brand_voice_preset, _custom)
                 else:
-                    brand_voice = resolve_user_brand_voice(bsrc)
+                    brand_voice = resolve_user_brand_voice(acct)
                 # Fall back to the active brand's saved profile when the composer leaves
                 # niche/audience blank; an explicit value in the request still wins.
-                profile = resolve_user_profile(bsrc)
+                profile = resolve_user_profile(acct)
                 niche = body.niche or profile["niche"]
                 target_audience = body.target_audience or profile["target_audience"]
                 generated = await engine.generate_post(
@@ -337,7 +337,7 @@ async def generate_post(
                 db_post = await _persist(
                     generated, db, body.template_style.value,
                     user_id=user.id,
-                    managed_account_id=(acct.id if acct else None),
+                    managed_account_id=acct.id,
                 )
                 if body.plan_date is not None:
                     # A batch draft: pin it to its calendar date but leave it a
@@ -747,9 +747,11 @@ async def regenerate_slide(
     else:
         raw_bytes, attribution = result, None
 
-    # Re-apply the same branded card with stored render params.
-    brand_cfg = apply_user_slide_style(await load_brand_config(
-        db, post.brand_engine if isinstance(post.brand_engine, str) and len(post.brand_engine) > 20 else None), user)
+    # Re-apply the same branded card with stored render params, under the brand
+    # the post was made for — not whichever one the user has selected now.
+    brand_cfg = apply_brand_slide_style(await load_brand_config(
+        db, post.brand_engine if isinstance(post.brand_engine, str) and len(post.brand_engine) > 20 else None),
+        await brand_for_post(db, post, user), is_local=bool(user.is_local))
     brand_engine = PillowBrandEngine(brand_cfg)
     branded = _rebrand_slide_bytes(raw_bytes, slide.render_params, brand_engine)
 
@@ -796,7 +798,9 @@ async def upload_slide(
 
     post, slide = await _slide_with_post(db, post_id, slide_num, user)
 
-    brand_cfg = apply_user_slide_style(await load_brand_config(db, None), user)
+    brand_cfg = apply_brand_slide_style(
+        await load_brand_config(db, None), await brand_for_post(db, post, user),
+        is_local=bool(user.is_local))
     brand_engine = PillowBrandEngine(brand_cfg)
     branded = _rebrand_slide_bytes(raw_bytes, slide.render_params, brand_engine)
 
@@ -844,7 +848,9 @@ async def slide_from_library(
         raise HTTPException(status_code=400, detail="That asset isn't ready yet.")
     raw_bytes = media_store.read(asset.user_id, asset.id)
 
-    brand_cfg = apply_user_slide_style(await load_brand_config(db, None), user)
+    brand_cfg = apply_brand_slide_style(
+        await load_brand_config(db, None), await brand_for_post(db, post, user),
+        is_local=bool(user.is_local))
     brand_engine = PillowBrandEngine(brand_cfg)
     branded = _rebrand_slide_bytes(raw_bytes, slide.render_params, brand_engine)
 
@@ -900,7 +906,9 @@ async def update_slide_overlay(
     if body.niche_text is not None:
         rp["niche_text"] = body.niche_text
 
-    brand_cfg = apply_user_slide_style(await load_brand_config(db, None), user)
+    brand_cfg = apply_brand_slide_style(
+        await load_brand_config(db, None), await brand_for_post(db, post, user),
+        is_local=bool(user.is_local))
     brand_engine = PillowBrandEngine(brand_cfg)
     branded = _rebrand_slide_bytes(raw_bytes, rp, brand_engine)
 
@@ -1093,7 +1101,7 @@ async def regenerate_field(
             tone="professional",
             text_model=post.text_model or resolve_ai_choice(user, settings, "text")[1],
             count=body.count,
-            brand_voice=resolve_user_brand_voice(user),
+            brand_voice=resolve_user_brand_voice(await brand_for_post(db, post, user)),
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Regeneration failed: {e}") from e
@@ -1112,6 +1120,7 @@ async def plan_week(
     body: PlanRequest,
     text_provider: Annotated[object, Depends(get_text_provider)],
     settings: Annotated[Settings, Depends(get_settings)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> PlanResponse:
     """Propose `count` post topics, balanced across pillars and on-brand. Creates
@@ -1123,7 +1132,10 @@ async def plan_week(
             status_code=400,
             detail="No text model selected. Choose a provider and model in Account → AI models.",
         )
-    profile = resolve_user_profile(user)
+    # The db dependency exists only for this: topics have to be planned for the
+    # brand the user is actually working in, which is a row now.
+    brand = await resolve_active_account(db, user)
+    profile = resolve_user_profile(brand)
     try:
         topics = await plan_topics(
             text_provider,
@@ -1133,7 +1145,7 @@ async def plan_week(
             platform=body.platform.value,
             count=body.count,
             text_model=text_model,
-            brand_voice=resolve_user_brand_voice(user),
+            brand_voice=resolve_user_brand_voice(brand),
         )
     except Exception as e:
         log.exception("Topic planning failed")

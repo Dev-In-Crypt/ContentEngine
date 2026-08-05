@@ -59,14 +59,15 @@ async def settings_for_post_owner(db: AsyncSession, post) -> Settings:
     return await build_settings_for_user(db, user)
 
 
-def resolve_user_brand_voice(user: Optional[UserModel]) -> str:
-    """The brand-voice text to generate a user's content in. Reads the user's saved
-    preset/custom (defaults to the balanced preset). Lives on User, so it's read
-    directly — not part of the _CRED_FIELDS/Settings overlay."""
+def resolve_user_brand_voice(brand) -> str:
+    """The brand-voice text to generate this brand's content in (defaults to the
+    balanced preset). Since UX phase 2 the argument is a ManagedAccount profile,
+    not a User — brand identity is not part of the _CRED_FIELDS/Settings overlay
+    either way."""
     from services.brand_voice import resolve_brand_voice
-    if user is None:
+    if brand is None:
         return resolve_brand_voice(None)
-    return resolve_brand_voice(user.brand_voice_preset, user.brand_voice_custom)
+    return resolve_brand_voice(brand.brand_voice_preset, brand.brand_voice_custom)
 
 
 def resolve_ai_choice(user: Optional[UserModel], settings: Settings,
@@ -95,34 +96,43 @@ def resolve_ai_choice(user: Optional[UserModel], settings: Settings,
     return provider, model, api_key or ""
 
 
-def apply_user_slide_style(cfg, user: Optional[UserModel]):
-    """Overlay the tenant's own slide style — colours and logo — onto a loaded
+def apply_brand_slide_style(cfg, brand, *, is_local: bool = False):
+    """Overlay a brand's slide style — colours and logo — onto a loaded
     BrandConfig. Unset colours keep the platform default preset. Mutates and
-    returns `cfg`."""
-    if user is None:
+    returns `cfg`.
+
+    `is_local` is a property of the deployment, not of a brand, so it arrives as
+    an argument rather than being read off the object. It used to be duck-typed,
+    which returned False for a profile — harmless while only a User was ever
+    passed, and wrong the moment the desktop owner got a profile of its own (UX
+    phase 2). The default is the strict cloud posture, so a caller who forgets
+    the flag can only ever be too careful with someone's logo.
+    """
+    if brand is None:
         return cfg
-    if getattr(user, "slide_accent_color", None):
-        cfg.niche_box_color = user.slide_accent_color
-    if getattr(user, "slide_text_box_color", None):
-        cfg.desc_box_color = user.slide_text_box_color
-    if not getattr(user, "is_local", False):
+    if getattr(brand, "slide_accent_color", None):
+        cfg.niche_box_color = brand.slide_accent_color
+    if getattr(brand, "slide_text_box_color", None):
+        cfg.desc_box_color = brand.slide_text_box_color
+    if not is_local:
         # A cloud tenant gets exactly their own logo, or none — clearing the path
         # so the platform's default logo never leaks onto someone else's brand.
         # The desktop/local user keeps whatever the loaded config carries.
         from pathlib import Path
-        logo = getattr(user, "logo_path", None)
+        logo = getattr(brand, "logo_path", None)
         cfg.logo_path = Path(logo) if logo else None
     return cfg
 
 
-def resolve_user_profile(user: Optional[UserModel]) -> dict[str, Optional[str]]:
-    """The user's saved brand profile (niche / audience / brand name), used to default
-    the composer and steer generation into their niche. Read directly off User; all
-    keys None when unset or no user."""
-    if user is None:
+def resolve_user_profile(brand) -> dict[str, Optional[str]]:
+    """A brand's niche / audience / name, used to default the composer and steer
+    generation. Since UX phase 2 the argument is a ManagedAccount profile, never
+    a User — the columns of the same name on User are a rollback snapshot that
+    nothing reads."""
+    if brand is None:
         return {"niche": None, "target_audience": None, "brand_name": None}
     return {
-        "niche": user.niche,
-        "target_audience": user.target_audience,
-        "brand_name": user.brand_name,
+        "niche": brand.niche,
+        "target_audience": brand.target_audience,
+        "brand_name": brand.brand_name,
     }

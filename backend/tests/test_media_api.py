@@ -704,6 +704,33 @@ def test_suggest_idea_passes_the_niche_through(client, monkeypatch):
     assert "artisan coffee" in fake.calls[0]["user_prompt"]
 
 
+def test_suggest_idea_falls_back_to_the_active_brands_niche(client, monkeypatch):
+    """With no niche in the body it comes from the profile — the twelfth and
+    last brand read moved off the User row in UX phase 2."""
+    import asyncio
+    from models.database import ManagedAccount
+
+    h = _register(client, "niche@ex.com")
+    _set_text_model(client, h)
+    aid = client.get("/api/accounts", headers=h).json()["active_account_id"]
+
+    async def _set():
+        async with app.state.sessionmaker() as db:
+            acct = await db.get(ManagedAccount, aid)
+            acct.niche = "artisan bakery"
+            await db.commit()
+    asyncio.run(_set())
+
+    fake = _FakeTextProvider()
+    key = _override_text_provider(monkeypatch, fake)
+    try:
+        r = client.post("/api/media/videos/suggest-idea", headers=h, json={})
+    finally:
+        app.dependency_overrides.pop(key, None)
+    assert r.status_code == 200
+    assert "artisan bakery" in fake.calls[0]["user_prompt"]
+
+
 def test_suggest_idea_provider_failure_is_a_502(client, monkeypatch):
     h = _register(client, "a@ex.com")
     _set_text_model(client, h)

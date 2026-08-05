@@ -57,6 +57,28 @@ async def resolve_active_account(db: AsyncSession,
     return profile
 
 
+async def brand_for_post(db: AsyncSession, post,
+                         user: UserModel) -> ManagedAccountModel:
+    """The brand a post was made under, for re-rendering its slides.
+
+    Deliberately the post's brand and not the active one. Someone running
+    several clients who re-renders a slide of a post made for Client A must get
+    A's colours and logo even after switching to Client B — resolving the active
+    brand here would be a fresh instance of exactly the bug UX phase 2 set out
+    to fix, the composer showing one brand and the editor another.
+
+    Falls back to the user's primary for a post from before profiles existed, or
+    one whose brand has been deleted. A tag naming someone else's brand is not
+    honoured: ownership lives on user_id and this must not become a way around it.
+    """
+    account_id = getattr(post, "managed_account_id", None)
+    if account_id:
+        acct = await db.get(ManagedAccountModel, account_id)
+        if acct is not None and acct.owner_user_id == user.id:
+            return acct
+    return await ensure_primary_profile(db, user)
+
+
 async def primary_profile(db: AsyncSession, user: UserModel):
     """The user's primary profile, or None if they have not been seeded yet."""
     return (await db.execute(

@@ -40,6 +40,7 @@ from models.schemas import (
 from services import media_store, music_store, staging
 from services.ai.base import AIError
 from services.ai.catalog import estimate_video_cost
+from services.managed_account import resolve_active_account
 from services.subtitles import chunk_segments, write_ass
 from services.tts import (
     ElevenLabsTTS, TTSError, concat_wavs, loop_music_only, mix_with_music, mp3_to_wav,
@@ -266,6 +267,7 @@ _IDEA_SYSTEM_PROMPT = (
 async def suggest_video_idea(
     request: Request,
     body: SuggestVideoIdeaRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
     settings: Annotated[Settings, Depends(get_effective_settings)],
     text_provider: Annotated[object, Depends(get_text_provider)],
@@ -276,7 +278,7 @@ async def suggest_video_idea(
             status_code=400,
             detail="No text model configured. Choose one in Account → AI models.")
 
-    profile = resolve_user_profile(user)
+    profile = resolve_user_profile(await resolve_active_account(db, user))
     niche = body.niche or profile.get("niche")
     audience = profile.get("target_audience")
     user_prompt = f"Niche: {niche or 'general'}."

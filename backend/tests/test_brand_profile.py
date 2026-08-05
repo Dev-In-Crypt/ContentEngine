@@ -115,20 +115,20 @@ def test_slide_style_blank_resets_to_default(cloud_client):
     assert cloud_client.get("/api/settings/slide-style", headers=h).json()["accent_color"] == ""
 
 
-def test_apply_user_slide_style_overlays_colors():
+def test_apply_brand_slide_style_overlays_colors():
     from services.brand_engine import BrandConfig
-    from services.user_settings import apply_user_slide_style
+    from services.user_settings import apply_brand_slide_style
 
-    cfg = apply_user_slide_style(BrandConfig(), None)          # no user → untouched
+    cfg = apply_brand_slide_style(BrandConfig(), None)          # no brand → untouched
     assert cfg.niche_box_color == BrandConfig().niche_box_color
 
-    u = SimpleNamespace(slide_accent_color="#123456", slide_text_box_color="#abcdef")
-    cfg = apply_user_slide_style(BrandConfig(), u)
+    b = SimpleNamespace(slide_accent_color="#123456", slide_text_box_color="#abcdef")
+    cfg = apply_brand_slide_style(BrandConfig(), b)
     assert cfg.niche_box_color == "#123456"
     assert cfg.desc_box_color == "#abcdef"
 
     unset = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None)
-    cfg = apply_user_slide_style(BrandConfig(), unset)          # unset → platform default
+    cfg = apply_brand_slide_style(BrandConfig(), unset)         # unset → platform default
     assert cfg.niche_box_color == BrandConfig().niche_box_color
 
 
@@ -177,39 +177,50 @@ def test_x_settings_requires_auth(cloud_client):
 
 # ── brand logo resolver (PART XXX) ──────────────────────────────────────────
 
-def test_apply_user_slide_style_sets_logo_for_a_cloud_tenant():
-    from services.brand_engine import BrandConfig
-    from services.user_settings import apply_user_slide_style
-
-    u = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None,
-                        is_local=False, logo_path="/data/logos/u1.png")
+def test_apply_brand_slide_style_sets_logo_for_a_cloud_tenant():
     from pathlib import Path
-    cfg = apply_user_slide_style(BrandConfig(), u)
+    from services.brand_engine import BrandConfig
+    from services.user_settings import apply_brand_slide_style
+
+    b = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None,
+                        logo_path="/data/logos/u1.png")
+    cfg = apply_brand_slide_style(BrandConfig(), b)
     assert cfg.logo_path == Path("/data/logos/u1.png")
 
 
 def test_cloud_tenant_without_a_logo_gets_no_platform_logo():
-    """A tenant's own logo, or none — the platform default must never leak."""
+    """A tenant's own logo, or none — the platform default must never leak.
+
+    Deliberately called WITHOUT is_local, pinning the default's direction: a
+    caller who forgets the flag must get the strict cloud posture, never the
+    one that lets the platform logo through.
+    """
     from pathlib import Path
     from services.brand_engine import BrandConfig
-    from services.user_settings import apply_user_slide_style
+    from services.user_settings import apply_brand_slide_style
 
     cfg = BrandConfig(logo_path=Path("/platform/default_logo.png"))   # inherited default
-    u = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None,
-                        is_local=False, logo_path=None)
-    cfg = apply_user_slide_style(cfg, u)
+    b = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None,
+                        logo_path=None)
+    cfg = apply_brand_slide_style(cfg, b)
     assert cfg.logo_path is None
 
 
-def test_local_user_keeps_the_config_logo():
+def test_the_desktop_keeps_the_config_logo():
+    """is_local is a property of the deployment, not of a brand, so it arrives
+    as an argument. It used to be read off the object by duck typing, which
+    quietly returned False for a profile — harmless while only the User was
+    ever passed, and wrong the moment the desktop owner got a profile of its
+    own (UX phase 2). The namespace below has no is_local attribute at all,
+    exactly like a real ManagedAccount."""
     from pathlib import Path
     from services.brand_engine import BrandConfig
-    from services.user_settings import apply_user_slide_style
+    from services.user_settings import apply_brand_slide_style
 
     cfg = BrandConfig(logo_path=Path("/desktop/logo.png"))
-    u = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None,
-                        is_local=True, logo_path=None)
-    cfg = apply_user_slide_style(cfg, u)
+    b = SimpleNamespace(slide_accent_color=None, slide_text_box_color=None,
+                        logo_path=None)
+    cfg = apply_brand_slide_style(cfg, b, is_local=True)
     assert cfg.logo_path == Path("/desktop/logo.png")
 
 

@@ -360,11 +360,24 @@ def test_generate_request_models_override_defaults(client, generated_ids):
     assert kwargs["image_model"] == "req/image"
 
 
+#: Written into User's legacy brand columns by the helper below. Since UX phase
+#: 2 those columns are a write-only rollback snapshot that nothing reads, so any
+#: of these strings reaching the engine means someone is still reading them.
+_STALE = "STALE-NEVER-READ"
+
+
 def _set_local_user_profile(niche=None, target_audience=None, brand_name=None):
-    """Set the acting (local) user's brand profile directly in the DB."""
+    """Set the acting (local) user's brand profile directly in the DB.
+
+    Writes the real values to the profile row and deliberately poisons the
+    matching User columns, so every test using this helper is also a guard on
+    the source of truth: read the User row and you get _STALE, not the value
+    you asked for.
+    """
     import asyncio
     from sqlalchemy import select
-    from models.database import User as UserModel
+    from models.database import ManagedAccount, User as UserModel
+    from services.managed_account import ensure_primary_profile
 
     async def _go():
         async with app.state.sessionmaker() as s:
@@ -374,14 +387,22 @@ def _set_local_user_profile(niche=None, target_audience=None, brand_name=None):
             if user is None:                      # created lazily on first request
                 user = UserModel(email="local@localhost", is_local=True, is_active=True)
                 s.add(user)
-            user.niche = niche
-            user.target_audience = target_audience
-            user.brand_name = brand_name
+                await s.commit()
+            profile = await ensure_primary_profile(s, user)
+            profile = await s.get(ManagedAccount, profile.id)
+            profile.niche = niche
+            profile.target_audience = target_audience
+            profile.brand_name = brand_name
+            user.niche = _STALE if niche else None
+            user.target_audience = _STALE if target_audience else None
+            user.brand_name = _STALE if brand_name else None
             await s.commit()
     asyncio.run(_go())
 
 
-def test_generate_uses_profile_niche_when_body_blank(client, generated_ids):
+def test_generation_reads_the_profile_not_the_stale_user_columns(client, generated_ids):
+    """The test this whole phase exists for. The profile says one thing, the
+    User row says another, and only one of them may reach the engine."""
     post_id = str(uuid.uuid4())
     generated_ids.append(post_id)
     client.fake_engine.generate_post.return_value = _generated(post_id)
@@ -397,11 +418,13 @@ def test_generate_uses_profile_niche_when_body_blank(client, generated_ids):
     assert kwargs["brand_name"] == "Crumb & Co"
 
 
-def test_generate_uses_user_slide_colors(client, generated_ids):
-    """The acting user's saved slide colours reach the brand engine that renders."""
+def test_generate_uses_the_profiles_slide_colors(client, generated_ids):
+    """The active brand's saved slide colours reach the engine that renders —
+    and the stale ones on the User row do not."""
     import asyncio
     from sqlalchemy import select
-    from models.database import User as UserModel
+    from models.database import ManagedAccount, User as UserModel
+    from services.managed_account import ensure_primary_profile
 
     async def _set_colors():
         async with app.state.sessionmaker() as s:
@@ -411,8 +434,13 @@ def test_generate_uses_user_slide_colors(client, generated_ids):
             if user is None:
                 user = UserModel(email="local@localhost", is_local=True, is_active=True)
                 s.add(user)
-            user.slide_accent_color = "#0f9d58"
-            user.slide_text_box_color = "#111827"
+                await s.commit()
+            profile = await ensure_primary_profile(s, user)
+            profile = await s.get(ManagedAccount, profile.id)
+            profile.slide_accent_color = "#0f9d58"
+            profile.slide_text_box_color = "#111827"
+            user.slide_accent_color = "#ff0000"        # never read
+            user.slide_text_box_color = "#00ff00"
             await s.commit()
     asyncio.run(_set_colors())
 
@@ -556,6 +584,34 @@ def test_plan_returns_dated_topics(client):
         assert client.get("/api/posts").json() == []
     finally:
         app.dependency_overrides.pop(get_text_provider, None)
+
+
+def test_plan_uses_the_active_brand_profile(client):
+    """Planning a week has to be planned for the brand the user is working in.
+    This is the site that needed a db dependency added to reach a profile at
+    all — before UX phase 2 it read the User row, which never knew about
+    brands."""
+    from api.deps import get_text_provider
+    from unittest.mock import AsyncMock
+
+    _set_local_user_profile(niche="Artisan bakery", target_audience="Home bakers")
+    topics = json.dumps([{"topic": f"Sourdough starters {i}", "pillar": "educational",
+                          "angle": "why"} for i in range(2)])
+    provider = AsyncMock()
+    provider.generate_text = AsyncMock(return_value=(topics, []))
+    app.dependency_overrides[get_text_provider] = lambda: provider
+    try:
+        res = client.post("/api/posts/plan", json={
+            "count": 2, "start_date": "2026-08-01", "cadence_days": 1,
+            "platform": "instagram"})
+        assert res.status_code == 200, res.text
+    finally:
+        app.dependency_overrides.pop(get_text_provider, None)
+
+    # plan_topics puts niche and audience in the system prompt (content_plan.py:59).
+    sent = "".join(str(v) for v in provider.generate_text.await_args.kwargs.values())
+    assert "Artisan bakery" in sent and "Home bakers" in sent
+    assert _STALE not in sent
 
 
 def test_plan_rejects_a_silly_count(client):

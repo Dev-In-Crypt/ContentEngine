@@ -27,7 +27,13 @@ async def get_or_create_workspace(db: AsyncSession, user: UserModel) -> Workspac
         select(WorkspaceModel).where(WorkspaceModel.owner_user_id == user.id)
     )).scalar_one_or_none()
     if ws is None:
-        name = (user.brand_name or (user.email.split("@")[0] if user.email else "") or "My workspace")
+        # The brand name lives on the profile now; User's copy is a rollback
+        # snapshot nothing reads (UX phase 2).
+        from services.managed_account import ensure_primary_profile
+        brand = await ensure_primary_profile(db, user)
+        name = (brand.brand_name
+                or (user.email.split("@")[0] if user.email else "")
+                or "My workspace")
         ws = WorkspaceModel(owner_user_id=user.id, name=name)
         db.add(ws)
         await db.commit()

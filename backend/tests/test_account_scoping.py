@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.deps import get_db, get_settings
@@ -163,6 +163,73 @@ def test_a_stale_active_id_falls_back_to_the_primary_and_is_repaired(ctx):
             user.active_account_id = "does-not-exist"
             assert (await resolve_active_account(db, user)).id == own
             assert user.active_account_id == own
+    asyncio.run(_check())
+
+
+def test_a_slide_rerender_uses_the_posts_brand_not_the_active_one(ctx):
+    """An agency re-rendering a slide of a post made for Client A must get A's
+    colours, even having since switched to Client B. Resolving the ACTIVE brand
+    at these four sites would be a fresh bug of exactly the shape phase 2 set
+    out to fix — the composer showing one brand and the editor another."""
+    from services.managed_account import brand_for_post
+
+    c, SM = ctx
+    h = _register(c, "agency@ex.com")
+    uid = _me_id(c, h)
+    a = c.post("/api/accounts", headers=h, json={"name": "Client A"}).json()["id"]
+    b = c.post("/api/accounts", headers=h, json={"name": "Client B"}).json()["id"]
+    c.put(f"/api/accounts/{a}", headers=h, json={"slide_accent_color": "#0a2540"})
+    _seed_post(SM, uid, a, "made-for-a")
+    c.post("/api/accounts/switch", headers=h, json={"account_id": b})
+
+    async def _check():
+        async with SM() as db:
+            user = await db.get(User, uid)
+            post = (await db.execute(
+                select(Post).where(Post.topic == "made-for-a"))).scalar_one()
+            brand = await brand_for_post(db, post, user)
+            assert brand.id == a and brand.slide_accent_color == "#0a2540"
+    asyncio.run(_check())
+
+
+def test_a_post_with_no_brand_falls_back_to_the_primary(ctx):
+    """A post from before the profile existed, or one whose brand was deleted
+    — the editor still has to render something."""
+    from services.managed_account import brand_for_post
+
+    c, SM = ctx
+    h = _register(c, "legacy2@ex.com")
+    uid = _me_id(c, h)
+    own = _primary(c, h)
+    _seed_post(SM, uid, None, "untagged")
+
+    async def _check():
+        async with SM() as db:
+            user = await db.get(User, uid)
+            post = (await db.execute(
+                select(Post).where(Post.topic == "untagged"))).scalar_one()
+            assert (await brand_for_post(db, post, user)).id == own
+    asyncio.run(_check())
+
+
+def test_a_post_tagged_with_someone_elses_brand_is_not_honoured(ctx):
+    """Ownership is on user_id, and brand_for_post must not become a way around
+    it: a foreign tag falls back to the caller's own profile."""
+    from services.managed_account import brand_for_post
+
+    c, SM = ctx
+    ha, hb = _register(c, "mine@ex.com"), _register(c, "theirs@ex.com")
+    uid = _me_id(c, ha)
+    mine = _primary(c, ha)
+    theirs = c.post("/api/accounts", headers=hb, json={"name": "Theirs"}).json()["id"]
+    _seed_post(SM, uid, theirs, "mislabelled")
+
+    async def _check():
+        async with SM() as db:
+            user = await db.get(User, uid)
+            post = (await db.execute(
+                select(Post).where(Post.topic == "mislabelled"))).scalar_one()
+            assert (await brand_for_post(db, post, user)).id == mine
     asyncio.run(_check())
 
 
