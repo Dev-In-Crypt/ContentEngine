@@ -3117,16 +3117,33 @@ function renderPreview(post) {
   const seoGroup = document.getElementById('seo-group');
   if (seoGroup) seoGroup.classList.toggle('hidden', !postIsInstagram(post));
 
-  // Reset reel preview for this post
+  // The preview follows the post, not the session that rendered it. It used to
+  // be hidden unconditionally here, so a reload (or just opening another post
+  // and coming back) lost the video and the publish button with it, and the
+  // only way to get them back was to render the whole thing again.
   const reelPrev = document.getElementById('reel-preview');
-  if (reelPrev) reelPrev.classList.add('hidden');
+  if (reelPrev) {
+    const vid = post.video_url ? API + post.video_url : null;
+    if (vid) {
+      document.getElementById('reel-video').src = vid;
+      document.getElementById('reel-download').href = vid;
+    } else {
+      // Clearing src matters: <video> keeps the previous post's frame otherwise,
+      // and the next post to have no video would show the last one's.
+      document.getElementById('reel-video').removeAttribute('src');
+    }
+    reelPrev.classList.toggle('hidden', !vid);
+  }
   // Both networks take a video built from the post's slides — Instagram through
-  // publish-reel, X through publish-video — so the only thing that hides the
-  // card is having nothing to render from. This used to hide it on X too, which
-  // made publishReelOrToX's whole X branch unreachable from the composer: the
-  // button that dispatches to it lives inside this card.
+  // publish-reel, X through publish-video — so the platform is not what decides
+  // this. What decides it is whether there is anything to show: slides to render
+  // from, or a video already rendered. (The second half matters because
+  // reel/from-library attaches a video without caring about slides, so a
+  // slides-only test would hide a post's own video from it.) Hiding on X was
+  // what made publishReelOrToX's whole X branch unreachable from the composer:
+  // the button that dispatches to it lives inside this card.
   const reelCard = document.getElementById('reel-card');
-  if (reelCard) reelCard.classList.toggle('hidden', !post.slides.length);
+  if (reelCard) reelCard.classList.toggle('hidden', !post.slides.length && !post.video_url);
 
   // Emoji picker (lazily built once)
   buildEmojiPicker();

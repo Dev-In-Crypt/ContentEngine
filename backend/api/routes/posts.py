@@ -116,6 +116,15 @@ def _to_preview(post: PostModel) -> PostPreview:
     checked_claims = cc.get("claims") or []
     brand_flags = cc.get("brand") or {}
     fact_check = cc.get("check") or {}
+    # The column can outlive the file — an uploads volume that wasn't persisted,
+    # a restored database — and a preview pointing at a 404 is worse than one
+    # that says "not rendered yet", so the file has to be there. Same check
+    # _build_slide_preview makes for has_raw_image, for the same reason.
+    video_url = None
+    if post.video_path:
+        vp = Path(post.video_path)
+        if vp.exists():
+            video_url = f"/api/posts/{post.id}/reel/video?t={int(vp.stat().st_mtime)}"
     return PostPreview(
         id=post.id,
         topic=post.topic,
@@ -129,6 +138,7 @@ def _to_preview(post: PostModel) -> PostPreview:
         hook=post.hook or "",
         platform=Platform(post.platform or "instagram"),
         slides=slides,
+        video_url=video_url,
         text_model_used=post.text_model or "",
         image_model_used=post.image_model,
         created_at=post.created_at or datetime.now(timezone.utc),

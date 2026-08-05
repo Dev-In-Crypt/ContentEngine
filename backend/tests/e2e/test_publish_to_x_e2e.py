@@ -157,19 +157,21 @@ _PIXEL = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 
 
-def _composer_post(post_id: str, platform: str, *, slides: bool = True) -> dict:
+def _composer_post(post_id: str, platform: str, *, slides: bool = True,
+                   video: bool = False, topic: str = "Sourdough") -> dict:
     from datetime import datetime, timezone
 
     from models.schemas import PostPreview, SlidePreview
 
     return PostPreview(
-        id=post_id, topic="t", format="single", status="preview",
+        id=post_id, topic=topic, format="single", status="preview",
         caption="c", hashtags=[], seo_keywords=[], cta="c", hook="h",
         platform=platform,
         slides=[SlidePreview(slide_number=1,
                              image_url=f"/api/posts/{post_id}/slides/1/image",
                              image_source="stock", width=1080, height=1350)]
         if slides else [],
+        video_url=f"/api/posts/{post_id}/reel/video?t=1" if video else None,
         text_model_used="m", image_model_used=None,
         created_at=datetime(2026, 8, 3, tzinfo=timezone.utc),
     ).model_dump(mode="json")
@@ -315,3 +317,109 @@ def test_clicking_publish_on_an_instagram_post_reaches_the_reel_route(page, sign
         page.locator("#reel-publish-btn").click()
 
     assert hit == ["reel"], f"an Instagram post went to {hit or 'nowhere'}"
+
+
+# ------------------------------------------------------------------ composer: the preview survives a reload
+#
+# renderPreview used to hide #reel-preview unconditionally, because the payload
+# had no way to say a video already existed — PostPreview carried no video_url.
+# So the video and the publish button under it lived only in the session that
+# ran the render: reload, or just open another post and come back, and the only
+# way to get the publish button back was to render the whole thing again.
+
+
+def _open_post_from_calendar(page, preview: dict) -> None:
+    """Return to an existing post the way a user does: from the calendar.
+
+    That is the path that lost the video. openPost re-runs renderPreview with a
+    freshly fetched payload, so everything the composer shows has to be in that
+    payload — which is the actual claim under test, and one that a page.reload()
+    plus an SSE replay would fake rather than exercise.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from models.schemas import PostSummary
+
+    from tests.e2e.nav import open_section
+
+    _route_jobs(page, [])
+    summary = PostSummary(
+        id=preview["id"], topic=preview["topic"], format="single",
+        status="scheduled", platform=preview["platform"],
+        scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
+        created_at=datetime.now(timezone.utc),
+    ).model_dump(mode="json")
+    page.route("**/api/posts", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([summary])))
+    page.route(f"**/api/posts/{preview['id']}", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(preview)))
+    # The <video> really fetches this; a 404 would leave a red herring in the
+    # console for whoever debugs this test next.
+    page.route("**/reel/video*", lambda r: r.fulfill(
+        status=200, content_type="video/mp4", body=b""))
+
+    open_section(page, "calendar")
+    page.locator("#cal-grid").get_by_text(preview["topic"]).click()
+    expect(page.locator("#view-create")).to_be_visible()
+
+
+def test_reopening_a_post_brings_its_video_back(page, signed_in):
+    signed_in()
+    _open_post_from_calendar(page, _composer_post("e2e-post-x", "x", video=True))
+
+    expect(page.locator("#reel-preview")).to_be_visible()
+    expect(page.locator("#reel-video")).to_have_attribute(
+        "src", f"{page.url.rstrip('/')}/api/posts/e2e-post-x/reel/video?t=1")
+    expect(page.locator("#reel-download")).to_have_attribute(
+        "href", f"{page.url.rstrip('/')}/api/posts/e2e-post-x/reel/video?t=1")
+
+
+def test_reopening_a_post_with_no_video_shows_no_preview(page, signed_in):
+    signed_in()
+    _open_post_from_calendar(page, _composer_post("e2e-post-x", "x"))
+    expect(page.locator("#reel-preview")).to_be_hidden()
+
+
+def test_a_post_with_a_video_but_no_slides_still_offers_the_card(page, signed_in):
+    """reel/from-library attaches a video without caring about slides, so
+    "has slides" alone would hide a post's own video from it — and with the
+    card goes the only way to publish that video."""
+    signed_in()
+    _open_post_from_calendar(
+        page, _composer_post("e2e-post-x", "x", slides=False, video=True))
+
+    expect(page.locator("#reel-card")).to_be_visible()
+    expect(page.locator("#reel-preview")).to_be_visible()
+
+
+def test_the_restored_button_publishes_without_re_rendering(page, signed_in):
+    """The point of restoring the preview: the publish button comes back with
+    it, and works. Before this, the video was on disk and reachable by API and
+    the only route to it from the composer was to render the whole thing again.
+    """
+    signed_in()
+    _open_post_from_calendar(page, _composer_post("e2e-post-x", "x", video=True))
+    hit = _record_publish_routes(page)
+
+    page.on("dialog", lambda d: d.accept())
+    with page.expect_response("**/api/posts/*/publish-video"):
+        page.locator("#reel-publish-btn").click()
+
+    assert hit == ["video"], f"an X post went to {hit or 'nowhere'}"
+
+
+def test_switching_posts_does_not_leave_the_previous_video_on_screen(page, signed_in):
+    """<video> keeps the last frame it loaded. Hiding the preview without
+    clearing src means the next post to have no video of its own shows the
+    previous one's the moment anything unhides the preview again."""
+    import re
+
+    signed_in()
+    _open_post_from_calendar(page, _composer_post("e2e-post-x", "x", video=True))
+    expect(page.locator("#reel-video")).to_have_attribute(
+        "src", f"{page.url.rstrip('/')}/api/posts/e2e-post-x/reel/video?t=1")
+
+    _open_post_from_calendar(page, _composer_post("e2e-post-2", "x", topic="Rye"))
+
+    expect(page.locator("#reel-preview")).to_be_hidden()
+    expect(page.locator("#reel-video")).not_to_have_attribute("src", re.compile(r".*"))
