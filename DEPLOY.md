@@ -41,6 +41,39 @@ stored API keys. **Never change it after go-live** — rotating it logs everyone
 **and makes every stored credential undecryptable**. Render generates a strong,
 stable value once; leave it alone.
 
+## ⚠️ Rolling back: downgrade the database *before* the old image
+
+The app brings the schema to head on startup — `main._run_migrations` calls
+`alembic upgrade head` inside the lifespan handler. So redeploying a previous
+image **without touching the database will not start**: the old image's script
+directory has no record of the newer revision, Alembic raises
+`Can't locate revision identified by '<rev>'`, and the container dies before it
+serves anything.
+
+The order that works:
+
+```bash
+# 1. downgrade the DB to the revision the old image knows
+docker compose exec app alembic downgrade <previous_rev>
+# 2. only then put the old image back
+git checkout <previous_tag> && docker compose up -d --build app
+```
+
+This is a property of running migrations at startup, not of any one release —
+it applies to every migration you ever ship.
+
+**Before a deploy that carries a data migration**, take a `pg_dump` *and* a
+count you can compare afterwards. A migration that mis-scopes an `UPDATE` fails
+silently: nothing errors, rows just stop matching the queries that read them.
+
+```bash
+docker compose exec -T db pg_dump -U insta insta | gzip > pre_deploy.sql.gz
+docker compose exec -T db psql -U insta -d insta -tAF'|' \
+  -c "SELECT u.id, u.email, count(p.id) FROM users u
+      LEFT JOIN posts p ON p.user_id = u.id GROUP BY 1,2 ORDER BY 1;" > baseline.txt
+# …deploy, then re-run the same query and `diff` it against baseline.txt
+```
+
 ## Using it (as a user)
 
 1. Open the site → **Register** (email + password).
