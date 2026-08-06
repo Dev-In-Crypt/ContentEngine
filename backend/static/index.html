@@ -72,6 +72,9 @@
     .sec-btn{ color:var(--muted); transition:background .12s,color .12s; }
     .sec-btn:hover{ background:var(--accent-dim); color:var(--text); }
     .sec-btn.sec-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
+    .set-btn{ color:var(--muted); transition:background .12s,color .12s; }
+    .set-btn:hover{ background:var(--accent-dim); color:var(--text); }
+    .set-btn.set-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
     /* Business vs Creator app-shell: one engine, two experiences (gated on account_type) */
     .business-only{ display:none; }
     body[data-account-type="business"] .business-only{ display:block; }
@@ -98,16 +101,35 @@
       <span class="font-bold tracking-tight">Content Engine</span>
     </div>
     <div class="ml-auto flex items-center gap-2 flex-wrap justify-end">
-      <select id="product-switcher" onchange="onProductSwitch()" class="hidden ce-input px-2 py-1 text-xs" title="Switch product: Creators / Business">
-        <option value="creator">Creators</option>
-        <option value="business">Business</option>
-      </select>
-      <select id="acct-switcher" onchange="onAcctSwitch()" class="hidden ce-input px-2 py-1 text-xs" title="Active brand"></select>
-      <button id="acct-manage" onclick="openBrandsModal()" class="hidden ce-btn-ghost px-2.5 py-1 text-xs" title="Manage brands">Brands</button>
-      <button onclick="toggleTheme()" id="theme-toggle" class="ce-card px-2.5 py-1 text-xs" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
       <button id="cost-badge" onclick="showCostPopover()" class="hidden ce-card px-3 py-1 text-xs" title="LLM spend today (click for details)">$0.00</button>
-      <span id="user-chip" class="hidden text-xs text-gray-300 ce-card px-3 py-1" title="Signed in"></span>
-      <button id="logout-btn" onclick="logout()" class="hidden text-xs ce-btn-ghost px-3 py-1" title="Sign out">Log out</button>
+      <!-- One menu instead of three separate dropdowns in the header. The brand
+           switcher, the product switcher and the setup guide were each their own
+           control competing for the same corner; the UX document names exactly
+           that as the problem. -->
+      <div class="relative">
+        <button id="avatar-btn" onclick="toggleAvatarMenu()" class="ce-card px-3 py-1 text-xs flex items-center gap-2" title="Account" aria-haspopup="true" aria-expanded="false">
+          <span id="avatar-initial" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style="background:var(--accent);color:var(--on-accent)">?</span>
+          <span id="user-chip" class="hidden sm:inline text-gray-300"></span>
+        </button>
+        <div id="avatar-menu" class="hidden absolute right-0 mt-2 w-64 ce-card p-2 space-y-1 z-40 shadow-2xl">
+          <div id="menu-brand-row" class="hidden px-2 pt-1 pb-2 space-y-1 border-b" style="border-color:var(--border)">
+            <div class="text-[10px] uppercase tracking-wide text-gray-500">Active brand</div>
+            <select id="menu-acct-switcher" onchange="onAcctSwitch()" class="ce-input w-full px-2 py-1 text-xs" title="Active brand"></select>
+            <button onclick="closeAvatarMenu(); openBrandsModal()" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs">Manage brands…</button>
+          </div>
+          <div id="menu-product-row" class="hidden px-2 py-2 space-y-1 border-b" style="border-color:var(--border)">
+            <div class="text-[10px] uppercase tracking-wide text-gray-500">Product</div>
+            <select id="product-switcher" onchange="onProductSwitch()" class="ce-input w-full px-2 py-1 text-xs" title="Switch product">
+              <option value="creator">Creators</option>
+              <option value="business">Business</option>
+            </select>
+          </div>
+          <button onclick="closeAvatarMenu(); openSettings('profiles')" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Settings</button>
+          <button onclick="closeAvatarMenu(); startSetupWizard()" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Setup guide</button>
+          <button onclick="closeAvatarMenu(); toggleTheme()" id="theme-toggle" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Light / dark</button>
+          <button id="logout-btn" onclick="logout()" class="hidden ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Log out</button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="cost-popover" class="hidden max-w-7xl mx-auto px-5 pb-3 text-xs text-gray-400"></div>
@@ -334,7 +356,7 @@
      because unless the user pressed Renew, the date is an estimate. -->
 <div id="expiry-banner" class="hidden fixed inset-x-0 z-40 bg-yellow-900/90 border-b border-yellow-700 text-yellow-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
   <span id="expiry-banner-text"></span>
-  <button onclick="setSection('keys')" class="underline font-semibold hover:text-white shrink-0">Open Connections</button>
+  <button onclick="openSettings('connections')" class="underline font-semibold hover:text-white shrink-0">Open Connections</button>
 </div>
 
 <!-- ===== MISSING-KEY ONBOARDING MODAL ===== -->
@@ -395,8 +417,6 @@
     <button data-section="biz-analytics" onclick="setSection('biz-analytics')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
     <button data-section="biz-journal" onclick="setSection('biz-journal')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
     <button data-section="biz-rules" onclick="setSection('biz-rules')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Rules</button>
-    <button data-section="keys" onclick="setSection('keys')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Connections</button>
-    <button data-section="account" onclick="setSection('account')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ml-auto">Account</button>
   </div>
 
   <!-- ===== CREATE VIEW (wizard) ===== -->
@@ -943,12 +963,19 @@
   </div><!-- /#view-grid -->
 
   <!-- ===== ADMIN VIEW ===== -->
-  <div id="view-admin" class="hidden space-y-4">
-    <!-- Personal API keys (cloud accounts only) -->
-    <section id="keys-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+  <div id="view-settings" class="hidden space-y-4">
+    <div id="settings-tabs" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
+      <button data-settings-tab="profiles" onclick="openSettings('profiles')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Profiles</button>
+      <button data-settings-tab="connections" onclick="openSettings('connections')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Connections</button>
+      <button data-settings-tab="keys" onclick="openSettings('keys')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Keys &amp; spend</button>
+    </div>
+
+    <!-- Credentials. One container on two tabs: they are never on screen
+         together, so the scope is the only thing that differs — publishing keys
+         on Connections, account-wide keys on Keys & spend. -->
+    <section id="keys-section" data-settings-tab="connections keys" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <h2 id="keys-title" class="text-lg font-semibold text-purple-300">Your API keys</h2>
-        <button onclick="startSetupWizard()" class="ce-btn-ghost px-3 py-1.5 text-xs whitespace-nowrap">Setup guide</button>
       </div>
       <p class="text-xs text-gray-500">Stored encrypted and used only for your posts. Leave a field blank to keep the current value; the placeholder shows what's set.</p>
       <div id="conn-health" class="hidden space-y-2"></div>
@@ -964,7 +991,7 @@
     </section>
 
     <!-- AI models (cloud accounts only) -->
-    <section id="ai-models-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="ai-models-section" data-settings-tab="keys" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">AI models</h2>
       <p class="text-xs text-gray-500">Choose who generates your content and paste that provider's key — you pay them directly. Text and images are independent, so you can mix providers. Not sure? OpenRouter gives every vendor's models with one key.</p>
       <div id="ai-models-form" class="space-y-5"></div>
@@ -972,7 +999,7 @@
     </section>
 
     <!-- Brand profile (cloud accounts only) -->
-    <section id="brand-profile-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="brand-profile-section" data-settings-tab="profiles" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">🏷 Brand profile</h2>
       <p class="text-xs text-gray-500">Set this once. It pre-fills the composer and steers every post into your niche — so you don't retype it each time. You can still override any of it per post.</p>
       <div>
@@ -994,7 +1021,7 @@
     </section>
 
     <!-- X plan (cloud accounts only) -->
-    <section id="x-settings-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="x-settings-section" data-settings-tab="connections" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">𝕏 X plan</h2>
       <p class="text-xs text-gray-500">X Premium lifts the 280-character limit, which unlocks the “Long post” type. This is your own record — we can't check it with X, so if the account isn't actually Premium, X will reject the post.</p>
       <label class="flex items-center gap-3 text-sm text-gray-200 cursor-pointer">
@@ -1005,7 +1032,7 @@
     </section>
 
     <!-- Slide colours (cloud accounts only) -->
-    <section id="slide-style-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="slide-style-section" data-settings-tab="profiles" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">Slide colours</h2>
       <p class="text-xs text-gray-500">Your brand colours for generated slides. Any colour works — text on the boxes is auto-set to black or white so it stays readable. Leave empty to use the default.</p>
       <div class="flex flex-wrap gap-6">
@@ -1066,7 +1093,7 @@
     </section>
 
     <!-- Brand voice (cloud accounts only) -->
-    <section id="brand-voice-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="brand-voice-section" data-settings-tab="profiles" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">🗣 Brand voice</h2>
       <p class="text-xs text-gray-500">The style your posts are written in. It steers tone and personality — hashtags, SEO and the post structure stay the same. Applies to every new post (you can override it per post in the composer).</p>
       <div id="brand-voice-list" class="grid gap-2 sm:grid-cols-2"></div>
@@ -1079,13 +1106,13 @@
       <button id="save-voice-btn" onclick="saveBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save voice</button>
     </section>
 
-    <section id="usage-section" class="bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="usage-section" data-settings-tab="keys" class="bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">Usage</h2>
       <div id="admin-usage" class="text-sm text-gray-300 bg-gray-800 rounded-lg p-3">Loading usage…</div>
     </section>
 
     <!-- Whole-DB backup/restore — admin / local desktop only -->
-    <section id="backup-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="backup-section" data-settings-tab="keys" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">Backup & Restore</h2>
       <div class="flex flex-wrap gap-3">
         <button onclick="downloadBackup()" class="bg-blue-700 hover:bg-blue-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download backup</button>
@@ -1098,7 +1125,7 @@
     </section>
 
     <!-- Your data: export + erasure (cloud accounts only) -->
-    <section id="mydata-section" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
+    <section id="mydata-section" data-settings-tab="keys" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">🗄 Your data</h2>
       <div class="space-y-2">
         <button onclick="exportMyData()" id="export-data-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download my data</button>
@@ -1109,7 +1136,7 @@
         <p class="text-xs text-gray-500">Erases your account, posts, images and keys from our servers. This cannot be undone — download your data first if you want to keep it.</p>
       </div>
     </section>
-  </div><!-- /#view-admin -->
+  </div><!-- /#view-settings -->
 
 <!-- ===== DELETE-ACCOUNT CONFIRMATION ===== -->
 <!-- The password is asked for again on purpose: the request is already
@@ -2150,13 +2177,33 @@ async function loadAccounts() {
   renderAcctSwitcher();
 }
 
+function toggleAvatarMenu() {
+  const m = document.getElementById('avatar-menu');
+  if (!m) return;
+  const open = m.classList.toggle('hidden') === false;
+  document.getElementById('avatar-btn').setAttribute('aria-expanded', String(open));
+}
+function closeAvatarMenu() {
+  const m = document.getElementById('avatar-menu');
+  if (m) m.classList.add('hidden');
+  const b = document.getElementById('avatar-btn');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+// Clicking anywhere else closes it — a menu that only closes by its own button
+// is a menu people leave open over the screen they wanted to look at.
+document.addEventListener('click', e => {
+  const menu = document.getElementById('avatar-menu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  if (!e.target.closest('#avatar-menu') && !e.target.closest('#avatar-btn')) closeAvatarMenu();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAvatarMenu(); });
+
 function renderAcctSwitcher() {
-  const sel = document.getElementById('acct-switcher');
-  const manage = document.getElementById('acct-manage');
+  const sel = document.getElementById('menu-acct-switcher');
+  const row = document.getElementById('menu-brand-row');
   if (!sel) return;
   const show = S.user && !S.user.is_local && S.user.account_type !== 'business';
-  sel.classList.toggle('hidden', !show);
-  if (manage) manage.classList.toggle('hidden', !show);
+  if (row) row.classList.toggle('hidden', !show);
   if (!show) return;
   const active = (S.user && S.user.active_account_id) || '';
   // No hardcoded "Personal" row: since the profile rework every user owns a
@@ -4599,7 +4646,7 @@ function setSection(sec) {
   const map = { create:'view-create', calendar:'view-calendar', feed:'view-grid',
                 analytics:'view-analytics', 'library-images':'view-library-images',
                 'library-video':'view-library-video',
-                keys:'view-admin', account:'view-admin',
+                settings:'view-settings',
                 'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
                 'biz-drafts':'view-biz-drafts', 'biz-analytics':'view-biz-analytics',
                 'biz-journal':'view-biz-journal', 'biz-rules':'view-biz-rules' };
@@ -4615,7 +4662,7 @@ function setSection(sec) {
   else if (sec === 'analytics') loadAnalytics();
   else if (sec === 'library-images') loadLibrary('image');
   else if (sec === 'library-video') { loadVideoModels(); loadLibrary('video'); startVideoPolling(); startPublishJobPolling(); }
-  else if (sec === 'keys' || sec === 'account') loadAdmin();
+  else if (sec === 'settings') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
   else if (sec === 'biz-drafts') loadDrafts();
@@ -4626,7 +4673,7 @@ function setSection(sec) {
 
 // Back-compat alias for any old callers (grid click etc.).
 function setView(view) {
-  setSection({ create:'create', calendar:'calendar', grid:'feed', admin:'account' }[view] || 'create');
+  setSection({ create:'create', calendar:'calendar', grid:'feed' }[view] || 'create');
 }
 
 async function loadAnalytics() {
@@ -5285,7 +5332,7 @@ function hasKey(key) {
   return !!(S.creds && S.creds[key] && S.creds[key].set);
 }
 
-let _needKeySection = 'account';
+let _needKeySection = 'keys';
 function needKey(title, msg, section) {
   _needKeySection = section;
   document.getElementById('need-key-title').textContent = title;
@@ -5350,18 +5397,40 @@ async function guardPublishKeys(network) {
   return true;
 }
 
+/** Open Settings on a tab. The one entry point — nothing assigns S.settingsTab
+ *  directly, so the panels and the tab strip cannot disagree. */
+function openSettings(tab) {
+  S.settingsTab = tab || 'profiles';
+  setSection('settings');
+}
+
+/** Show exactly the panels belonging to the active tab.
+ *
+ *  The list is READ OFF THE DOM rather than kept here, for the same reason
+ *  setSection derives its view list from its map: a panel added to the markup
+ *  and forgotten in a hand-written hide list is a panel that stays on screen
+ *  under every tab. A section may name more than one tab — the credentials
+ *  block is on two, with only its scope differing. */
+function renderSettingsTabs() {
+  const tab = S.settingsTab || 'profiles';
+  document.querySelectorAll('#settings-tabs .set-btn').forEach(b =>
+    b.classList.toggle('set-active', b.dataset.settingsTab === tab));
+  document.querySelectorAll('#view-settings section[data-settings-tab]').forEach(el =>
+    el.classList.toggle('hidden', !el.dataset.settingsTab.split(' ').includes(tab)));
+}
+
 async function loadAdmin() {
   renderUserChrome();
-  // Section-driven layout: "keys" = this network's publishing keys only;
-  // "account" = global OpenRouter/stock keys + usage + backup.
-  const account = S.section !== 'keys';
-  // Business has no network rail, so its Connections page can't be network-scoped —
-  // it shows every credential group (media + Instagram + X) at once.
-  const business = !!(S.user && S.user.account_type === 'business');
+  renderSettingsTabs();
+  // Which tab is open decides what the credentials block means: "connections"
+  // = the publishing keys for every network, "keys" = the account-wide ones
+  // (OpenRouter, stock, ElevenLabs, Kling) plus spend, backup and GDPR.
+  const tab = S.settingsTab || 'profiles';
+  const account = tab === 'keys';
   const keysH = document.getElementById('keys-title');
-  if (keysH) keysH.textContent = account ? 'Account keys'
-    : (business ? 'Connections' : ('' + (S.platform === 'x' ? 'X' : 'Instagram') + ' keys'));
-  document.getElementById('usage-section').classList.toggle('hidden', !account);
+  if (keysH) keysH.textContent = account ? 'Account keys' : 'Connections';
+  // The tab already hid everything that isn't its own; these only narrow it
+  // further, for reasons about the ACCOUNT rather than about the tab.
   document.getElementById('backup-section').classList.toggle('hidden', !(account && S.user && (S.user.is_admin || S.user.is_local)));
   // Export and erasure are about a cloud tenancy; local mode's data is already
   // on the user's own disk and has no account to delete.
@@ -5375,42 +5444,46 @@ async function loadAdmin() {
   const keysSec = document.getElementById('keys-section');
   if (S.user && !S.user.is_local) {
     keysSec.classList.remove('hidden');
-    const scope = account ? 'account' : (business ? 'all' : S.platform);
+    // Connections shows every network at once. There is no active network to
+    // scope by since the rail went, and scoping to one would hide half of
+    // somebody's credentials with nothing on screen to say so.
+    const scope = account ? 'account' : 'publishing';
     await loadCredentials(scope);
-    // Health is about publishing, so the account-only page has nothing to show.
-    await loadConnections(scope === 'account' ? []
-      : scope === 'all' ? ['instagram', 'x'] : [scope]);
+    // Health is about publishing, so the account-only tab has nothing to show.
+    await loadConnections(account ? [] : ['instagram', 'x']);
   }
   else keysSec.classList.add('hidden');
-  // "Test connection" only makes sense on a publishing keys page. Creator's page is
-  // network-scoped → one button for the active network; Business shows all creds →
-  // one button per network.
+  // One Test button per network, on Connections only. The single "Test
+  // connection" button tested whichever network the rail pointed at, and there
+  // is no such thing to point at any more.
   const canTest = !account && S.user && !S.user.is_local;
   const testBtn = document.getElementById('test-conn-btn');
-  if (testBtn) testBtn.classList.toggle('hidden', !(canTest && !business && (S.platform === 'x' || S.platform === 'instagram')));
+  if (testBtn) testBtn.classList.add('hidden');
   const txBtn = document.getElementById('test-x-btn');
-  if (txBtn) txBtn.classList.toggle('hidden', !(canTest && business));
+  if (txBtn) txBtn.classList.toggle('hidden', !canTest);
   const tigBtn = document.getElementById('test-ig-btn');
-  if (tigBtn) tigBtn.classList.toggle('hidden', !(canTest && business));
+  if (tigBtn) tigBtn.classList.toggle('hidden', !canTest);
   const testRes = document.getElementById('test-conn-result');
   if (testRes) testRes.textContent = '';
   // Brand voice lives on the Account page for cloud users.
-  const voiceSec = document.getElementById('brand-voice-section');
-  const showVoice = account && S.user && !S.user.is_local;
-  voiceSec.classList.toggle('hidden', !showVoice);
-  if (showVoice) await loadBrandVoice();
-  const profSec = document.getElementById('brand-profile-section');
-  profSec.classList.toggle('hidden', !showVoice);
-  if (showVoice) await loadProfile();
-  const xSec = document.getElementById('x-settings-section');
-  xSec.classList.toggle('hidden', !showVoice);
-  if (showVoice) await loadXSettings();
-  const styleSec = document.getElementById('slide-style-section');
-  styleSec.classList.toggle('hidden', !showVoice);
-  if (showVoice) await loadSlideStyle();
-  const aiSec = document.getElementById('ai-models-section');
-  aiSec.classList.toggle('hidden', !showVoice);
-  if (showVoice) await loadAISettings();
+  // Brand identity is a cloud-tenancy notion — the desktop owner has no other
+  // brand to keep theirs apart from. The TAB decides what is on screen; this
+  // only decides what is worth fetching.
+  if (!(S.user && !S.user.is_local)) {
+    ['brand-voice-section', 'brand-profile-section', 'x-settings-section',
+     'slide-style-section', 'ai-models-section'].forEach(id =>
+      document.getElementById(id).classList.add('hidden'));
+    return;
+  }
+  if (tab === 'profiles') {
+    await loadBrandVoice();
+    await loadProfile();
+    await loadSlideStyle();
+  } else if (tab === 'connections') {
+    await loadXSettings();
+  } else if (tab === 'keys') {
+    await loadAISettings();
+  }
 }
 
 // ===== PER-USER API KEYS ===== (scope: 'account' | 'instagram' | 'x')
@@ -5437,7 +5510,11 @@ async function loadCredentials(scope) {
     if (res.ok) data = await res.json();
   } catch { /* 401 handled by apiFetch */ }
   S.creds = data;   // keep the onboarding guard cache in sync with what we render
-  const scopes = scope === 'all' ? ['account', 'instagram', 'x'] : [scope || 'account'];
+  // 'publishing' is every network's keys and NOTHING else: the account-wide
+  // ones have their own tab, and a key that appears on two tabs is a key
+  // somebody edits in one place and looks for in the other.
+  const scopes = scope === 'publishing' ? ['instagram', 'x']
+    : scope === 'all' ? ['account', 'instagram', 'x'] : [scope || 'account'];
   const fields = CRED_FIELDS.filter(f => scopes.includes(f.scope));
   const noneSet = fields.every(f => !(data[f.key] && data[f.key].set));
   const form = document.getElementById('keys-form');

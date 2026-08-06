@@ -28,16 +28,13 @@ _SECTION_BUTTON = {
     "leads": "biz-leads",
 }
 
-#: Settings tab → today's button. Both halves currently live behind two
-#: top-level buttons that share one container (`#view-admin`), split only by a
-#: comparison on the section name.
+#: Settings tabs that live in the Settings screen itself, reached from the
+#: avatar menu. Sources and Rules are still top-level Business buttons; they
+#: move in 3.8, and only this mapping changes when they do.
+_SETTINGS_TAB = {"profiles", "connections", "keys"}
 _SETTINGS_BUTTON = {
-    "profiles": "account",
-    "connections": "keys",
-    "keys": "account",
     "sources": "biz-sources",
     "rules": "biz-rules",
-    "team": "account",
 }
 
 #: Create mode → today's button. Becomes a mode switch inside Create in 3.5.
@@ -66,7 +63,13 @@ def open_section(page, name: str) -> None:
 
 
 def open_settings(page, tab: str = "profiles") -> None:
-    """Open Settings on a given tab."""
+    """Open Settings on a given tab, through the avatar menu the product uses."""
+    if tab in _SETTINGS_TAB:
+        page.locator("#avatar-btn").click()
+        page.locator("#avatar-menu").get_by_text("Settings").click()
+        page.locator(f'#settings-tabs [data-settings-tab="{tab}"]').click()
+        expect(page.locator("#view-settings")).to_be_visible()
+        return
     _click(page, _SETTINGS_BUTTON[tab])
 
 
