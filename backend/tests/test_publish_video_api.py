@@ -362,3 +362,61 @@ def test_publish_jobs_filter_by_asset_id(client):
 
     jobs = client.get("/api/publish-jobs?asset_id=mine", headers=h).json()
     assert [j["id"] for j in jobs] == [mine_id]
+
+
+# ------------------------------------------------------------------ posts.py: the preview's video_url
+#
+# The composer's video preview — and the publish button inside it — used to
+# exist only in the session that ran the render: renderPreview hid it on every
+# load because the payload gave it no way to know a video was already there.
+# GET /api/posts/{id} now says so.
+
+
+def test_the_preview_exposes_a_rendered_video(client, tmp_path):
+    h = _register(client, "a@ex.com")
+    user_id = asyncio.run(_user_id(app.state.sessionmaker, "a@ex.com"))
+    post_id = _seed_post(app.state.sessionmaker, user_id, tmp_path)
+
+    body = client.get(f"/api/posts/{post_id}", headers=h).json()
+    assert body["video_url"].startswith(f"/api/posts/{post_id}/reel/video?t=")
+    # …and it resolves, rather than merely looking plausible.
+    assert client.get(body["video_url"], headers=h).status_code == 200
+
+
+def test_the_preview_has_no_video_url_before_a_render(client, tmp_path):
+    h = _register(client, "a@ex.com")
+    user_id = asyncio.run(_user_id(app.state.sessionmaker, "a@ex.com"))
+    post_id = _seed_post(app.state.sessionmaker, user_id, tmp_path, video_path=None)
+
+    assert client.get(f"/api/posts/{post_id}", headers=h).json()["video_url"] is None
+
+
+def test_a_video_path_whose_file_is_gone_is_not_offered(client, tmp_path):
+    """The column outlives the file — an uploads volume that wasn't persisted, a
+    restored database. Reporting the URL anyway would put a permanent 404 in the
+    composer with a publish button under it."""
+    h = _register(client, "a@ex.com")
+    user_id = asyncio.run(_user_id(app.state.sessionmaker, "a@ex.com"))
+    post_id = _seed_post(app.state.sessionmaker, user_id, tmp_path,
+                         video_path=str(tmp_path / "never_written.mp4"))
+
+    assert client.get(f"/api/posts/{post_id}", headers=h).json()["video_url"] is None
+
+
+def test_the_video_url_changes_when_the_video_is_re_rendered(client, tmp_path):
+    """A fixed URL would let the browser serve the previous render from cache,
+    which is the whole reason the render endpoints cache-bust their own reply."""
+    import os
+    import time
+
+    h = _register(client, "a@ex.com")
+    user_id = asyncio.run(_user_id(app.state.sessionmaker, "a@ex.com"))
+    post_id = _seed_post(app.state.sessionmaker, user_id, tmp_path)
+
+    before = client.get(f"/api/posts/{post_id}", headers=h).json()["video_url"]
+    # mtime, not wall clock: the buster has to move because the FILE changed.
+    video = tmp_path / "post_reel.mp4"
+    os.utime(video, (time.time() + 60, time.time() + 60))
+    after = client.get(f"/api/posts/{post_id}", headers=h).json()["video_url"]
+
+    assert before != after

@@ -286,6 +286,11 @@ class PostPreview(BaseModel):
     hook: Optional[str]
     platform: Platform = Platform.INSTAGRAM
     slides: list[SlidePreview]
+    #: The rendered video, if this post has one on disk — so the composer can put
+    #: the preview (and the publish button inside it) back after a reload instead
+    #: of only ever showing them in the session that did the render. Carries an
+    #: mtime cache-buster, same as the render endpoints' own reply.
+    video_url: Optional[str] = None
     text_model_used: str
     image_model_used: Optional[str]
     created_at: datetime

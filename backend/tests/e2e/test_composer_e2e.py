@@ -362,7 +362,9 @@ def test_an_x_post_is_generated_as_x_not_as_the_default_network(
 
     assert sent["platform"] == "x"
     assert sent["x_mode"] == "short"
-    # Reels are an Instagram format and have no meaning on an X post.
+    # Hidden because this post has no slides to render a video from — not
+    # because it is an X post. X takes video too (publish-video); see
+    # test_publish_to_x_e2e.py for the card on an X post that does have slides.
     expect(page.locator("#reel-card")).to_be_hidden()
 
 

@@ -793,7 +793,9 @@
       </div>
     </div>
 
-    <!-- Reel (video) — built from slides, so hidden for a text-only post -->
+    <!-- Video, rendered from the post's slides. Instagram calls the result a
+         Reel and X just calls it a video, so the copy below is set per network
+         at runtime. Built from slides, so hidden for a text-only post. -->
     <div id="reel-card" class="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
       <div class="flex items-center justify-between">
         <label class="text-sm font-semibold text-purple-300">Turn this post into a video</label>
@@ -3096,12 +3098,33 @@ function renderPreview(post) {
   const seoGroup = document.getElementById('seo-group');
   if (seoGroup) seoGroup.classList.toggle('hidden', !postIsInstagram(post));
 
-  // Reset reel preview for this post
+  // The preview follows the post, not the session that rendered it. It used to
+  // be hidden unconditionally here, so a reload (or just opening another post
+  // and coming back) lost the video and the publish button with it, and the
+  // only way to get them back was to render the whole thing again.
   const reelPrev = document.getElementById('reel-preview');
-  if (reelPrev) reelPrev.classList.add('hidden');
-  // Reels publish to Instagram only, and need slides — hide on X / text-only.
+  if (reelPrev) {
+    const vid = post.video_url ? API + post.video_url : null;
+    if (vid) {
+      document.getElementById('reel-video').src = vid;
+      document.getElementById('reel-download').href = vid;
+    } else {
+      // Clearing src matters: <video> keeps the previous post's frame otherwise,
+      // and the next post to have no video would show the last one's.
+      document.getElementById('reel-video').removeAttribute('src');
+    }
+    reelPrev.classList.toggle('hidden', !vid);
+  }
+  // Both networks take a video built from the post's slides — Instagram through
+  // publish-reel, X through publish-video — so the platform is not what decides
+  // this. What decides it is whether there is anything to show: slides to render
+  // from, or a video already rendered. (The second half matters because
+  // reel/from-library attaches a video without caring about slides, so a
+  // slides-only test would hide a post's own video from it.) Hiding on X was
+  // what made publishReelOrToX's whole X branch unreachable from the composer:
+  // the button that dispatches to it lives inside this card.
   const reelCard = document.getElementById('reel-card');
-  if (reelCard) reelCard.classList.toggle('hidden', !post.slides.length || !postIsInstagram(post));
+  if (reelCard) reelCard.classList.toggle('hidden', !post.slides.length && !post.video_url);
 
   // Emoji picker (lazily built once)
   buildEmojiPicker();
@@ -3688,7 +3711,18 @@ function updatePostEditorChrome() {
   if (count) count.classList.toggle('hidden', !showXsingle);
   if (splitBtn) splitBtn.classList.toggle('hidden', !showXsingle);
   updateCaptionCount();
+  updateMakeReelButton();
   updateReelPublishButton();
+}
+
+// "Reel" is Instagram's word. The same render is just a video on X, so the
+// button that starts it is labelled from the post's network — the card itself
+// is shown on both. Skipped while a render is in flight: the label is the
+// progress indicator then, and overwriting it would hide it.
+function updateMakeReelButton() {
+  const btn = document.getElementById('make-reel-btn');
+  if (!btn || btn.disabled) return;
+  btn.textContent = postPlatform() === 'x' ? 'Make video' : 'Make Reel';
 }
 
 // The Reel card's publish button is platform-aware (Instagram vs X) and, once
@@ -4343,14 +4377,15 @@ async function makeReel() {
     document.getElementById('reel-video').src = url;
     document.getElementById('reel-download').href = url;
     document.getElementById('reel-preview').classList.remove('hidden');
+    const noun = postPlatform() === 'x' ? 'Video' : 'Reel';
     if (data.broll_fallbacks > 0) {
       const total = (data.broll_clips || 0) + data.broll_fallbacks;
-      toast(`⚠ Reel ready — ${data.broll_fallbacks}/${total} scenes used slides (stock clips unavailable)`, 'warn');
+      toast(`⚠ ${noun} ready — ${data.broll_fallbacks}/${total} scenes used slides (stock clips unavailable)`, 'warn');
     } else {
-      toast('✅ Reel rendered', 'success');
+      toast(`✅ ${noun} rendered`, 'success');
     }
   } catch(e) { toast('❌ ' + e.message, 'error'); }
-  finally { btn.disabled = false; btn.textContent = 'Make Reel'; }
+  finally { btn.disabled = false; updateMakeReelButton(); }
 }
 
 async function publishReel() {
