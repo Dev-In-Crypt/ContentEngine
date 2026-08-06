@@ -410,13 +410,10 @@
   <div id="section-nav" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
     <button data-section="create" onclick="setSection('create')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
     <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▦ Calendar</button>
-    <button data-section="feed" onclick="setSection('feed')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▤ Feed</button>
-    <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
     <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
     <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
+    <button data-section="results" onclick="setSection('results')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Results</button>
     <button data-section="queue" onclick="setSection('queue')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Queue</button>
-    <button data-section="biz-analytics" onclick="setSection('biz-analytics')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
-    <button data-section="biz-journal" onclick="setSection('biz-journal')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
     <button data-section="biz-rules" onclick="setSection('biz-rules')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Rules</button>
   </div>
 
@@ -941,8 +938,17 @@
   </div><!-- /#create-post-panel -->
   </div><!-- /#view-create -->
 
-  <!-- ===== CALENDAR VIEW ===== -->
+  <!-- ===== CALENDAR ===== -->
+  <!-- Two views of the same posts: the month they are scheduled across, and the
+       profile grid they will land in. The grid was its own top-level section
+       until 3.7, which filed a second pair of glasses as a second place. -->
   <div id="view-calendar" class="hidden space-y-4">
+    <div id="calendar-modes" class="flex gap-1">
+      <button data-calendar-mode="calendar" onclick="setCalendarMode('calendar')" class="cal-mode-btn sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">&#9638; Calendar</button>
+      <button data-calendar-mode="profile" onclick="setCalendarMode('profile')" class="cal-mode-btn sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">&#9636; Profile</button>
+    </div>
+
+    <div id="calendar-panel" data-calendar-panel="calendar" class="space-y-4">
     <!-- Content pillars mix -->
     <section class="bg-gray-900 rounded-2xl p-6 space-y-3">
       <h2 class="text-lg font-semibold text-purple-300">Content pillars</h2>
@@ -1014,10 +1020,9 @@
         <span>🟣 scheduled</span><span>🟢 published</span><span>🔴 failed</span><span>⚪ draft</span>
       </div>
     </section>
-  </div><!-- /#view-calendar -->
+    </div><!-- /#calendar-panel -->
 
-  <!-- ===== GRID VIEW ===== -->
-  <div id="view-grid" class="hidden space-y-4">
+    <div id="profile-panel" data-calendar-panel="profile" class="hidden space-y-4">
     <section class="bg-gray-900 rounded-2xl p-6 space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-purple-300">▦ Feed grid <span class="text-xs text-gray-500 font-normal">— how your profile feed looks</span></h2>
@@ -1031,7 +1036,8 @@
       </div>
       <p id="grid-empty" class="text-sm text-gray-500 text-center hidden">No posts yet.</p>
     </section>
-  </div><!-- /#view-grid -->
+    </div><!-- /#profile-panel -->
+  </div><!-- /#view-calendar -->
 
   <!-- ===== ADMIN VIEW ===== -->
   <div id="view-settings" class="hidden space-y-4">
@@ -1245,14 +1251,55 @@
     </div>
   </div>
 
-  <!-- ===== ANALYTICS VIEW ===== -->
-  <div id="view-analytics" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Analytics</h2>
-      <p class="text-xs text-gray-400 mt-1">Everything you've published, on every network — open each to view it where it lives. (In-app metrics are Instagram-only.)</p>
-      <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
+  <!-- ===== RESULTS ===== -->
+  <!-- What happened after the work left. Three separate top-level screens until
+       3.7 — two of them both labelled "Analytics", which is how a navigation
+       stops being readable. Sources and Journal are Business-only, so the tab
+       strip carries the same gating class as the nav, and openResults() refuses
+       a tab this account cannot see rather than trusting the strip. -->
+  <div id="view-results" class="hidden space-y-4">
+    <div id="results-tabs" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
+      <button data-results-tab="posts" onclick="openResults('posts')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Posts</button>
+      <button data-results-tab="sources" onclick="openResults('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
+      <button data-results-tab="journal" onclick="openResults('journal')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
     </div>
-  </div>
+
+    <div id="results-posts" data-results-tab="posts">
+      <div class="ce-card p-5">
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Published posts</h2>
+        <p class="text-xs text-gray-400 mt-1">Everything you've published, on every network — open each to view it where it lives. (In-app metrics are Instagram-only.)</p>
+        <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
+      </div>
+    </div>
+
+    <div id="results-sources" data-results-tab="sources" class="hidden">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Source analytics</h2>
+      <p class="text-xs text-gray-400 mt-1">Which sources give you the best posts — ranked by your pipeline: leads → worthy → drafts → approved. Engagement stats arrive once publishing is enabled.</p>
+      <div id="biz-analytics-totals" class="mt-4"></div>
+      <div id="biz-analytics-list" class="mt-4 space-y-2">Loading…</div>
+    </div>
+    </div>
+
+    <div id="results-journal" data-results-tab="journal" class="hidden">
+    <div class="ce-card p-5">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Journal</h2>
+        <span class="text-xs text-gray-400">Every approval, with the AI draft vs the human's edits — your audit trail.</span>
+        <span class="ml-auto flex gap-2">
+          <button onclick="exportJournal('csv')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export CSV</button>
+          <button onclick="exportJournal('json')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
+        </span>
+      </div>
+      <div class="flex gap-2 mt-3 text-xs items-center">
+        <label class="text-gray-400">From <input id="journal-from" type="date" class="ce-input px-2 py-1 ml-1"></label>
+        <label class="text-gray-400">To <input id="journal-to" type="date" class="ce-input px-2 py-1 ml-1"></label>
+        <button onclick="loadJournal()" class="ce-btn-ghost px-3 py-1.5">Apply</button>
+      </div>
+      <div id="biz-journal-list" class="mt-4 space-y-3">Loading…</div>
+    </div>
+    </div>
+  </div><!-- /#view-results -->
 
   <!-- ===== LIBRARY: Photos (standalone media, not tied to any post) ===== -->
 
@@ -1285,36 +1332,6 @@
   </div>
 
   <!-- ===== BUSINESS: Drafts ===== -->
-
-  <!-- ===== BUSINESS: Source analytics ===== -->
-  <div id="view-biz-analytics" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Source analytics</h2>
-      <p class="text-xs text-gray-400 mt-1">Which sources give you the best posts — ranked by your pipeline: leads → worthy → drafts → approved. Engagement stats arrive once publishing is enabled.</p>
-      <div id="biz-analytics-totals" class="mt-4"></div>
-      <div id="biz-analytics-list" class="mt-4 space-y-2">Loading…</div>
-    </div>
-  </div>
-
-  <!-- ===== BUSINESS: Journal ===== -->
-  <div id="view-biz-journal" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-lg font-semibold" style="color:var(--accent)">Journal</h2>
-        <span class="text-xs text-gray-400">Every approval, with the AI draft vs the human's edits — your audit trail.</span>
-        <span class="ml-auto flex gap-2">
-          <button onclick="exportJournal('csv')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export CSV</button>
-          <button onclick="exportJournal('json')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
-        </span>
-      </div>
-      <div class="flex gap-2 mt-3 text-xs items-center">
-        <label class="text-gray-400">From <input id="journal-from" type="date" class="ce-input px-2 py-1 ml-1"></label>
-        <label class="text-gray-400">To <input id="journal-to" type="date" class="ce-input px-2 py-1 ml-1"></label>
-        <button onclick="loadJournal()" class="ce-btn-ghost px-3 py-1.5">Apply</button>
-      </div>
-      <div id="biz-journal-list" class="mt-4 space-y-3">Loading…</div>
-    </div>
-  </div>
 
   <!-- ===== BUSINESS: Brand rules ===== -->
   <div id="view-biz-rules" class="hidden space-y-4">
@@ -4740,12 +4757,10 @@ function videoGridVisible() {
 // ===== SIDEBAR SECTIONS =====
 function setSection(sec) {
   S.section = sec;
-  const map = { create:'view-create', calendar:'view-calendar', feed:'view-grid',
-                analytics:'view-analytics',
-                settings:'view-settings',
+  const map = { create:'view-create', calendar:'view-calendar',
+                results:'view-results', settings:'view-settings',
                 'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
-                queue:'view-queue', 'biz-analytics':'view-biz-analytics',
-                'biz-journal':'view-biz-journal', 'biz-rules':'view-biz-rules' };
+                queue:'view-queue', 'biz-rules':'view-biz-rules' };
   // Every view id is a value in `map` above — deriving the list from it means a
   // section added only to the map (the easy mistake) can no longer end up
   // stuck visible forever, which used to require editing this list separately.
@@ -4753,22 +4768,68 @@ function setSection(sec) {
     const el = document.getElementById(v); if (el) el.classList.toggle('hidden', map[sec] !== v);
   }
   document.querySelectorAll('#section-nav .sec-btn').forEach(b => b.classList.toggle('sec-active', b.dataset.section === sec));
-  if (sec === 'calendar') renderCalendar();
-  else if (sec === 'feed') loadGrid();
-  else if (sec === 'analytics') loadAnalytics();
+  if (sec === 'calendar') applyCalendarMode();
+  else if (sec === 'results') loadResults();
   else if (sec === 'create') applyCreateMode();
   else if (sec === 'settings') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
   else if (sec === 'queue') loadQueue();
-  else if (sec === 'biz-analytics') loadSourceAnalytics();
-  else if (sec === 'biz-journal') loadJournal();
   else if (sec === 'biz-rules') loadBrandRules();
 }
 
 // Back-compat alias for any old callers (grid click etc.).
 function setView(view) {
-  setSection({ create:'create', calendar:'calendar', grid:'feed' }[view] || 'create');
+  if (view === 'grid') return setCalendarMode('profile'), setSection('calendar');
+  setSection({ create:'create', calendar:'calendar' }[view] || 'create');
+}
+
+/** Switch the Calendar between the month and the profile grid. */
+function setCalendarMode(mode) {
+  S.calendarMode = (mode === 'profile') ? 'profile' : 'calendar';
+  applyCalendarMode();
+}
+
+/** Show exactly one of the Calendar's two panels and load what it needs.
+ *
+ *  The panel list is read off the DOM, like the Settings tabs and setSection's
+ *  view list before it: a panel added to the markup and forgotten in a
+ *  hand-written list is a panel that stays on screen under the other mode. */
+function applyCalendarMode() {
+  const mode = S.calendarMode === 'profile' ? 'profile' : 'calendar';
+  document.querySelectorAll('#calendar-modes .cal-mode-btn').forEach(b =>
+    b.classList.toggle('sec-active', b.dataset.calendarMode === mode));
+  document.querySelectorAll('#view-calendar [data-calendar-panel]').forEach(el =>
+    el.classList.toggle('hidden', el.dataset.calendarPanel !== mode));
+  if (mode === 'profile') loadGrid(); else renderCalendar();
+}
+
+/** Open Results on a tab. The one entry point, like openSettings. */
+function openResults(tab) {
+  S.resultsTab = tab || 'posts';
+  setSection('results');
+}
+
+/** Show the active tab's panel, and fetch for that tab only.
+ *
+ *  Two tabs belong to Business alone. The tab strip already says so in CSS, so
+ *  availability is ASKED OF THE DOM rather than restated here — the two cannot
+ *  disagree that way. It is a real guard and not decoration: openResults() is
+ *  reachable from anywhere, and S.resultsTab outlives an account switch, so
+ *  without the fallback a creator can land on an empty Business panel whose tab
+ *  strip offers no way back. */
+function loadResults() {
+  let tab = S.resultsTab || 'posts';
+  const btn = document.querySelector(`#results-tabs [data-results-tab="${tab}"]`);
+  if (!btn || btn.offsetParent === null) tab = 'posts';
+  S.resultsTab = tab;
+  document.querySelectorAll('#results-tabs .set-btn').forEach(b =>
+    b.classList.toggle('set-active', b.dataset.resultsTab === tab));
+  document.querySelectorAll('#view-results > div[data-results-tab]').forEach(el =>
+    el.classList.toggle('hidden', el.dataset.resultsTab !== tab));
+  if (tab === 'sources') return loadSourceAnalytics();
+  if (tab === 'journal') return loadJournal();
+  return loadAnalytics();
 }
 
 async function loadAnalytics() {

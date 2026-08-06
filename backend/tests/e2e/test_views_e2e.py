@@ -15,7 +15,7 @@ import pytest
 from playwright.sync_api import expect
 
 from models.schemas import PostSummary
-from tests.e2e.nav import open_section
+from tests.e2e.nav import open_calendar, open_results, open_section
 
 pytestmark = pytest.mark.e2e
 
@@ -83,12 +83,12 @@ def test_clicking_a_calendar_entry_opens_the_post(page, signed_in):
     expect(page.locator("#view-create")).to_be_visible()
 
 
-# ------------------------------------------------------------------ feed grid
+# ------------------------------------- the profile grid, a view of the calendar
 
 def test_the_feed_grid_renders_a_card(page, signed_in):
     signed_in()
     _serve_posts(page, _post(id="g1", topic="Grid post", status="published"))
-    open_section(page, "feed")
+    open_calendar(page, "profile")
     expect(page.locator("#grid-container")).to_contain_text("Grid post")
     expect(page.locator("#grid-empty")).to_be_hidden()
 
@@ -101,7 +101,7 @@ def test_the_feed_grid_stays_instagram_only(page, signed_in):
     _serve_posts(page,
                  _post(id="g1", topic="Gram post", status="published"),
                  _post(id="g2", topic="Tweet post", status="published", platform="x"))
-    open_section(page, "feed")
+    open_calendar(page, "profile")
     expect(page.locator("#grid-container")).to_contain_text("Gram post")
     expect(page.locator("#grid-container")).not_to_contain_text("Tweet post")
 
@@ -109,11 +109,88 @@ def test_the_feed_grid_stays_instagram_only(page, signed_in):
 def test_an_empty_feed_grid_says_so(page, signed_in):
     signed_in()
     _serve_posts(page)
-    open_section(page, "feed")
+    open_calendar(page, "profile")
     expect(page.locator("#grid-empty")).to_be_visible()
 
 
+def test_the_profile_grid_and_the_calendar_are_not_both_on_screen(page, signed_in):
+    """Two views of the same posts, one at a time. They live in one section now,
+    so nothing but the mode switch keeps them apart — and a panel left visible
+    under the other mode is the exact defect this file exists to catch."""
+    signed_in()
+    _serve_posts(page, _post(id="g1", topic="Grid post", status="published"))
+    open_calendar(page, "profile")
+    expect(page.locator("#calendar-panel")).to_be_hidden()
+    open_calendar(page, "calendar")
+    expect(page.locator("#profile-panel")).to_be_hidden()
+    expect(page.locator("#cal-grid")).to_be_visible()
+
+
 # ------------------------------------------------------------------ results
+
+def test_results_opens_on_published_posts(page, signed_in):
+    """Whatever else Results grows, the thing a person came for is their posts."""
+    signed_in()
+    _serve_posts(page, _post(id="r1", topic="Shipped it", status="published"))
+    open_section(page, "results")
+    expect(page.locator("#results-posts")).to_be_visible()
+    expect(page.locator("#analytics-list")).to_contain_text("Shipped it")
+
+
+def test_a_creator_is_not_offered_the_business_result_tabs(page, signed_in):
+    signed_in()
+    _serve_posts(page)
+    open_section(page, "results")
+    expect(page.locator('#results-tabs [data-results-tab="posts"]')).to_be_visible()
+    for tab in ("sources", "journal"):
+        expect(page.locator(f'#results-tabs [data-results-tab="{tab}"]')).to_be_hidden()
+
+
+def test_a_creator_asking_for_a_business_tab_gets_their_posts(page, signed_in):
+    """The tab strip hides what a creator may not have, but hiding a button is
+    not a guard — `openResults` is reachable from anywhere, and a stale
+    S.resultsTab survives an account switch. Ask for the Journal as a creator
+    and Results must fall back to Posts rather than render an empty Business
+    screen with no way back to the tab strip."""
+    signed_in()
+    _serve_posts(page)
+    open_section(page, "results")
+    page.evaluate("openResults('journal')")
+    expect(page.locator("#results-posts")).to_be_visible()
+    expect(page.locator("#results-journal")).to_be_hidden()
+
+
+def test_results_fetches_only_the_tab_that_is_open(page, signed_in):
+    """Three panels, one screen — but a screen that loads all three on entry
+    spends three round-trips to show one."""
+    signed_in(account_type="business")
+    _serve_posts(page)
+    calls = []
+    page.on("request", lambda r: calls.append(r.url))
+    open_results(page, "journal")
+    expect(page.locator("#biz-journal-list")).not_to_contain_text("Loading")
+    assert not [u for u in calls if "source-analytics" in u], calls
+
+
+def test_a_business_account_gets_all_three_result_tabs(page, signed_in):
+    signed_in(account_type="business")
+    _serve_posts(page)
+    open_section(page, "results")
+    for tab in ("posts", "sources", "journal"):
+        expect(page.locator(f'#results-tabs [data-results-tab="{tab}"]')).to_be_visible()
+
+
+def test_source_analytics_is_a_tab_of_results(page, signed_in):
+    signed_in(account_type="business")
+    page.route("**/api/business/source-analytics*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps({
+            "totals": {"leads": 3, "worthy": 2, "drafts": 1, "approved": 1},
+            "sources": [{"id": "s1", "url": "https://example.com/feed", "kind": "feed",
+                         "leads": 3, "worthy": 2, "drafts": 1, "approved": 1}],
+        })))
+    open_results(page, "sources")
+    expect(page.locator("#biz-analytics-list")).to_contain_text("example.com/feed")
+
 
 def test_results_lists_a_published_post_with_its_link(page, signed_in):
     """The link is new: `published_url` was read here but never sent, so a
@@ -122,7 +199,7 @@ def test_results_lists_a_published_post_with_its_link(page, signed_in):
     _serve_posts(page, _post(
         id="r1", topic="Shipped it", status="published",
         published_at=datetime.now(timezone.utc), published_url="https://example.com/p/1"))
-    open_section(page, "results")
+    open_results(page)
     expect(page.locator("#analytics-list")).to_contain_text("Shipped it")
     expect(page.locator("#analytics-list a")).to_have_attribute(
         "href", "https://example.com/p/1")
@@ -133,7 +210,7 @@ def test_results_shows_both_networks(page, signed_in):
     _serve_posts(page,
                  _post(id="r1", topic="Gram result", status="published"),
                  _post(id="r2", topic="X result", status="published", platform="x"))
-    open_section(page, "results")
+    open_results(page)
     expect(page.locator("#analytics-list")).to_contain_text("Gram result")
     expect(page.locator("#analytics-list")).to_contain_text("X result")
     expect(page.locator('#analytics-list [title="X"]')).to_be_visible()
@@ -144,7 +221,7 @@ def test_results_leaves_out_what_is_not_published(page, signed_in):
     _serve_posts(page,
                  _post(id="r1", topic="Shipped it", status="published"),
                  _post(id="r2", topic="Still a draft", status="draft"))
-    open_section(page, "results")
+    open_results(page)
     expect(page.locator("#analytics-list")).to_contain_text("Shipped it")
     expect(page.locator("#analytics-list")).not_to_contain_text("Still a draft")
 
@@ -163,7 +240,7 @@ def test_the_journal_renders_an_entry(page, signed_in):
             "source_url": "https://example.com/news",
             "approved_at": datetime.now(timezone.utc).isoformat(),
         }])))
-    page.locator('[data-section="biz-journal"]').click()
+    open_results(page, "journal")
     expect(page.locator("#biz-journal-list")).to_contain_text("What the human approved")
     expect(page.locator("#biz-journal-list")).to_contain_text("edited by a human")
 
@@ -172,7 +249,7 @@ def test_an_empty_journal_says_so(page, signed_in):
     signed_in(account_type="business")
     page.route("**/api/business/journal*", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
-    page.locator('[data-section="biz-journal"]').click()
+    open_results(page, "journal")
     expect(page.locator("#biz-journal-list")).to_contain_text("No approvals")
 
 

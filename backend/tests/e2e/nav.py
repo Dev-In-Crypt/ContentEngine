@@ -22,8 +22,7 @@ from playwright.sync_api import expect
 _SECTION_BUTTON = {
     "create": "create",
     "calendar": "calendar",
-    "feed": "feed",
-    "results": "analytics",
+    "results": "results",
     "queue": "queue",
     "leads": "biz-leads",
 }
@@ -76,6 +75,35 @@ def open_create(page, mode: str = "post") -> None:
     _click(page, "create")
     page.locator(f'#create-modes [data-create-mode="{mode}"]').click()
     expect(page.locator(_CREATE_VIEW[mode])).to_be_visible()
+
+
+#: Results tab -> the panel that must be on screen once we arrive. Three
+#: separate top-level screens until 3.7; the Journal and Source analytics tabs
+#: exist only for a Business account, which is why `open_results` is the only
+#: honest way to reach them.
+_RESULTS_VIEW = {
+    "posts": "#results-posts",
+    "sources": "#results-sources",
+    "journal": "#results-journal",
+}
+
+#: Calendar view mode -> its panel. The feed grid stopped being a section in
+#: 3.7: it is the same posts on a second pair of glasses, not a second place.
+_CALENDAR_VIEW = {"calendar": "#calendar-panel", "profile": "#profile-panel"}
+
+
+def open_results(page, tab: str = "posts") -> None:
+    """Open Results on one of its tabs, and wait for the panel to be on screen."""
+    _click(page, "results")
+    page.locator(f'#results-tabs [data-results-tab="{tab}"]').click()
+    expect(page.locator(_RESULTS_VIEW[tab])).to_be_visible()
+
+
+def open_calendar(page, mode: str = "calendar") -> None:
+    """Open the Calendar in one of its two view modes."""
+    _click(page, "calendar")
+    page.locator(f'#calendar-modes [data-calendar-mode="{mode}"]').click()
+    expect(page.locator(_CALENDAR_VIEW[mode])).to_be_visible()
 
 
 def open_rules(page) -> None:

@@ -23,6 +23,8 @@ from playwright.sync_api import expect
 
 from models.schemas import AISettingsResponse, PostPreview, SlidePreview
 
+from tests.e2e.nav import open_calendar
+
 pytestmark = pytest.mark.e2e
 
 # A 1×1 transparent PNG, so the preview's <img> tags resolve instead of 404ing.
@@ -410,14 +412,20 @@ def test_the_network_rail_is_gone(page, signed_in):
     expect(page.locator("#net-toggle-x")).to_be_visible()
 
 
-def test_the_feed_section_is_reachable_whatever_the_composer_targets(page, signed_in):
+def test_the_profile_grid_is_reachable_whatever_the_composer_targets(page, signed_in):
     """The rail used to hide the Feed button on X and shove you off the section
     if you were standing on it. The grid is Instagram-only by its own nature
     now, so which network the composer is aimed at has nothing to do with
-    whether you may look at your profile grid."""
+    whether you may look at your profile grid.
+
+    In 3.7 it stopped being a section at all and became a view of the Calendar.
+    The claim is unchanged; only the way in is."""
     signed_in()
     page.locator("#net-toggle-x").click()
-    expect(page.locator('[data-section="feed"]')).to_be_visible()
+    open_calendar(page, "profile")
+    # An empty grid has no height, so assert on the screen's own empty state:
+    # it renders only after loadGrid has run, which is the reachability claim.
+    expect(page.locator("#grid-empty")).to_be_visible()
 
 
 # ── The media library picker, reached from an already-rendered post ─────────
