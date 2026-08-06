@@ -39,12 +39,23 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="session")
 def live_server(tmp_path_factory):
-    """uvicorn in its own process, on a throwaway database."""
+    """uvicorn in its own process, on a throwaway database.
+
+    Its output goes to a **file**, never to an unread `subprocess.PIPE`. A pipe
+    nobody reads is not a place output disappears into; it is a 4 KB buffer, and
+    the writer blocks forever once it fills. The server would then still accept
+    connections and answer none of them, so every later test died in `page.goto`
+    with a navigation timeout and none of them with a readable failure. Alembic
+    alone spends ~3 KB of that buffer on migration lines before the first test
+    runs, which is why the whole suite wedged partway through while every file
+    passed alone: only the long run reached the limit.
+    """
     import urllib.error
     import urllib.request
 
     workdir = tmp_path_factory.mktemp("e2e")
     db = (workdir / "e2e.db").as_posix()
+    log_path = workdir / "server.log"
     port = _free_port()
 
     env = {
@@ -63,28 +74,42 @@ def live_server(tmp_path_factory):
         "RATE_LIMIT_ENABLED": "false",
         "PYTHONPATH": str(BACKEND),
     }
+    logfile = log_path.open("w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "main:app",
          "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning"],
         cwd=str(BACKEND), env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        stdout=logfile, stderr=subprocess.STDOUT,
     )
+
+    def _log() -> str:
+        """What the server has said so far, for a failure that needs explaining."""
+        try:
+            text = log_path.read_text(encoding="utf-8", errors="replace").strip()
+        except OSError:
+            return f"(no server log at {log_path})"
+        return f"--- server log ({log_path}) ---\n{text}" if text else \
+            f"(the server logged nothing; {log_path})"
 
     base = f"http://127.0.0.1:{port}"
     deadline = time.time() + 60
-    while time.time() < deadline:
-        if proc.poll() is not None:
+    try:
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                raise RuntimeError("the test server exited early:\n" + _log())
+            try:
+                with urllib.request.urlopen(f"{base}/health", timeout=1) as r:
+                    if r.status == 200:
+                        break
+            except (urllib.error.URLError, OSError):
+                time.sleep(0.2)
+        else:
+            proc.kill()
             raise RuntimeError(
-                "the test server exited early:\n" + (proc.stdout.read() or ""))
-        try:
-            with urllib.request.urlopen(f"{base}/health", timeout=1) as r:
-                if r.status == 200:
-                    break
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.2)
-    else:
-        proc.kill()
-        raise RuntimeError("the test server did not become healthy in time")
+                "the test server did not become healthy in time:\n" + _log())
+    except BaseException:
+        logfile.close()
+        raise
 
     yield base
 
@@ -93,16 +118,27 @@ def live_server(tmp_path_factory):
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
+        proc.wait(timeout=10)
+    logfile.close()
 
 
 @pytest.fixture
 def page(live_server, browser):
     """A fresh context per test: no cookies, no localStorage, no shared session."""
     context = browser.new_context(viewport={"width": 1280, "height": 900})
-    p = context.new_page()
-    errors: list[str] = []
-    p.on("pageerror", lambda e: errors.append(str(e)))
-    p.goto(live_server)
+    # Everything up to the yield has to clean up after itself. A fixture that
+    # raises before yielding never runs its teardown, so a failing `goto` used to
+    # strand the whole context — browser processes and all — and a run that lost
+    # the server stranded one per remaining test. That turned a readable first
+    # failure into a machine slowed by a pile of orphaned browsers.
+    try:
+        p = context.new_page()
+        errors: list[str] = []
+        p.on("pageerror", lambda e: errors.append(str(e)))
+        p.goto(live_server)
+    except BaseException:
+        context.close()
+        raise
     yield p
     # A thrown exception in the SPA is a failure even when the assertions passed —
     # half the bugs this suite is for surface as a swallowed TypeError.
