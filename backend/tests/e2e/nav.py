@@ -24,7 +24,7 @@ _SECTION_BUTTON = {
     "calendar": "calendar",
     "feed": "feed",
     "results": "analytics",
-    "queue": "biz-drafts",
+    "queue": "queue",
     "leads": "biz-leads",
 }
 

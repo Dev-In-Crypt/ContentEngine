@@ -414,7 +414,7 @@
     <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
     <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
     <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
-    <button data-section="biz-drafts" onclick="setSection('biz-drafts')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Drafts</button>
+    <button data-section="queue" onclick="setSection('queue')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Queue</button>
     <button data-section="biz-analytics" onclick="setSection('biz-analytics')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
     <button data-section="biz-journal" onclick="setSection('biz-journal')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
     <button data-section="biz-rules" onclick="setSection('biz-rules')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Rules</button>
@@ -1230,6 +1230,21 @@
   </div>
 </div>
 
+  <!-- ===== QUEUE ===== -->
+  <!-- One section, two contents. A creator's queue is their own unpublished
+       work; a Business account's is the approval pipeline, which carries
+       buttons a creator has no use for. Merging the two lists would mean
+       showing a creator approval controls that do nothing, or hiding from
+       Business the very thing the screen exists for. -->
+  <div id="view-queue" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 id="queue-title" class="text-lg font-semibold" style="color:var(--accent)">Queue</h2>
+      <p id="queue-sub" class="text-xs text-gray-400 mt-1">Everything you've made that hasn't gone out yet — drafts, previews and anything scheduled.</p>
+      <div id="queue-list" class="mt-4 space-y-2 text-sm"></div>
+      <div id="biz-drafts-list" class="hidden mt-4 space-y-3">Loading…</div>
+    </div>
+  </div>
+
   <!-- ===== ANALYTICS VIEW ===== -->
   <div id="view-analytics" class="hidden space-y-4">
     <div class="ce-card p-5">
@@ -1270,13 +1285,6 @@
   </div>
 
   <!-- ===== BUSINESS: Drafts ===== -->
-  <div id="view-biz-drafts" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Drafts</h2>
-      <p class="text-xs text-gray-400 mt-1">Posts drafted from your leads. A person reviews and approves before anything goes out.</p>
-      <div id="biz-drafts-list" class="mt-4 space-y-3">Loading…</div>
-    </div>
-  </div>
 
   <!-- ===== BUSINESS: Source analytics ===== -->
   <div id="view-biz-analytics" class="hidden space-y-4">
@@ -1847,6 +1855,42 @@ function updateDigestBtn() {
 }
 
 // makePost / makeDigest / loadDrafts are defined with the Phase 3 draft flow below.
+//: What a post looks like before it has gone anywhere. Anything else belongs
+//: to Results — a queue that keeps everything ever made stops being a queue on
+//: the day it would start being useful.
+const QUEUE_STATUSES = ['draft', 'preview', 'scheduled', 'failed'];
+
+async function loadQueue() {
+  const business = !!(S.user && S.user.account_type === 'business');
+  const own = document.getElementById('queue-list');
+  const biz = document.getElementById('biz-drafts-list');
+  document.getElementById('queue-title').textContent = business ? 'Drafts' : 'Queue';
+  document.getElementById('queue-sub').textContent = business
+    ? 'Posts drafted from your leads. A person reviews and approves before anything goes out.'
+    : "Everything you've made that hasn't gone out yet — drafts, previews and anything scheduled.";
+  own.classList.toggle('hidden', business);
+  biz.classList.toggle('hidden', !business);
+  if (business) return loadDrafts();
+
+  await ensurePosts();
+  const rows = S.posts.filter(p => QUEUE_STATUSES.includes(p.status));
+  if (!rows.length) {
+    own.innerHTML = '<div class="text-gray-500">Nothing waiting. Anything you make lands here until it goes out.</div>';
+    return;
+  }
+  const dot = { scheduled: '🟣', failed: '🔴', draft: '⚪', preview: '⚪' };
+  own.innerHTML = rows.map(p => {
+    const when = p.scheduled_at ? new Date(p.scheduled_at).toLocaleString() : '';
+    return `<div class="ce-card p-3 flex items-center gap-3 cursor-pointer" onclick="openPost('${esc(p.id)}')">
+      <span>${dot[p.status] || '⚪'}</span>${netBadge(p)}
+      <div class="flex-1 min-w-0">
+        <div class="text-gray-200 truncate">${esc(p.topic || 'post')}</div>
+        <div class="text-xs text-gray-500">${esc(p.status)}${when ? ' · ' + esc(when) : ''}${p.schedule_error ? ' · ' + esc(p.schedule_error) : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function loadDrafts() {
   const box = document.getElementById('biz-drafts-list');
   box.textContent = 'Loading…';
@@ -4700,7 +4744,7 @@ function setSection(sec) {
                 analytics:'view-analytics',
                 settings:'view-settings',
                 'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
-                'biz-drafts':'view-biz-drafts', 'biz-analytics':'view-biz-analytics',
+                queue:'view-queue', 'biz-analytics':'view-biz-analytics',
                 'biz-journal':'view-biz-journal', 'biz-rules':'view-biz-rules' };
   // Every view id is a value in `map` above — deriving the list from it means a
   // section added only to the map (the easy mistake) can no longer end up
@@ -4716,7 +4760,7 @@ function setSection(sec) {
   else if (sec === 'settings') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
-  else if (sec === 'biz-drafts') loadDrafts();
+  else if (sec === 'queue') loadQueue();
   else if (sec === 'biz-analytics') loadSourceAnalytics();
   else if (sec === 'biz-journal') loadJournal();
   else if (sec === 'biz-rules') loadBrandRules();

@@ -204,3 +204,82 @@ def test_opening_a_post_from_the_calendar_returns_to_the_wizard(page, signed_in)
 
     expect(page.locator("#create-post-panel")).to_be_visible()
     expect(page.locator("#create-video-panel")).to_be_hidden()
+
+
+# ------------------------------------------------------------------ queue
+#
+# One section, two contents. A creator's queue is their own unpublished work; a
+# Business account's is the approval pipeline, which has buttons a creator has
+# no use for. Merging the two lists would mean showing a creator approval
+# controls that do nothing, or hiding from Business the thing the screen is for.
+
+def test_the_queue_lists_unpublished_work(page, signed_in):
+    signed_in()
+    _serve_posts(page,
+                 _post(id="q1", topic="A draft", status="draft"),
+                 _on(id="q2", topic="Scheduled one"))
+    open_section(page, "queue")
+    expect(page.locator("#queue-list")).to_contain_text("A draft")
+    expect(page.locator("#queue-list")).to_contain_text("Scheduled one")
+
+
+def test_the_queue_leaves_out_what_is_already_published(page, signed_in):
+    """Published work belongs to Results. A queue that keeps everything ever
+    made stops being a queue on the day it matters."""
+    signed_in()
+    _serve_posts(page,
+                 _post(id="q1", topic="A draft", status="draft"),
+                 _post(id="q2", topic="Already out", status="published"))
+    open_section(page, "queue")
+    expect(page.locator("#queue-list")).to_contain_text("A draft")
+    expect(page.locator("#queue-list")).not_to_contain_text("Already out")
+
+
+def test_a_queue_row_says_which_network_it_is_for(page, signed_in):
+    signed_in()
+    _serve_posts(page, _post(id="q1", topic="A tweet draft", status="draft", platform="x"))
+    open_section(page, "queue")
+    expect(page.locator('#queue-list [title="X"]')).to_be_visible()
+
+
+def test_an_empty_queue_says_so(page, signed_in):
+    signed_in()
+    _serve_posts(page)
+    open_section(page, "queue")
+    expect(page.locator("#queue-list")).to_contain_text("Nothing waiting")
+
+
+def test_clicking_a_queue_row_opens_the_post(page, signed_in):
+    signed_in()
+    _serve_posts(page, _post(id="q1", topic="A draft", status="draft"))
+    page.route("**/api/posts/q1", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps({
+            "id": "q1", "topic": "A draft", "format": "single", "status": "draft",
+            "platform": "instagram", "slides": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })))
+    open_section(page, "queue")
+    page.locator("#queue-list").get_by_text("A draft").click()
+    expect(page.locator("#create-post-panel")).to_be_visible()
+
+
+def test_a_business_queue_is_the_approval_pipeline(page, signed_in):
+    """Same section, different content — the drafts screen moved in here rather
+    than being merged with the creator list."""
+    signed_in(account_type="business")
+    page.route("**/api/business/drafts", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([{
+            "id": "d1", "topic": "t", "hook": "A drafted lead", "caption": "c",
+            "thread_parts": [], "hashtags": [], "source_kind": "lead",
+            "source_url": "https://example.com/x", "platform": "instagram",
+            "status": "draft", "schedule_error": None,
+            "checked_claims": [], "brand_flags": {},
+            "created_at": "2026-07-20T00:00:00+00:00",
+        }])))
+    _serve_posts(page, _post(id="q1", topic="A creator draft", status="draft"))
+    open_section(page, "queue")
+    # The approval pipeline, actually loaded — not merely an empty container
+    # with the right id. Drop the branch and the creator list renders instead.
+    expect(page.locator("#biz-drafts-list")).to_contain_text("A drafted lead")
+    expect(page.locator("#queue-list")).to_be_hidden()
+    expect(page.locator("#view-queue")).not_to_contain_text("A creator draft")

@@ -75,16 +75,20 @@ def test_a_business_account_gets_the_business_navigation(page, signed_in):
     """One engine, two products, split only by account_type. A business user
     seeing "Create" — or a creator seeing "Leads" — is the whole split leaking."""
     signed_in(account_type="business")
-    for section in ("biz-sources", "biz-leads", "biz-drafts", "biz-rules"):
+    for section in ("biz-sources", "biz-leads", "biz-rules"):
         expect(page.locator(f'[data-section="{section}"]')).to_be_visible()
     for section in ("create", "calendar", "feed"):
         expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
+    # Queue is shared: both products have work waiting, it is only made of
+    # different things. Its content is what differs, not its existence.
+    expect(page.locator('[data-section="queue"]')).to_be_visible()
 
 
 def test_a_creator_account_is_not_shown_the_business_screens(page, signed_in):
     signed_in()
     expect(page.locator('[data-section="create"]')).to_be_visible()
-    for section in ("biz-sources", "biz-leads", "biz-drafts", "biz-rules"):
+    expect(page.locator('[data-section="queue"]')).to_be_visible()
+    for section in ("biz-sources", "biz-leads", "biz-rules"):
         expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
 
 
@@ -103,7 +107,7 @@ def test_an_agency_account_gets_the_creator_shell(page, signed_in):
     signed_in(account_type="agency")
     expect(page.locator('[data-section="create"]')).to_be_visible()
     expect(page.locator("#view-create")).to_be_visible()
-    for section in ("biz-sources", "biz-leads", "biz-drafts", "biz-rules"):
+    for section in ("biz-sources", "biz-leads", "biz-rules"):
         expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
 
 
