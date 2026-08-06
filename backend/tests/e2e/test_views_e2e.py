@@ -174,3 +174,33 @@ def test_an_empty_journal_says_so(page, signed_in):
         status=200, content_type="application/json", body="[]"))
     page.locator('[data-section="biz-journal"]').click()
     expect(page.locator("#biz-journal-list")).to_contain_text("No approvals")
+
+
+def test_opening_a_post_from_the_calendar_returns_to_the_wizard(page, signed_in):
+    """The likeliest regression in the Create merge, and the one worth its own
+    test: openPost sends you to the Create section, but the section is a
+    container of three panels now. Land there with Video showing and you get
+    the right section and a hidden wizard — a click that appears to do
+    nothing."""
+    from tests.e2e.nav import open_create
+
+    signed_in()
+    page.route("**/api/media?kind=video", lambda r: r.fulfill(
+        status=200, content_type="application/json", body="[]"))
+    page.route("**/api/models/providers", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"text": [], "image": [], "video": []})))
+    open_create(page, "video")
+
+    _serve_posts(page, _on(id="c9", topic="From the calendar"))
+    page.route("**/api/posts/c9", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps({
+            "id": "c9", "topic": "From the calendar", "format": "single",
+            "status": "scheduled", "platform": "instagram", "slides": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })))
+    open_section(page, "calendar")
+    page.locator("#cal-grid").get_by_text("From the").click()
+
+    expect(page.locator("#create-post-panel")).to_be_visible()
+    expect(page.locator("#create-video-panel")).to_be_hidden()

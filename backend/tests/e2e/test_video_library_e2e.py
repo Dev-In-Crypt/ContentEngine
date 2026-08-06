@@ -67,20 +67,16 @@ def _route_catalog(page):
         status=200, content_type="application/json", body=json.dumps(_providers_body())))
 
 
-def test_the_video_tab_is_hidden_from_a_business_account(page, signed_in):
-    signed_in(account_type="business")
-    expect(page.locator('[data-section="library-video"]')).to_be_hidden()
-
-
-def test_switching_to_video_hides_every_other_view(page, signed_in):
+def test_switching_to_video_hides_the_other_modes(page, signed_in):
     signed_in()
     _route_catalog(page)
     page.route("**/api/media?kind=video", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
     open_create(page, "video")
-    expect(page.locator("#view-create")).to_be_hidden()
+    expect(page.locator("#create-post-panel")).to_be_hidden()
+    expect(page.locator("#create-photo-panel")).to_be_hidden()
     open_create(page, "post")
-    expect(page.locator("#view-library-video")).to_be_hidden()
+    expect(page.locator("#create-video-panel")).to_be_hidden()
 
 
 def test_an_empty_library_shows_an_empty_state(page, signed_in):
@@ -250,3 +246,27 @@ def test_clearing_the_seed_hides_the_preview(page, signed_in):
 
     page.locator("#lib-vid-seed-preview button").click()
     expect(page.locator("#lib-vid-seed-preview")).to_be_hidden()
+
+
+def test_leaving_the_video_panel_stops_the_polling(page, signed_in):
+    """A poller outliving its view keeps hitting the API for as long as the tab
+    is open, and throws into a page that has moved on. It used to stop by
+    comparing S.section to a literal section name; the panel is inside Create
+    now, so it asks whether the grid is actually on screen instead.
+
+    Force that predicate true and this test sees the polls continue.
+    """
+    signed_in()
+    _route_catalog(page)
+    polls = []
+    page.route("**/api/media?kind=video", lambda r: (
+        polls.append(1),
+        r.fulfill(status=200, content_type="application/json",
+                  body=json.dumps([_video_asset(status="pending", url=None)]))))
+    open_create(page, "video")
+    expect(page.locator("#library-video-grid")).to_contain_text("Generating")
+
+    open_create(page, "post")
+    settled = len(polls)
+    page.wait_for_timeout(6000)          # more than one poll interval
+    assert len(polls) == settled, f"{len(polls) - settled} poll(s) after leaving"

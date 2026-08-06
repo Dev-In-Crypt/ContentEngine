@@ -31,19 +31,16 @@ def _asset(**over) -> dict:
     return MediaAssetDetail(**fields).model_dump(mode="json")
 
 
-def test_the_photos_tab_is_hidden_from_a_business_account(page, signed_in):
-    signed_in(account_type="business")
-    expect(page.locator('[data-section="library-images"]')).to_be_hidden()
-
-
-def test_switching_to_photos_hides_every_other_view(page, signed_in):
-    """The exact defect a duplicated view-id list produces: a section shown
-    without every other one actually hiding."""
+def test_switching_to_photos_hides_the_other_modes(page, signed_in):
+    """The exact defect a duplicated hide-list produces: one panel shown
+    without the others actually hiding. Photos stopped being a section in 3.5,
+    so the guard moved down a level with it — and it is still needed there."""
     signed_in()
     open_create(page, "photo")
-    expect(page.locator("#view-create")).to_be_hidden()
+    expect(page.locator("#create-post-panel")).to_be_hidden()
+    expect(page.locator("#create-video-panel")).to_be_hidden()
     open_create(page, "post")
-    expect(page.locator("#view-library-images")).to_be_hidden()
+    expect(page.locator("#create-photo-panel")).to_be_hidden()
 
 
 def test_an_empty_library_shows_an_empty_state_not_a_blank_grid(page, signed_in):

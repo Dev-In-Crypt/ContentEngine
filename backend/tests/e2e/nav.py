@@ -37,19 +37,12 @@ _SETTINGS_BUTTON = {
     "rules": "biz-rules",
 }
 
-#: Create mode → today's button. Becomes a mode switch inside Create in 3.5.
-_CREATE_BUTTON = {
-    "post": "create",
-    "photo": "library-images",
-    "video": "library-video",
-}
-
-#: Create mode → the container that must be on screen once we arrive. Kept
-#: separate from the button map because after 3.5 the two stop coinciding.
+#: Create mode → the panel that must be on screen once we arrive. Photo and
+#: Video stopped being sections in 3.5; they are shapes of the same act.
 _CREATE_VIEW = {
-    "post": "#view-create",
-    "photo": "#view-library-images",
-    "video": "#view-library-video",
+    "post": "#create-post-panel",
+    "photo": "#create-photo-panel",
+    "video": "#create-video-panel",
 }
 
 
@@ -80,7 +73,8 @@ def open_create(page, mode: str = "post") -> None:
     entry, and a test that starts asserting before the container is visible races
     the first render.
     """
-    _click(page, _CREATE_BUTTON[mode])
+    _click(page, "create")
+    page.locator(f'#create-modes [data-create-mode="{mode}"]').click()
     expect(page.locator(_CREATE_VIEW[mode])).to_be_visible()
 
 

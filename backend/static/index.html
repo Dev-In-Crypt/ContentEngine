@@ -75,6 +75,9 @@
     .set-btn{ color:var(--muted); transition:background .12s,color .12s; }
     .set-btn:hover{ background:var(--accent-dim); color:var(--text); }
     .set-btn.set-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
+    .mode-btn{ color:var(--muted); transition:background .12s,color .12s; }
+    .mode-btn:hover{ background:var(--accent-dim); color:var(--text); }
+    .mode-btn.mode-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
     /* Business vs Creator app-shell: one engine, two experiences (gated on account_type) */
     .business-only{ display:none; }
     body[data-account-type="business"] .business-only{ display:block; }
@@ -409,8 +412,6 @@
     <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▦ Calendar</button>
     <button data-section="feed" onclick="setSection('feed')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▤ Feed</button>
     <button data-section="analytics" onclick="setSection('analytics')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Analytics</button>
-    <button data-section="library-images" onclick="setSection('library-images')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Photos</button>
-    <button data-section="library-video" onclick="setSection('library-video')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Video</button>
     <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
     <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
     <button data-section="biz-drafts" onclick="setSection('biz-drafts')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Drafts</button>
@@ -421,6 +422,75 @@
 
   <!-- ===== CREATE VIEW (wizard) ===== -->
   <div id="view-create" class="space-y-8">
+
+  <!-- One question, three shapes of answer. Photos and Video used to be their
+       own top-level sections; they are formats of the same act — making
+       something — so they live here, and the library grid under each generate
+       form IS the library. -->
+  <div id="create-modes" class="flex gap-1">
+    <button data-create-mode="post" onclick="setCreateMode('post')" class="mode-btn px-3 py-1.5 rounded-lg text-sm">Post</button>
+    <button data-create-mode="photo" onclick="setCreateMode('photo')" class="mode-btn px-3 py-1.5 rounded-lg text-sm">Photo</button>
+    <button data-create-mode="video" onclick="setCreateMode('video')" class="mode-btn px-3 py-1.5 rounded-lg text-sm">Video</button>
+  </div>
+
+  <div id="create-photo-panel" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Photos</h2>
+      <p class="text-xs text-gray-400 mt-1">Generate an image on its own, or upload one — then use it in any post later. Nothing here belongs to a post until you put it in one.</p>
+      <div class="mt-4 flex flex-col sm:flex-row gap-2">
+        <input id="lib-img-prompt" type="text" placeholder="Describe the image you want"
+          class="ce-input flex-1 px-4 py-3" />
+        <button id="lib-img-generate-btn" onclick="generateLibraryImage()" class="ce-btn px-5 py-3 text-sm whitespace-nowrap">Generate</button>
+        <label class="ce-btn-ghost px-5 py-3 text-sm whitespace-nowrap cursor-pointer text-center">
+          Upload
+          <input id="lib-img-upload-input" type="file" multiple accept="image/jpeg,image/png,image/webp"
+            class="hidden" onchange="uploadToLibrary(event, 'image')" />
+        </label>
+      </div>
+      <p id="lib-img-status" class="hidden text-sm text-gray-400 mt-2"></p>
+      <div id="library-image-grid" class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+    </div>
+  </div>
+
+  <div id="create-video-panel" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Video</h2>
+      <p class="text-xs text-gray-400 mt-1">Generate a short video from a prompt, or animate a photo from your library — then use it as a Reel later. Billed per second by Kling, unlike a photo.</p>
+
+      <div class="mt-4 space-y-2">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <textarea id="lib-vid-prompt" rows="2" placeholder="Describe the video you want"
+            class="ce-input flex-1 px-4 py-3"></textarea>
+          <button id="lib-vid-idea-btn" onclick="suggestVideoIdea()" class="ce-btn-ghost px-4 py-3 text-sm whitespace-nowrap">✨ Suggest an idea</button>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center text-sm">
+          <select id="lib-vid-model" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs"></select>
+          <select id="lib-vid-duration" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs">
+            <option value="5">5s</option>
+            <option value="10">10s</option>
+          </select>
+          <select id="lib-vid-aspect" class="ce-input px-2 py-1.5 text-xs">
+            <option value="9:16" selected>9:16</option>
+            <option value="16:9">16:9</option>
+            <option value="1:1">1:1</option>
+          </select>
+          <button id="lib-vid-seed-btn" onclick="openLibraryPicker('video-seed')" class="ce-btn-ghost px-3 py-1.5 text-xs">Animate a photo</button>
+          <span id="lib-vid-seed-preview" class="hidden text-xs text-gray-400 flex items-center gap-1">
+            <img id="lib-vid-seed-thumb" class="w-8 h-8 rounded object-cover" alt="Seed photo" />
+            <button onclick="clearVideoSeed()" class="text-gray-500 hover:text-gray-300">✕</button>
+          </span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="lib-vid-generate-btn" onclick="generateLibraryVideo()" class="ce-btn px-5 py-2.5 text-sm">Generate</button>
+          <span id="lib-vid-cost" class="text-xs text-gray-500"></span>
+        </div>
+      </div>
+      <p id="lib-vid-status" class="hidden text-sm text-gray-400 mt-2"></p>
+      <div id="library-video-grid" class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+    </div>
+  </div>
+
+  <div id="create-post-panel" class="space-y-8">
 
   <!-- ===== STEP INDICATOR ===== -->
   <div class="flex items-center justify-center gap-2 select-none">
@@ -868,6 +938,7 @@
     <div id="toast" class="hidden fixed bottom-6 right-6 bg-gray-800 border border-gray-700 rounded-xl px-5 py-3 shadow-xl text-sm"></div>
   </section>
 
+  </div><!-- /#create-post-panel -->
   </div><!-- /#view-create -->
 
   <!-- ===== CALENDAR VIEW ===== -->
@@ -1169,63 +1240,8 @@
   </div>
 
   <!-- ===== LIBRARY: Photos (standalone media, not tied to any post) ===== -->
-  <div id="view-library-images" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Photos</h2>
-      <p class="text-xs text-gray-400 mt-1">Generate an image on its own, or upload one — then use it in any post later. Nothing here belongs to a post until you put it in one.</p>
-      <div class="mt-4 flex flex-col sm:flex-row gap-2">
-        <input id="lib-img-prompt" type="text" placeholder="Describe the image you want"
-          class="ce-input flex-1 px-4 py-3" />
-        <button id="lib-img-generate-btn" onclick="generateLibraryImage()" class="ce-btn px-5 py-3 text-sm whitespace-nowrap">Generate</button>
-        <label class="ce-btn-ghost px-5 py-3 text-sm whitespace-nowrap cursor-pointer text-center">
-          Upload
-          <input id="lib-img-upload-input" type="file" multiple accept="image/jpeg,image/png,image/webp"
-            class="hidden" onchange="uploadToLibrary(event, 'image')" />
-        </label>
-      </div>
-      <p id="lib-img-status" class="hidden text-sm text-gray-400 mt-2"></p>
-      <div id="library-image-grid" class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
-    </div>
-  </div>
 
   <!-- ===== LIBRARY: Video (Kling — text-to-video and image-to-video) ===== -->
-  <div id="view-library-video" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Video</h2>
-      <p class="text-xs text-gray-400 mt-1">Generate a short video from a prompt, or animate a photo from your library — then use it as a Reel later. Billed per second by Kling, unlike a photo.</p>
-
-      <div class="mt-4 space-y-2">
-        <div class="flex flex-col sm:flex-row gap-2">
-          <textarea id="lib-vid-prompt" rows="2" placeholder="Describe the video you want"
-            class="ce-input flex-1 px-4 py-3"></textarea>
-          <button id="lib-vid-idea-btn" onclick="suggestVideoIdea()" class="ce-btn-ghost px-4 py-3 text-sm whitespace-nowrap">✨ Suggest an idea</button>
-        </div>
-        <div class="flex flex-wrap gap-2 items-center text-sm">
-          <select id="lib-vid-model" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs"></select>
-          <select id="lib-vid-duration" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs">
-            <option value="5">5s</option>
-            <option value="10">10s</option>
-          </select>
-          <select id="lib-vid-aspect" class="ce-input px-2 py-1.5 text-xs">
-            <option value="9:16" selected>9:16</option>
-            <option value="16:9">16:9</option>
-            <option value="1:1">1:1</option>
-          </select>
-          <button id="lib-vid-seed-btn" onclick="openLibraryPicker('video-seed')" class="ce-btn-ghost px-3 py-1.5 text-xs">Animate a photo</button>
-          <span id="lib-vid-seed-preview" class="hidden text-xs text-gray-400 flex items-center gap-1">
-            <img id="lib-vid-seed-thumb" class="w-8 h-8 rounded object-cover" alt="Seed photo" />
-            <button onclick="clearVideoSeed()" class="text-gray-500 hover:text-gray-300">✕</button>
-          </span>
-        </div>
-        <div class="flex items-center gap-3">
-          <button id="lib-vid-generate-btn" onclick="generateLibraryVideo()" class="ce-btn px-5 py-2.5 text-sm">Generate</button>
-          <span id="lib-vid-cost" class="text-xs text-gray-500"></span>
-        </div>
-      </div>
-      <p id="lib-vid-status" class="hidden text-sm text-gray-400 mt-2"></p>
-      <div id="library-video-grid" class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
-    </div>
-  </div>
 
   <!-- ===== BUSINESS: Sources ===== -->
   <div id="view-biz-sources" class="hidden space-y-4">
@@ -2752,6 +2768,7 @@ function goStep(n) {
 
 // Header logo → back to the Create section (works from Account/keys/Calendar/etc.).
 function goHome() {
+  S.createMode = 'post';
   setSection('create');
   showStep(1);
 }
@@ -4253,6 +4270,7 @@ async function openPost(postId) {
     if (!res.ok) throw new Error('Load failed');
     const post = await res.json();
     S.postId = post.id;
+    S.createMode = 'post';
     setView('create');
     renderPreview(post);
     showStep(4);
@@ -4640,12 +4658,46 @@ async function saveXSettings() {
   finally { if (btn) { btn.disabled = false; btn.textContent = prev; } }
 }
 
+/** Which of Create's three shapes is on screen. Set only through
+ *  setCreateMode, so the buttons and the panels cannot disagree. */
+function setCreateMode(mode) {
+  S.createMode = mode || 'post';
+  applyCreateMode();
+}
+
+async function applyCreateMode() {
+  const mode = S.createMode || 'post';
+  document.querySelectorAll('#create-modes .mode-btn').forEach(b =>
+    b.classList.toggle('mode-active', b.dataset.createMode === mode));
+  document.getElementById('create-post-panel').classList.toggle('hidden', mode !== 'post');
+  document.getElementById('create-photo-panel').classList.toggle('hidden', mode !== 'photo');
+  document.getElementById('create-video-panel').classList.toggle('hidden', mode !== 'video');
+  if (mode === 'photo') await loadLibrary('image');
+  if (mode === 'video') {
+    await loadVideoModels();
+    await loadLibrary('video');
+    startVideoPolling();
+    startPublishJobPolling();
+  }
+}
+
+/** Is the video grid actually on screen?
+ *
+ *  What the pollers used to ask was `S.section === 'library-video'`, which is
+ *  the same question only while the video grid is its own section. Asking the
+ *  DOM instead survives every move of it — and fixes a bug that was already
+ *  there: opening the composer's video card while a render was in flight left
+ *  S.section elsewhere and silently stopped the poll. */
+function videoGridVisible() {
+  const el = document.getElementById('create-video-panel');
+  return !!el && !el.classList.contains('hidden');
+}
+
 // ===== SIDEBAR SECTIONS =====
 function setSection(sec) {
   S.section = sec;
   const map = { create:'view-create', calendar:'view-calendar', feed:'view-grid',
-                analytics:'view-analytics', 'library-images':'view-library-images',
-                'library-video':'view-library-video',
+                analytics:'view-analytics',
                 settings:'view-settings',
                 'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
                 'biz-drafts':'view-biz-drafts', 'biz-analytics':'view-biz-analytics',
@@ -4660,8 +4712,7 @@ function setSection(sec) {
   if (sec === 'calendar') renderCalendar();
   else if (sec === 'feed') loadGrid();
   else if (sec === 'analytics') loadAnalytics();
-  else if (sec === 'library-images') loadLibrary('image');
-  else if (sec === 'library-video') { loadVideoModels(); loadLibrary('video'); startVideoPolling(); startPublishJobPolling(); }
+  else if (sec === 'create') applyCreateMode();
   else if (sec === 'settings') loadAdmin();
   else if (sec === 'biz-sources') loadSources();
   else if (sec === 'biz-leads') loadLeads();
@@ -4923,7 +4974,7 @@ let _videoPollSignature = null;
 function startVideoPolling() {
   if (_videoPollTimer) return;
   _videoPollTimer = setInterval(async () => {
-    if (S.section !== 'library-video') { stopVideoPolling(); return; }
+    if (!videoGridVisible()) { stopVideoPolling(); return; }
     const res = await apiFetch(`${API}/api/media?kind=video`).catch(() => null);
     if (!res || !res.ok) return;
     const assets = await res.json();
@@ -5249,7 +5300,7 @@ function startPublishJobPolling() {
       // Only reload the grid when there's an actual job to reflect — an empty
       // list (the common case) has nothing new to show, and reloading anyway
       // races the grid's own independent load right after entering the tab.
-      if (jobs.length && S.section === 'library-video') loadLibrary('video');
+      if (jobs.length && videoGridVisible()) loadLibrary('video');
       updatePostEditorChrome();
     }
     if (!jobs.some(j => _PUB_JOB_ACTIVE.has(j.status))) stopPublishJobPolling();
