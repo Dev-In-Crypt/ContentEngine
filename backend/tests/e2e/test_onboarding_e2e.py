@@ -1,145 +1,203 @@
-"""The first-run wizard, driven by a real browser.
+"""First-run setup: three questions and a post, on a real screen.
 
-Every assertion here corresponds to something that was broken in the code at some
-point and was caught by hand rather than by a test: a step advancing when its
-input was empty, a success line wiped by the re-render that advanced it, a
-checklist claiming more than it knew.
+It was a modal over the app: four steps that asked for a niche, an AI key and
+publishing credentials before showing anything — precisely the three things the
+UX document says not to ask for. The key moves to the moment generation runs out
+(phase 6) and the credentials to the first publish, which leaves three
+questions worth asking and one thing worth showing.
+
+A real screen rather than an overlay, and that is not cosmetic. The modal's
+backdrop covered the app and silently ate the first click of every test that
+forgot it — a hazard documented at length in two fixtures and worked around in
+four files. A screen has nothing behind it to mis-click.
+
+Two things here are guards rather than layout. Escape must NOT dismiss this
+(it is a screen, and there is a visible way out), and the "where did I stop"
+key is namespaced by account — the old one was global, so two accounts in one
+browser shared a verdict about whether setup had been done.
 """
 import pytest
 from playwright.sync_api import expect
 
+from tests.e2e.nav import dismiss_onboarding, open_onboarding
+
 pytestmark = pytest.mark.e2e
 
-WIZARD = "#onboarding-modal"
+SCREEN = "#onboarding-screen"
 
 
-def _progress(page) -> str:
-    """A one-shot read, for asserting the wizard has NOT moved."""
-    return page.locator("#onb-progress").inner_text()
+def _state(page):
+    return page.evaluate("localStorage.getItem('onboarding:' + S.user.id)")
 
 
-def _expect_step(page, n: int, total: int = 4) -> None:
-    """Wait until the wizard is really on step `n`.
+def _account_type(page):
+    return page.evaluate("S.user.account_type")
 
-    The Continue handler is async: click() returns once the click is dispatched,
-    not once the save it fires has come back. It disables #onb-primary while it
-    waits, so clicking Continue again is naturally safe — but Skip is a separate
-    button that stays enabled, so clicking it straight after races the request in
-    flight. Waiting on the counter is what makes a sequence of steps
-    deterministic instead of a bet on how fast the machine is.
+
+def _settled(page):
+    """Wait for the boot to finish before asserting that setup did NOT appear.
+
+    The screen starts hidden in the markup and `maybeStartOnboarding` runs after
+    four awaited loads, so a bare `to_be_hidden()` passes on its first check —
+    before the app has had the chance to show it. That is a test that passes for
+    the wrong reason, and it did: the mutation that removes the "already done"
+    check went straight through it.
     """
-    expect(page.locator("#onb-progress")).to_have_text(f"Step {n} of {total}")
+    page.wait_for_load_state("networkidle")
 
 
-def test_the_wizard_greets_a_brand_new_creator(page, signup):
+# ── screen 1: what do you run ───────────────────────────────────────────────
+
+def test_a_brand_new_account_lands_on_the_first_question(page, signup):
     signup()
-    expect(page.locator(WIZARD)).to_be_visible()
-    expect(page.locator("#onb-title")).to_contain_text("brand")
-    assert _progress(page) == "Step 1 of 4"
-    expect(page.locator("#onb-back")).to_be_hidden()
+    expect(page.locator(SCREEN)).to_be_visible()
+    expect(page.locator("#onb-s1")).to_be_visible()
+    for choice in ("creator", "business", "agency"):
+        expect(page.locator(f'[data-onb-type="{choice}"]')).to_be_visible()
 
 
-def test_a_business_account_gets_its_own_steps(page, signup):
-    signup(account_type="business")
-    expect(page.locator(WIZARD)).to_be_visible()
-    expect(page.locator("#onb-title")).to_contain_text("AI model")
-    assert _progress(page) == "Step 1 of 3"
-
-
-def test_an_empty_niche_does_not_advance(page, signup):
+def test_choosing_your_own_channel_moves_on_without_a_reload(page, signup):
+    """creator↔agency needs no reboot — only crossing the business boundary
+    changes which shell the app bootstraps into."""
     signup()
-    page.locator("#onb-primary").click()
-    expect(page.locator("#onb-result")).to_contain_text("Add your niche")
-    assert _progress(page) == "Step 1 of 4"
+    page.locator('[data-onb-type="creator"]').click()
+    expect(page.locator("#onb-s2")).to_be_visible()
+    assert _account_type(page) == "creator"
 
 
-def test_the_brand_step_saves_and_moves_on(page, signup):
+def test_choosing_clients_accounts_records_an_agency(page, signup):
+    """The signup form only ever offered two doors, so this is the first place
+    in the product where somebody can say they run clients' accounts — and the
+    agency shell has been waiting since 3.9."""
     signup()
-    page.locator("#onb-niche").fill("Artisan bakery")
-    page.locator("#onb-primary").click()
-    expect(page.locator("#onb-title")).to_contain_text("AI model")
-    assert _progress(page) == "Step 2 of 4"
-    # OpenRouter is preselected so a new user has one decision, not three.
-    expect(page.locator("#wiz-ai-provider")).to_have_value("openrouter")
-    assert page.locator("#wiz-ai-model").input_value() != ""
+    page.locator('[data-onb-type="agency"]').click()
+    expect(page.locator("#onb-s2")).to_be_visible()
+    assert _account_type(page) == "agency"
+    assert page.evaluate("document.body.dataset.accountType") == "agency"
 
 
-def test_the_ai_step_refuses_to_advance_without_a_key(page, signup):
+# ── screen 2: your brand (manual form for now; the website field is 5.4) ────
+
+def test_the_brand_screen_will_not_continue_without_a_niche(page, signup):
+    """The one rule the old wizard had that is worth keeping: the post at the
+    end is written from this, and a blank profile produces a blank post."""
     signup()
-    page.locator("#onb-niche").fill("Artisan bakery")
-    page.locator("#onb-primary").click()
-    page.locator("#onb-primary").click()          # no key pasted
-    expect(page.locator("#onb-result")).to_contain_text("Paste your API key")
-    assert _progress(page) == "Step 2 of 4"
+    page.locator('[data-onb-type="creator"]').click()
+    page.locator("#onb-continue-brand").click()
+
+    expect(page.locator("#onb-s2")).to_be_visible()
+    expect(page.locator("#onb-brand-status")).to_contain_text("niche")
 
 
-def test_the_publishing_step_swaps_fields_per_network(page, signup):
+def test_a_saved_brand_moves_on_to_the_network(page, signup):
     signup()
-    page.locator("#onb-niche").fill("Artisan bakery")
-    page.locator("#onb-primary").click()
-    _expect_step(page, 2)                         # the brand save has landed
-    page.locator("#onb-skip").click()             # past the AI key
-    expect(page.locator("#onb-title")).to_contain_text("place to post")
-    expect(page.locator('[data-wiz-cred="x_api_key"]')).to_be_visible()
-    page.locator("#onb-body").get_by_role("button", name="Instagram").click()
-    expect(page.locator('[data-wiz-cred="instagram_access_token"]')).to_be_visible()
-    expect(page.locator('[data-wiz-cred="x_api_key"]')).to_have_count(0)
+    page.locator('[data-onb-type="creator"]').click()
+    page.locator("#onb-niche").fill("Sourdough baking")
+    page.locator("#onb-audience").fill("Home bakers")
+    page.locator("#onb-continue-brand").click()
+
+    expect(page.locator("#onb-s3")).to_be_visible()
+    assert page.evaluate("S.profile && S.profile.niche") == "Sourdough baking"
 
 
-def test_the_final_checklist_reports_only_what_is_true(page, signup):
+# ── screen 3: one network ───────────────────────────────────────────────────
+
+def test_picking_a_network_moves_on(page, signup):
     signup()
-    page.locator("#onb-niche").fill("Artisan bakery")
-    page.locator("#onb-primary").click()
-    _expect_step(page, 2)                         # the brand save has landed
-    page.locator("#onb-skip").click()
-    _expect_step(page, 3)
-    page.locator("#onb-skip").click()
-    _expect_step(page, 4)
-    body = page.locator("#onb-body").inner_text()
-    assert "✅ Brand profile" in body
-    assert "○ AI key saved" in body               # skipped, so not claimed
+    page.locator('[data-onb-type="creator"]').click()
+    page.locator("#onb-niche").fill("Sourdough baking")
+    page.locator("#onb-continue-brand").click()
+    page.locator('[data-onb-net="x"]').click()
+
+    expect(page.locator("#onb-s4")).to_be_visible()
+    assert page.evaluate("S.platform") == "x"
 
 
-def test_closing_the_wizard_keeps_it_closed_but_setup_guide_reopens_it(page, signup):
+def test_skipping_the_network_still_moves_on(page, signup):
+    """"I'll skip" has to work, or it is not a skip. The default network is the
+    one the composer already has."""
     signup()
-    page.get_by_text("Close setup").click()
-    expect(page.locator(WIZARD)).to_be_hidden()
+    page.locator('[data-onb-type="creator"]').click()
+    page.locator("#onb-niche").fill("Sourdough baking")
+    page.locator("#onb-continue-brand").click()
+    page.locator("#onb-skip-net").click()
+
+    expect(page.locator("#onb-s4")).to_be_visible()
+
+
+# ── leaving, and coming back ────────────────────────────────────────────────
+
+def test_leaving_setup_puts_you_in_the_app(page, signup):
+    signup()
+    page.locator("#onb-later").click()
+    expect(page.locator(SCREEN)).to_be_hidden()
+    expect(page.locator("#view-create")).to_be_visible()
+    assert _state(page) == "done"
+
+
+def test_escape_does_not_dismiss_the_setup_screen(page, signup):
+    """A screen is not a modal. Escape closing it would leave a half-configured
+    account in the app with no sign that anything was skipped — and the reason
+    it would happen is habit: every other overlay in this file is registered
+    with the Escape handler."""
+    signup()
+    expect(page.locator(SCREEN)).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator(SCREEN)).to_be_visible()
+
+
+def test_an_interrupted_setup_resumes_where_it_stopped(page, signup):
+    """Written on ENTRY to each screen, so a crash or a refresh resumes where the
+    user actually was rather than where they last succeeded."""
+    signup()
+    page.locator('[data-onb-type="creator"]').click()
+    expect(page.locator("#onb-s2")).to_be_visible()
+    assert _state(page) == "2"
 
     page.reload()
-    expect(page.locator(WIZARD)).to_be_hidden()   # dismissal is remembered
-
-    # The guide used to be filed inside the credentials page. It is in the
-    # avatar menu now — reachable from every screen, which is what a first-run
-    # guide needs to be.
-    page.locator("#avatar-btn").click()
-    page.locator("#avatar-menu").get_by_text("Setup guide").click()
-    expect(page.locator(WIZARD)).to_be_visible()
+    expect(page.locator(SCREEN)).to_be_visible()
+    expect(page.locator("#onb-s2")).to_be_visible()
 
 
-def test_a_returning_account_with_a_profile_is_not_nagged(page, signup, live_server):
+def test_a_finished_setup_is_not_asked_again(page, signup):
     signup()
-    page.locator("#onb-niche").fill("Artisan bakery")
-    page.locator("#onb-primary").click()
-    page.evaluate("localStorage.removeItem('onboarding_done')")
-    page.goto(live_server)
-    # A brand is on file but no AI key, so it still has something to offer —
-    # and it must open on the step that is actually missing.
-    expect(page.locator(WIZARD)).to_be_visible()
-    expect(page.locator("#onb-title")).to_contain_text("brand")
+    page.locator("#onb-later").click()
+    page.reload()
+    _settled(page)
+    expect(page.locator(SCREEN)).to_be_hidden()
 
 
-def test_a_step_outcome_survives_the_move_to_the_next_step(page, signup):
-    """The advance re-renders the modal, and the re-render used to clear the very
-    line that said the step worked — so every success was invisible. Driven
-    through the page's own functions because the steps that produce a green
-    message need a provider key or the network."""
+def test_the_setup_guide_reopens_it_from_the_start(page, signed_in):
+    """Dismissed is not deleted: the avatar menu offers it again, and a second
+    pass starts at the beginning rather than at whatever screen was last seen."""
+    signed_in()
+    open_onboarding(page)
+    expect(page.locator("#onb-s1")).to_be_visible()
+
+
+def test_a_second_account_in_the_same_browser_gets_its_own_setup(page, signup):
+    """The old flag was global, so signing into a second account in the same
+    browser skipped setup entirely — the app decided you had already done it
+    because somebody else had."""
     signup()
+    page.locator("#onb-later").click()
+    expect(page.locator(SCREEN)).to_be_hidden()
+
+    page.evaluate("logout()")
+    signup()
+    expect(page.locator(SCREEN)).to_be_visible()
+
+
+def test_an_account_that_finished_the_old_wizard_is_not_asked_again(page, signup):
+    """Every existing user carries the old global flag. Without honouring it,
+    this release nags all of them once."""
+    signup()
+    page.locator("#onb-later").click()
     page.evaluate("""() => {
-        S.wiz.ids = ['brand', 'ai', 'publish', 'done'];
-        S.wiz.step = 1;
-        wizRender();
-        wizSay('✅ gpt-5 works.', true);
-        wizNext();
+      localStorage.removeItem('onboarding:' + S.user.id);
+      localStorage.setItem('onboarding_done', '1');
     }""")
-    expect(page.locator("#onb-progress")).to_have_text("Step 3 of 4")
-    expect(page.locator("#onb-result")).to_contain_text("gpt-5 works")
+
+    page.reload()
+    _settled(page)
+    expect(page.locator(SCREEN)).to_be_hidden()

@@ -140,7 +140,7 @@
             </select>
           </div>
           <button onclick="closeAvatarMenu(); openSettings('profiles')" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Settings</button>
-          <button onclick="closeAvatarMenu(); startSetupWizard()" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Setup guide</button>
+          <button onclick="closeAvatarMenu(); startOnboarding({restart: true})" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Setup guide</button>
           <button onclick="closeAvatarMenu(); toggleTheme()" id="theme-toggle" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Light / dark</button>
           <button id="logout-btn" onclick="logout()" class="hidden ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Log out</button>
         </div>
@@ -386,29 +386,86 @@
   </div>
 </div>
 
-<!-- ===== BRAND PROFILE ONBOARDING MODAL (first login, skippable) ===== -->
-<!-- ===== FIRST-RUN SETUP WIZARD =====
-     Bring-your-own-keys is our cheapest path to market and the user's steepest
-     first step: without an AI key nothing in the app does anything. This walks
-     that step instead of dropping the user in front of a wall of key fields. -->
-<div id="onboarding-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
-  <div class="ce-card p-6 max-w-lg w-full space-y-4 shadow-2xl" style="max-height:90vh;overflow-y:auto">
-    <div class="flex items-start justify-between gap-3">
-      <div class="text-lg font-semibold" id="onb-title"></div>
-      <div class="text-xs text-gray-500 shrink-0 pt-1" id="onb-progress"></div>
+<!-- ===== FIRST-RUN SETUP =====
+     A screen, not a modal, and that is not cosmetic: the overlay it replaces
+     covered the app and ate the first click of anything behind it. Three
+     questions and a post; the AI key moved to the moment generation runs out
+     and the publishing credentials to the first publish, because asking for
+     either before showing anything is what the UX document says not to do. -->
+<div id="onboarding-screen" class="hidden fixed inset-0 z-40 overflow-y-auto" style="background:var(--bg)">
+  <div class="max-w-xl mx-auto px-6 py-12 space-y-6">
+    <div class="flex items-center justify-between">
+      <div class="text-sm" style="color:var(--muted)" id="onb-progress"></div>
+      <button id="onb-later" onclick="closeOnboarding('later')" class="text-xs" style="color:var(--muted)">I'll do this later</button>
     </div>
-    <div class="h-1 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.1)">
-      <div id="onb-bar" class="h-full bg-purple-500 transition-all" style="width:0%"></div>
-    </div>
-    <div class="text-sm text-gray-400" id="onb-sub"></div>
-    <div id="onb-body" class="space-y-3"></div>
-    <div id="onb-result" class="text-xs"></div>
-    <div class="flex gap-2 pt-1">
-      <button id="onb-back" onclick="wizBack()" class="ce-btn-ghost px-3 py-2 text-sm hidden">← Back</button>
-      <button id="onb-primary" onclick="wizPrimary()" class="ce-btn flex-1 py-2 text-sm">Continue</button>
-      <button id="onb-skip" onclick="wizSkipStep()" class="ce-btn-ghost px-3 py-2 text-sm">Skip</button>
-    </div>
-    <button onclick="wizClose()" class="w-full text-xs text-gray-500 hover:text-gray-300">Close setup — I'll finish later</button>
+
+    <!-- 1. what do you run -->
+    <section id="onb-s1" class="hidden space-y-4">
+      <h1 class="text-2xl font-semibold">What are you posting for?</h1>
+      <p class="text-sm" style="color:var(--muted)">This decides which screens you get. You can change it later in Settings.</p>
+      <div class="grid gap-3">
+        <button data-onb-type="creator" onclick="onbPickType('creator')" class="ce-card p-4 text-left hover:opacity-90">
+          <div class="font-semibold">My own channel</div>
+          <div class="text-sm" style="color:var(--muted)">You write, you post. The composer and the calendar.</div>
+        </button>
+        <button data-onb-type="business" onclick="onbPickType('business')" class="ce-card p-4 text-left hover:opacity-90">
+          <div class="font-semibold">A business</div>
+          <div class="text-sm" style="color:var(--muted)">We watch your sources and draft from what happens. A person approves.</div>
+        </button>
+        <button data-onb-type="agency" onclick="onbPickType('agency')" class="ce-card p-4 text-left hover:opacity-90">
+          <div class="font-semibold">Clients' accounts</div>
+          <div class="text-sm" style="color:var(--muted)">Several brands, one login, plus a Team screen.</div>
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. your brand. The website field arrives in 5.4; this is the fallback
+         it falls back TO, so it ships first and stays. -->
+    <section id="onb-s2" class="hidden space-y-4">
+      <h1 class="text-2xl font-semibold">Tell us about your brand</h1>
+      <p class="text-sm" style="color:var(--muted)">Your first post gets written from this, so a couple of words is enough.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm mb-1" style="color:var(--muted)">What's your niche?</label>
+          <input id="onb-niche" type="text" maxlength="120" placeholder="Sourdough baking, B2B SaaS, personal finance…" class="ce-input w-full px-4 py-3" />
+        </div>
+        <div>
+          <label class="block text-sm mb-1" style="color:var(--muted)">Who's it for? <span class="text-xs">(optional)</span></label>
+          <input id="onb-audience" type="text" maxlength="120" placeholder="Home bakers, founders, first-time investors…" class="ce-input w-full px-4 py-3" />
+        </div>
+        <div>
+          <label class="block text-sm mb-1" style="color:var(--muted)">Brand name <span class="text-xs">(optional)</span></label>
+          <input id="onb-brand" type="text" maxlength="120" placeholder="Crumb &amp; Co" class="ce-input w-full px-4 py-3" />
+        </div>
+      </div>
+      <p id="onb-brand-status" class="hidden text-sm"></p>
+      <button id="onb-continue-brand" onclick="onbSaveBrand()" class="ce-btn w-full py-3">Continue</button>
+    </section>
+
+    <!-- 3. one network -->
+    <section id="onb-s3" class="hidden space-y-4">
+      <h1 class="text-2xl font-semibold">Where does it go first?</h1>
+      <p class="text-sm" style="color:var(--muted)">Pick one. The same idea can be written for the other later, from the post itself.</p>
+      <div class="grid gap-3">
+        <button data-onb-net="instagram" onclick="onbPickNetwork('instagram')" class="ce-card p-4 text-left hover:opacity-90">
+          <div class="font-semibold">&#128248; Instagram</div>
+          <div class="text-sm" style="color:var(--muted)">Carousels, single images, Reels.</div>
+        </button>
+        <button data-onb-net="x" onclick="onbPickNetwork('x')" class="ce-card p-4 text-left hover:opacity-90">
+          <div class="font-semibold">&#120143; X</div>
+          <div class="text-sm" style="color:var(--muted)">Short posts and threads.</div>
+        </button>
+      </div>
+      <button id="onb-skip-net" onclick="onbSkipNetwork()" class="w-full text-sm py-2" style="color:var(--muted)">I'll decide later</button>
+    </section>
+
+    <!-- 4. the first post. Filled in 5.5; the shell is here so the resume key
+         has a screen to name and the flow already ends somewhere. -->
+    <section id="onb-s4" class="hidden space-y-4">
+      <h1 class="text-2xl font-semibold">Your first post</h1>
+      <div id="onb-post" class="text-sm" style="color:var(--muted)">Ready when you are.</div>
+      <button id="onb-finish" onclick="closeOnboarding('done')" class="ce-btn w-full py-3">Start creating</button>
+    </section>
   </div>
 </div>
 
@@ -2300,7 +2357,7 @@ async function startApp() {
   // setSection simply hid every view, because none of them matched.
   if (S.user && S.user.account_type === 'business' && !S.user.is_local) {
     setSection('create');
-    maybeShowOnboarding();   // an empty workspace needs a key and a source, same as a creator
+    maybeStartOnboarding();   // an empty workspace needs a key and a source, same as a creator
     return;
   }
   setNetwork('instagram');   // default network tab → drives sections + platform
@@ -2311,7 +2368,7 @@ async function startApp() {
     await loadProfile();
     await loadXSettings();   // the composer gates "Long post" on this
     await loadPresets();     // saved composer settings, shown in step 2
-    maybeShowOnboarding();
+    maybeStartOnboarding();
   }
 }
 
@@ -3961,7 +4018,6 @@ document.addEventListener('keydown', e => {
 // ===== MODAL ACCESSIBILITY (focus trap + Esc-to-close + restore focus) =====
 const _MODAL_CLOSERS = {
   'need-key-modal': () => closeNeedKey(),
-  'onboarding-modal': () => wizClose(),
   'delete-account-modal': () => closeDeleteAccount(),
   'variations-modal': () => closeVariations(),
   'edit-slide-modal': () => closeEditSlide(),
@@ -6656,326 +6712,153 @@ function prefillComposerFromProfile() {
   updateConfigureSummary();
 }
 
-// ===== ONBOARDING (first login, skippable) =====
-// ===== FIRST-RUN SETUP WIZARD =====
-// The steps differ per product because the first useful action does: a creator
-// needs a brand and a composer, a Business workspace needs a source to watch.
-// Everything here drives the same endpoints as the settings screens — the wizard
-// is an order to do things in, not a second way to store them.
-S.wiz = { ids: [], step: 0, publishNet: 'x' };
+// ===== FIRST-RUN SETUP =====
+//
+// Three questions and a post, on a real screen rather than a modal. The screen
+// is deliberately NOT in setSection's map and NOT in _MODAL_CLOSERS: it is not
+// a section (the four nav buttons stay untouched) and Escape must not dismiss
+// it — a half-configured account dropped into the app with no sign anything was
+// skipped is worse than one more click.
 
-function wizStepIds() {
-  return (S.user && S.user.account_type === 'business')
-    ? ['ai', 'source', 'done']
-    : ['brand', 'ai', 'publish', 'done'];
+//: Where this account stopped. Namespaced by user id because the old global
+//: flag meant two accounts in one browser shared a verdict: sign into a second
+//: one and the app decided you had already done setup because somebody else had.
+function onbKey() {
+  return 'onboarding:' + ((S.user && S.user.id) || 'anon');
 }
 
-/** True once any AI provider key is stored — the real "can this account do
- *  anything at all" test, and the reason the wizard exists. */
-function wizHasAIKey() {
-  const keys = (S.ai && S.ai.keys) || {};
-  return Object.values(keys).some(k => k && k.set);
+const ONB_SCREENS = ['1', '2', '3', '4'];
+
+function onbState() {
+  try { return localStorage.getItem(onbKey()); } catch (e) { return null; }
 }
 
-async function maybeShowOnboarding() {
-  if (!S.user || S.user.is_local) return;          // cloud accounts only
-  if (localStorage.getItem('onboarding_done')) return;
-  await loadAISettings();                          // populates S.ai / S.aiCatalog
-  const needsBrand = S.user.account_type !== 'business' && !(S.profile && S.profile.niche);
-  if (wizHasAIKey() && !needsBrand) return;        // nothing left to walk them through
-  await startSetupWizard();
+function onbRemember(state) {
+  try { localStorage.setItem(onbKey(), state); } catch (e) { /* private mode */ }
 }
 
-/** Also reachable from Connections, so dismissing it isn't a one-way door. */
-async function startSetupWizard() {
-  if (!S.aiCatalog || !S.ai) await loadAISettings();
-  await ensureCreds(true);
-  if (S.user.account_type === 'business') await wizLoadSources();
-  S.wiz.ids = wizStepIds();
-  S.wiz.step = 0;
-  document.getElementById('onboarding-modal').classList.remove('hidden');
-  onModalOpen('onboarding-modal');
-  wizRender();
+/** Show one screen, and record that we got here.
+ *
+ *  Written on ENTRY rather than on success: a refresh or a crash should resume
+ *  where the user actually was, not where they last completed something. */
+function showOnboardingScreen(n) {
+  const want = String(n);
+  ONB_SCREENS.forEach(k => {
+    const el = document.getElementById('onb-s' + k);
+    if (el) el.classList.toggle('hidden', k !== want);
+  });
+  const idx = ONB_SCREENS.indexOf(want);
+  const prog = document.getElementById('onb-progress');
+  if (prog) prog.textContent = idx >= 0 ? `Step ${idx + 1} of ${ONB_SCREENS.length}` : '';
+  onbRemember(want);
 }
 
-function wizClose() {
-  localStorage.setItem('onboarding_done', '1');
-  document.getElementById('onboarding-modal').classList.add('hidden');
-  onModalClose();
+function startOnboarding(opts) {
+  const restart = !!(opts && opts.restart);
+  document.getElementById('onboarding-screen').classList.remove('hidden');
+  const at = restart ? '1' : (ONB_SCREENS.includes(onbState()) ? onbState() : '1');
+  // Prefill from the server rather than from whatever was typed last time: a
+  // second pass should show what is actually saved.
+  const prof = S.profile || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+  set('onb-niche', prof.niche);
+  set('onb-audience', prof.target_audience);
+  set('onb-brand', prof.brand_name);
+  showOnboardingScreen(at);
 }
 
-function wizCurrent() { return WIZ[S.wiz.ids[S.wiz.step]] || WIZ.done; }
-
-function wizRender() {
-  const step = wizCurrent();
-  const n = S.wiz.step + 1, total = S.wiz.ids.length;
-  document.getElementById('onb-title').textContent = step.title();
-  document.getElementById('onb-sub').textContent = step.sub();
-  document.getElementById('onb-progress').textContent = `Step ${n} of ${total}`;
-  document.getElementById('onb-bar').style.width = Math.round((n / total) * 100) + '%';
-  document.getElementById('onb-body').innerHTML = step.body();
-  document.getElementById('onb-result').textContent = '';
-  document.getElementById('onb-primary').textContent = step.primary;
-  document.getElementById('onb-back').classList.toggle('hidden', S.wiz.step === 0);
-  document.getElementById('onb-skip').classList.toggle('hidden', !step.skippable);
-  if (step.focus) setTimeout(() => { const el = document.getElementById(step.focus); if (el) el.focus(); }, 50);
+/** Offer setup to somebody who has not finished it. */
+async function maybeStartOnboarding() {
+  if (!S.user || S.user.is_local) return;     // cloud accounts only
+  const state = onbState();
+  if (state === 'done') return;
+  if (state === null) {
+    // One-release compatibility shim: every account that finished the old
+    // wizard carries a single global flag. Without honouring it once, this
+    // release nags all of them. Delete after a release or two.
+    let legacy = null;
+    try { legacy = localStorage.getItem('onboarding_done'); } catch (e) {}
+    if (legacy) { onbRemember('done'); return; }
+  }
+  startOnboarding({});
 }
 
-function wizSay(msg, ok) {
-  const el = document.getElementById('onb-result');
-  el.textContent = msg || '';
-  el.className = 'text-xs ' + (ok ? 'text-green-400' : 'text-red-400');
+/** Leave setup. `reason` is 'done' either way — an explicit "not now" is a
+ *  decision, and re-asking on the next load is how you teach people to distrust
+ *  an app. The avatar menu keeps it reachable. */
+function closeOnboarding(reason) {
+  onbRemember('done');
+  document.getElementById('onboarding-screen').classList.add('hidden');
+  if (reason !== 'stay') setSection('create');
 }
 
-function wizBack() { if (S.wiz.step > 0) { S.wiz.step--; wizRender(); } }
+// ── screen 1: what do you run ───────────────────────────────────────────────
 
-function wizNext() {
-  if (S.wiz.step >= S.wiz.ids.length - 1) { wizClose(); return; }
-  // Carry the outcome across the step change. Advancing re-renders, which used to
-  // wipe the line that says what just happened — so "Added — 11 leads" was set and
-  // erased in the same tick and the user never saw their step succeed.
-  const el = document.getElementById('onb-result');
-  const carry = { text: el.textContent, cls: el.className };
-  S.wiz.step++;
-  wizRender();
-  if (carry.text) { el.textContent = carry.text; el.className = carry.cls; }
-}
-
-function wizSkipStep() { wizSay(''); wizNext(); }
-
-async function wizPrimary() {
-  const btn = document.getElementById('onb-primary');
-  const prev = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Working…';
-  try {
-    if (await wizCurrent().run()) wizNext();
-  } catch (e) {
-    wizSay('❌ ' + e.message, false);
-  } finally { btn.disabled = false; btn.textContent = prev; }
-}
-
-const WIZ = {
-  // ---- 1. Brand (creators) -------------------------------------------------
-  brand: {
-    primary: 'Continue', skippable: true, focus: 'onb-niche',
-    title: () => '👋 Tell us about your brand',
-    sub: () => 'Twenty seconds, and every post you generate is written for your audience instead of nobody in particular. Changeable later under Account.',
-    body: () => `
-      <div>
-        <label class="block text-xs text-gray-400 mb-1">Niche / industry</label>
-        <input id="onb-niche" type="text" maxlength="120" placeholder="e.g. Artisan bakery, SaaS marketing, Travel"
-          value="${esc((S.profile && S.profile.niche) || '')}" class="ce-input w-full px-3 py-2 text-sm" />
-      </div>
-      <div>
-        <label class="block text-xs text-gray-400 mb-1">Target audience <span class="text-gray-600">(optional)</span></label>
-        <input id="onb-audience" type="text" maxlength="120" placeholder="e.g. Home bakers, Startup founders"
-          value="${esc((S.profile && S.profile.target_audience) || '')}" class="ce-input w-full px-3 py-2 text-sm" />
-      </div>
-      <div>
-        <label class="block text-xs text-gray-400 mb-1">Brand name <span class="text-gray-600">(optional)</span></label>
-        <input id="onb-brand" type="text" maxlength="120" placeholder="e.g. Crumb &amp; Co"
-          value="${esc((S.profile && S.profile.brand_name) || '')}" class="ce-input w-full px-3 py-2 text-sm" />
-      </div>`,
-    run: async () => {
-      const niche = document.getElementById('onb-niche').value.trim();
-      if (!niche) { wizSay('Add your niche, or press Skip.', false); return false; }
-      return await _putProfile(niche,
-        document.getElementById('onb-audience').value.trim(),
-        document.getElementById('onb-brand').value.trim(),
-        null);
-    },
-  },
-
-  // ---- 2. AI key (both) — the step that actually unblocks the product ------
-  ai: {
-    primary: 'Save and test', skippable: true, focus: 'wiz-ai-key',
-    title: () => 'Connect an AI model',
-    sub: () => 'You bring your own key, so you pay the model vendor directly and we never mark it up. Nothing in the app can generate until one is set.',
-    body: () => {
-      const provs = (S.aiCatalog && S.aiCatalog.text) || [];
-      const cur = wizAIProvider();
-      const meta = provs.find(p => p.key === cur);
-      const models = meta ? meta.models : [];
-      const model = wizAIModel(cur);
-      const keyInfo = (S.ai.keys && S.ai.keys[cur]) || {};
-      const opts = provs.map(p =>
-        `<option value="${esc(p.key)}"${p.key === cur ? ' selected' : ''}>${esc(p.label)}</option>`).join('');
-      const modelOpts = models.map(m =>
-        `<option value="${esc(m.id)}"${m.id === model ? ' selected' : ''}>${esc(m.label)} — $${m.price_in}/$${m.price_out} per M</option>`).join('');
-      return `
-        <select id="wiz-ai-provider" onchange="wizRender()" class="ce-input w-full px-3 py-2 text-sm">${opts}</select>
-        <select id="wiz-ai-model" class="ce-input w-full px-3 py-2 text-sm">${modelOpts}</select>
-        <input id="wiz-ai-key" type="password" autocomplete="off"
-          placeholder="${esc((meta && meta.label) || '')} API key — ${keyInfo.set ? 'set: ' + esc(keyInfo.masked || '••••') : 'not set'}"
-          class="ce-input w-full px-3 py-2 text-sm" />
-        ${meta ? `<div class="text-xs text-gray-500">${esc(meta.hint)}
-          <a href="${esc(safeUrl(meta.key_url))}" target="_blank" rel="noopener" class="underline">Get a key ↗</a></div>` : ''}
-        ${wizImageModelFor(cur) ? '<div class="text-xs text-gray-500">This key covers AI slide images too — we\'ll set that up for you.</div>' : ''}`;
-    },
-    run: async () => {
-      const provider = document.getElementById('wiz-ai-provider').value;
-      const model = document.getElementById('wiz-ai-model').value;
-      const key = document.getElementById('wiz-ai-key').value.trim();
-      if (!provider || !model) { wizSay('Pick a provider and a model.', false); return false; }
-      const meta = ((S.aiCatalog && S.aiCatalog.text) || []).find(p => p.key === provider);
-      const keyInfo = (S.ai.keys && S.ai.keys[provider]) || {};
-      if (!key && !keyInfo.set) { wizSay('Paste your API key — the link above opens the page that issues it.', false); return false; }
-      if (key && meta) {
-        const r = await apiFetch(`${API}/api/settings/credentials`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [meta.key_field]: key }),
-        });
-        if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || 'Saving the key failed'); }
-      }
-      // One key per provider serves text and images, so wire images too when the
-      // provider can do them — otherwise AI slides would fail for no visible reason.
-      const img = wizImageModelFor(provider);
-      const body = { text_provider: provider, text_model: model };
-      if (img) { body.image_provider = provider; body.image_model = img; }
-      const r2 = await apiFetch(`${API}/api/settings/ai`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+async function onbPickType(kind) {
+  const current = (S.user && S.user.account_type) || 'creator';
+  if (kind !== current) {
+    try {
+      const res = await apiFetch(`${API}/api/auth/account-type`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_type: kind }),
       });
-      if (!r2.ok) { const e = await r2.json().catch(()=>({})); throw new Error(e.detail || 'Save failed'); }
+      if (!res.ok) { toast("Couldn't save that — try again.", 'error'); return; }
+      S.user.account_type = (await res.json()).account_type || 'creator';
+    } catch (e) { toast('❌ ' + e.message, 'error'); return; }
 
-      const r3 = await apiFetch(`${API}/api/settings/ai/test`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'text' }),
-      });
-      const d = await r3.json().catch(() => ({}));
-      await loadAISettings();
-      await ensureCreds(true);
-      if (!d.ok) { wizSay('❌ ' + (d.message || 'The key did not work.'), false); return false; }
-      wizSay('✅ ' + (d.message || 'Works.'), true);
-      return true;
-    },
-  },
-
-  // ---- 3a. Publishing (creators, optional) --------------------------------
-  publish: {
-    primary: 'Save and test', skippable: true,
-    title: () => '📣 Connect a place to post',
-    sub: () => 'Optional. Without it you can still generate posts and export them — you just publish by hand.',
-    body: () => {
-      const net = S.wiz.publishNet;
-      const tab = (id, label) => `<button type="button" onclick="wizSetNet('${id}')"
-        class="flex-1 px-3 py-2 text-sm rounded-lg ${net === id ? 'bg-purple-600' : 'bg-gray-800 hover:bg-gray-700'}">${label}</button>`;
-      const fields = CRED_FIELDS.filter(f => f.scope === net).map(f => {
-        const info = (S.creds && S.creds[f.key]) || {};
-        return `<input data-wiz-cred="${esc(f.key)}" type="password" autocomplete="off" aria-label="${esc(f.label)}"
-            placeholder="${esc(f.label)} — ${info.set ? 'set: ' + esc(info.masked || '••••') : 'not set'}"
-            class="ce-input w-full px-3 py-2 text-sm" />
-          ${f.hint ? `<div class="text-xs text-gray-500 -mt-1 pl-1">${esc(f.hint)}</div>` : ''}`;
-      }).join('');
-      return `<div class="flex gap-2">${tab('x', '𝕏 / Twitter')}${tab('instagram', 'Instagram')}</div>
-        <div class="space-y-2">${fields}</div>`;
-    },
-    run: async () => {
-      const net = S.wiz.publishNet;
-      const body = {};
-      document.querySelectorAll('#onb-body input[data-wiz-cred]').forEach(el => {
-        const v = el.value.trim();
-        if (v) body[el.dataset.wizCred] = v;
-      });
-      if (Object.keys(body).length) {
-        const r = await apiFetch(`${API}/api/settings/credentials`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-        });
-        if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || 'Saving failed'); }
-        await ensureCreds(true);
-      }
-      const r2 = await apiFetch(`${API}/api/settings/publish/test`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: net }),
-      });
-      const d = await r2.json().catch(() => ({}));
-      if (!d.ok) { wizSay('❌ ' + (d.message || 'Could not connect.'), false); return false; }
-      wizSay('✅ ' + (d.message || 'Connected.'), true);
-      return true;
-    },
-  },
-
-  // ---- 3b. First source (business) ----------------------------------------
-  source: {
-    primary: 'Add source', skippable: true, focus: 'wiz-source-url',
-    title: () => '🔭 Add a source to watch',
-    sub: () => 'A changelog, blog or releases page. We check it on a schedule and turn real published news into drafts — nothing is invented.',
-    body: () => `<input id="wiz-source-url" type="url" placeholder="https://example.com/changelog"
-        class="ce-input w-full px-3 py-2 text-sm" />
-      <div class="text-xs text-gray-500">Works with GitHub releases, RSS/Atom feeds, and ordinary changelog pages.</div>`,
-    run: async () => {
-      const url = document.getElementById('wiz-source-url').value.trim();
-      if (!/^https?:\/\//i.test(url)) { wizSay('Enter a public http(s) URL.', false); return false; }
-      const r = await apiFetch(`${API}/api/business/sources`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
-      });
-      if (!r.ok) { wizSay('❌ Could not read that source. Check the URL is public.', false); return false; }
-      const d = await r.json();
-      await wizLoadSources();
-      wizSay(`✅ Added — ${d.leads_found} lead${d.leads_found === 1 ? '' : 's'} in the last 90 days.`, true);
-      return true;
-    },
-  },
-
-  // ---- 4. Done -------------------------------------------------------------
-  done: {
-    primary: 'Finish', skippable: false,
-    title: () => '🎉 You\'re set up',
-    sub: () => 'Here\'s where you stand. Anything still missing is in Connections whenever you want it.',
-    body: () => {
-      const business = S.user && S.user.account_type === 'business';
-      const row = (ok, label) =>
-        `<div class="text-sm ${ok ? 'text-green-400' : 'text-gray-400'}">${ok ? '✅' : '○'} ${esc(label)}</div>`;
-      const publishOk = ['x', 'instagram'].some(n =>
-        CRED_FIELDS.filter(f => f.scope === n).every(f => hasKey(f.key)));
-      return `<div class="space-y-1">
-        ${business ? '' : row(!!(S.profile && S.profile.niche), 'Brand profile')}
-        ${row(wizHasAIKey(), 'AI key saved')}
-        ${business ? row((S.sources || []).length > 0, 'A source to watch')
-                   : row(publishOk, 'A network to publish to (optional)')}
-      </div>`;
-    },
-    run: async () => {
-      wizClose();
-      if (S.user && S.user.account_type === 'business') setSection('biz-sources');
-      else { setSection('create'); }
-      return false;   // wizClose already dismissed it
-    },
-  },
-};
-
-function wizSetNet(net) { S.wiz.publishNet = net; wizRender(); }
-
-/** The Sources screen renders straight into the DOM without keeping the list, so
- *  the wizard's checklist fetches its own copy. */
-async function wizLoadSources() {
-  try {
-    const r = await apiFetch(`${API}/api/business/sources`);
-    S.sources = r.ok ? await r.json() : [];
-  } catch { S.sources = []; }
+    // Crossing the business boundary changes which shell the app bootstraps
+    // into, so reboot — the same move onProductSwitch already makes. The resume
+    // key is at '2' by now, so the reload lands back on the next question.
+    const crossed = (kind === 'business') !== (current === 'business');
+    if (crossed) { showOnboardingScreen('2'); location.reload(); return; }
+    // creator ↔ agency needs no reboot: it is the same shell plus a Settings tab.
+    renderUserChrome();
+  }
+  showOnboardingScreen('2');
 }
 
-/** Default to OpenRouter: one key reaches every vendor, so it is the single
- *  cheapest decision a new user can make. Their existing choice always wins. */
-function wizAIProvider() {
-  const sel = document.getElementById('wiz-ai-provider');
-  if (sel && sel.value) return sel.value;
-  const provs = (S.aiCatalog && S.aiCatalog.text) || [];
-  const cur = (S.ai && S.ai.text_provider) || '';
-  if (cur && provs.some(p => p.key === cur)) return cur;
-  return provs.some(p => p.key === 'openrouter') ? 'openrouter' : (provs[0] ? provs[0].key : '');
+// ── screen 2: your brand ────────────────────────────────────────────────────
+
+function onbBrandSay(msg, ok) {
+  const el = document.getElementById('onb-brand-status');
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.className = 'text-sm ' + (ok ? 'text-green-400' : 'text-yellow-300');
+  el.textContent = msg;
 }
 
-function wizAIModel(provider) {
-  const meta = ((S.aiCatalog && S.aiCatalog.text) || []).find(p => p.key === provider);
-  const models = meta ? meta.models : [];
-  const cur = (S.ai && S.ai.text_model) || '';
-  if (cur && models.some(m => m.id === cur)) return cur;
-  return models[0] ? models[0].id : '';
+async function onbSaveBrand() {
+  const niche = document.getElementById('onb-niche').value.trim();
+  if (!niche) {
+    // The one rule the old wizard had that is worth keeping: the post at the end
+    // is written from this, and a blank profile produces a blank post.
+    onbBrandSay('Add your niche — a couple of words is enough.', false);
+    return;
+  }
+  const btn = document.getElementById('onb-continue-brand');
+  const ok = await _putProfile(
+    niche,
+    document.getElementById('onb-audience').value.trim(),
+    document.getElementById('onb-brand').value.trim(),
+    btn);
+  if (ok === false) { onbBrandSay("Couldn't save that — try again.", false); return; }
+  showOnboardingScreen('3');
 }
 
-function wizImageModelFor(provider) {
-  const meta = ((S.aiCatalog && S.aiCatalog.image) || []).find(p => p.key === provider);
-  return meta && meta.models[0] ? meta.models[0].id : '';
+// ── screen 3: one network ───────────────────────────────────────────────────
+
+function onbPickNetwork(net) {
+  setNetwork(net === 'x' ? 'x' : 'instagram');
+  // setNetwork re-enters setSection, which is harmless underneath a full-screen
+  // overlay — but it also means the composer is already aimed correctly when the
+  // screen lifts.
+  showOnboardingScreen('4');
+}
+
+function onbSkipNetwork() {
+  // A skip that does nothing but move on. The composer already has a default,
+  // and picking one here is a convenience rather than a requirement.
+  showOnboardingScreen('4');
 }
 
 // ===== YOUR DATA: export + erasure =====
@@ -7036,7 +6919,7 @@ async function confirmDeleteAccount() {
     // Nothing left to be signed in to — drop the session before anything can
     // fire another request against an account that no longer exists.
     localStorage.removeItem('api_token');
-    localStorage.removeItem('onboarding_done');
+    try { localStorage.removeItem(onbKey()); } catch (e) {}
     document.getElementById('delete-account-modal').classList.add('hidden');
     onModalClose();
     alert('Your account and its data have been deleted.');

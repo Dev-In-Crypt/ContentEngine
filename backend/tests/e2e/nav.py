@@ -19,8 +19,8 @@ from playwright.sync_api import expect
 #: First-run setup: the container, and the control that leaves it. Both change
 #: shape in UX phase 5 (a modal becomes a full screen); nothing outside this
 #: module should name either.
-_ONBOARDING = "#onboarding-modal"
-_ONBOARDING_DISMISS = "Close setup"
+_ONBOARDING = "#onboarding-screen"
+_ONBOARDING_DISMISS = "I'll do this later"
 
 #: Destination → its nav button. Four of them, which is the whole point of
 #: phase 3; everything else is reached through `open_settings` or `open_create`.
@@ -127,9 +127,9 @@ def dismiss_onboarding(page) -> None:
     business, not every other screen's.
 
     This lived in four copies (the signed_in fixture and three in the account
-    file) because nav.py never held it. UX phase 5 replaces the modal with a
-    real screen, and the whole point of this module is that such a change costs
-    one function rather than a sweep.
+    file) because nav.py never held it. Phase 5 then replaced the modal with a
+    real screen — and the change cost these two constants, which is the whole
+    point of the module.
     """
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
