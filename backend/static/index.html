@@ -1931,17 +1931,41 @@ async function loadQueue() {
     own.innerHTML = '<div class="text-gray-500">Nothing waiting. Anything you make lands here until it goes out.</div>';
     return;
   }
-  const dot = { scheduled: '🟣', failed: '🔴', draft: '⚪', preview: '⚪' };
-  own.innerHTML = rows.map(p => {
-    const when = p.scheduled_at ? new Date(p.scheduled_at).toLocaleString() : '';
-    return `<div class="ce-card p-3 flex items-center gap-3 cursor-pointer" onclick="openPost('${esc(p.id)}')">
-      <span>${dot[p.status] || '⚪'}</span>${netBadge(p)}
-      <div class="flex-1 min-w-0">
-        <div class="text-gray-200 truncate">${esc(p.topic || 'post')}</div>
-        <div class="text-xs text-gray-500">${esc(p.status)}${when ? ' · ' + esc(when) : ''}${p.schedule_error ? ' · ' + esc(p.schedule_error) : ''}</div>
+  // One idea is one card, however many networks it went to. Collapsed by
+  // default because the common case is one thought going out; expandable
+  // because the siblings are separate posts with separate schedules and each
+  // has to be reachable.
+  own.innerHTML = groupPosts(rows).map(g => {
+    const st = groupStatus(g.posts);
+    const many = g.posts.length > 1;
+    const inner = many ? g.posts.map(p =>
+      `<div data-group-row class="hidden flex items-center gap-3 pl-6 py-1 cursor-pointer text-sm"
+            onclick="event.stopPropagation(); openPost('${esc(p.id)}')">
+        <span>${queueDot(p.status)}</span>${netBadge(p)}
+        <span class="text-gray-400">${esc(queueLine(p))}</span>
+      </div>`).join('') : '';
+    return `<div class="ce-card p-3">
+      <div class="flex items-center gap-3 cursor-pointer" onclick="openPost('${esc(g.primary.id)}')">
+        <span>${queueDot(st)}</span>${netBadges(g.posts)}
+        <div class="flex-1 min-w-0">
+          <div class="text-gray-200 truncate">${esc(g.primary.topic || 'post')}</div>
+          <div class="text-xs text-gray-500">${esc(queueLine(g.primary, st))}</div>
+        </div>
+        ${many ? `<button data-expand-group onclick="event.stopPropagation(); this.closest('.ce-card').querySelectorAll('[data-group-row]').forEach(r => r.classList.toggle('hidden'))" class="ce-btn-ghost px-2 py-1 text-xs">${g.posts.length} networks</button>` : ''}
       </div>
+      ${inner}
     </div>`;
   }).join('');
+}
+
+function queueDot(status) {
+  return ({ scheduled: '🟣', failed: '🔴', published: '🟢' })[status] || '⚪';
+}
+
+function queueLine(p, status) {
+  const when = p.scheduled_at ? new Date(p.scheduled_at).toLocaleString() : '';
+  return `${status || p.status}${when ? ' · ' + when : ''}`
+    + (p.schedule_error ? ' · ' + p.schedule_error : '');
 }
 
 async function loadDrafts() {
@@ -4530,6 +4554,33 @@ function _todayRef() { const d = new Date(); return { year: d.getFullYear(), mon
 // — a field /api/posts did not send. `undefined || 'instagram'` made the filter
 // a no-op on Instagram and a match against nothing on X, so switching networks
 // emptied the calendar, the feed grid and analytics. The field is sent now.
+//: Worst first. A collapsed card that says "scheduled" while one network failed
+//: is a lie the user acts on — they see it going out and never look again.
+const GROUP_STATUS_ORDER = ['failed', 'scheduled', 'preview', 'draft', 'published'];
+
+/** Sibling posts of one idea, newest group first.
+ *
+ *  Grouping is done here rather than on the server because `limit`/`offset`
+ *  count rows, not ideas — a server-side group would break paging — and because
+ *  two screens deliberately do NOT group (see loadGrid and loadAnalytics). */
+function groupPosts(rows) {
+  const byKey = new Map();
+  (rows || []).forEach(p => {
+    const key = p.variant_group_id || p.id;
+    if (!byKey.has(key)) byKey.set(key, { key, posts: [], primary: p });
+    byKey.get(key).posts.push(p);
+  });
+  return [...byKey.values()];
+}
+
+/** The status a whole group should report: the most actionable one. */
+function groupStatus(posts) {
+  for (const s of GROUP_STATUS_ORDER) {
+    if (posts.some(p => p.status === s)) return s;
+  }
+  return (posts[0] || {}).status || 'draft';
+}
+
 /** The glyphs for a group of sibling posts, one per network, deduped.
  *  Used by the collapsed group cards in the Queue. */
 function netBadges(posts) {
@@ -4578,8 +4629,12 @@ async function renderCalendar() {
     const cell = document.createElement('div');
     cell.className = 'min-h-[64px] bg-gray-800 rounded-lg p-1 text-left';
     let html = `<div class="text-[10px] text-gray-500">${day}</div>`;
-    (byDay[day] || []).forEach(p => {
-      html += `<div class="text-[10px] truncate cursor-pointer hover:text-purple-300" onclick="openPost('${p.id}')">${dot[p.status] || '⚪'}${netBadge(p)} ${esc(p.topic.slice(0,14))}</div>`;
+    // Grouped WITHIN the day, never across the month: siblings schedule
+    // independently, so one idea can legitimately sit on two dates and a
+    // group-level date would have to be invented — and be wrong on one of them.
+    groupPosts(byDay[day] || []).forEach(g => {
+      const st = groupStatus(g.posts);
+      html += `<div data-cal-entry class="text-[10px] truncate cursor-pointer hover:text-purple-300" onclick="openPost('${g.primary.id}')">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
     });
     cell.innerHTML = html;
     grid.appendChild(cell);
@@ -4593,6 +4648,11 @@ async function loadGrid() {
   // profile page — a 4:5 ring grid. A tweet in it wouldn't be "unfiltered",
   // it would be wrong. So it is a property of the view, not of a global
   // active-network setting.
+  //
+  // It is also why this screen needs NO grouping in phase 4: a variant group
+  // holds at most one Instagram post, so the filter already yields one tile per
+  // idea. Adding grouping here would be wrong, and dropping the filter would put
+  // a tweet in a simulated Instagram profile.
   const posts = S.posts.filter(p => (p.platform || 'instagram') === 'instagram');
   const c = document.getElementById('grid-container');
   document.getElementById('grid-empty').classList.toggle('hidden', posts.length > 0);
