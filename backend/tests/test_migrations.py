@@ -69,6 +69,8 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     # of one; `tone` is what its caption was written in, which nothing stored
     # before this phase.
     assert {"variant_group_id", "tone"} <= post_cols
+    # UX phase 5: posts written on OUR key rather than the account's own.
+    assert "free_generations_used" in cols
 
 
 def test_migrations_autostamp_preexisting_db(tmp_path):

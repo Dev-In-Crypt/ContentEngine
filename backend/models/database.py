@@ -68,6 +68,13 @@ class User(Base):
     # Plain column (no FK) to avoid a users<->managed_accounts create_all cycle; the
     # app clears it when the account is deleted.
     active_account_id = Column(String(36))
+    #: Posts this account has had written on OUR key rather than its own.
+    #: Onboarding (UX phase 5) ends on one, and phase 6 reads this to decide when
+    #: to ask for a key. The unit is the account and not the IP: per-IP alone
+    #: breaks a shared office and is defeated by a VPN, and the account is what
+    #: phase 6 bills against. Only services/free_generation.py may move it.
+    free_generations_used = Column(Integer, nullable=False, default=0,
+                                   server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     credentials = relationship("UserCredentials", back_populates="user",

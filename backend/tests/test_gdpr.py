@@ -269,6 +269,14 @@ def test_media_paths_do_not_include_another_owners_logo(sm, two):
     assert "/tmp/not-mine.png" not in asyncio.run(_go())
 
 
+def test_export_carries_the_free_post_allowance(sm, two):
+    """`_row` reflects over the table's columns, so a new column exports itself —
+    which is a property worth a test rather than a coincidence worth trusting.
+    How much of our money an account has spent is data about that account."""
+    data = _collect(sm, two["mine"]["user"])
+    assert "free_generations_used" in data["account"]
+
+
 def test_export_does_not_leak_the_password_hash(sm, two):
     data = _collect(sm, two["mine"]["user"])
     assert "password_hash" not in data["account"]
