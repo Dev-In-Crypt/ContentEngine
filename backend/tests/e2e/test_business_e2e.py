@@ -78,7 +78,7 @@ def test_the_navigation_is_four_buttons(page, signed_in):
     signed_in()
     for section in ("create", "calendar", "queue", "results"):
         expect(page.locator(f'[data-section="{section}"]')).to_be_visible()
-    assert page.locator("#section-nav .sec-btn:visible").count() == 4
+    expect(page.locator("#section-nav .sec-btn:visible")).to_have_count(4)
 
 
 def test_a_business_account_gets_the_same_shell(page, signed_in):

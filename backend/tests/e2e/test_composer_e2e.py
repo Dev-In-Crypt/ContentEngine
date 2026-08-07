@@ -282,7 +282,7 @@ def test_the_progress_line_says_how_far_along_it_is(page, signed_in, keyed):
     expect(page.locator("#progress-list")).to_contain_text("Image 1 of 2 ready")
     # The finished stage is ticked, the newest one is still spinning.
     expect(page.locator("#progress-list li").first).to_contain_text("✓")
-    assert page.locator("#progress-list [data-spin]").count() == 1
+    expect(page.locator("#progress-list [data-spin]")).to_have_count(1)
 
 
 def test_an_error_frame_offers_the_way_back_instead_of_a_dead_spinner(

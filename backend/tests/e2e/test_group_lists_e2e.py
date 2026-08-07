@@ -61,7 +61,7 @@ def test_two_networks_of_one_idea_are_one_card(page, signed_in):
            _post(id="p2", platform="x"))
     open_section(page, "queue")
 
-    assert page.locator("#queue-list > .ce-card").count() == 1
+    expect(page.locator("#queue-list > .ce-card")).to_have_count(1)
     card = page.locator("#queue-list > .ce-card").first
     expect(card).to_contain_text("Sourdough starter")
     expect(card).to_contain_text("📸")
@@ -74,7 +74,7 @@ def test_two_separate_ideas_stay_two_cards(page, signed_in):
            _post(id="p1", topic="Sourdough starter", variant_group_id="g1"),
            _post(id="p2", topic="Rye loaf", variant_group_id="g2"))
     open_section(page, "queue")
-    assert page.locator("#queue-list > .ce-card").count() == 2
+    expect(page.locator("#queue-list > .ce-card")).to_have_count(2)
 
 
 def test_a_group_card_reports_the_sibling_in_trouble(page, signed_in):
