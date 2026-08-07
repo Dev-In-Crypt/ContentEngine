@@ -137,6 +137,18 @@ def client(db_url):
     asyncio.run(eng.dispose())
 
 
+def _stored(client, post_id: str, column: str):
+    """Read a column off the row. `tone` is stored but never rendered, and the
+    group key is echoed back by the response — so asserting only on the response
+    would pass even if the column were never written."""
+    import asyncio
+
+    async def _go():
+        async with app.state.sessionmaker() as s:
+            return getattr(await s.get(PostModel, post_id), column)
+    return asyncio.run(_go())
+
+
 def _sse_events(resp) -> list[dict]:
     """TestClient buffers the stream, so the whole body is in .text."""
     return [
@@ -310,6 +322,38 @@ def test_generate_streams_progress_then_complete(client, generated_ids):
 
     # Persisted, not just streamed.
     assert client.get(f"/api/posts/{post_id}").status_code == 200
+
+
+def test_generate_assigns_a_variant_group(client, generated_ids):
+    """One idea, one group. A post nobody adapted is a group of one whose key is
+    its own id — so the Queue can group unconditionally instead of treating the
+    column as sometimes-meaningful."""
+    post_id = str(uuid.uuid4())
+    generated_ids.append(post_id)
+    client.fake_engine.generate_post.return_value = _generated(post_id)
+
+    res = client.post("/api/posts/generate", json={"topic": "AI trends", "format": "single"})
+    post = _sse_events(res)[-1]["post"]
+    assert post["variant_group_id"] == post_id
+
+    listed = client.get("/api/posts").json()
+    assert [p["variant_group_id"] for p in listed if p["id"] == post_id] == [post_id]
+    assert _stored(client, post_id, "variant_group_id") == post_id
+
+
+def test_generate_records_the_tone_it_was_written_in(client, generated_ids):
+    """The composer has always sent a tone and _persist has always dropped it,
+    so adapting a post to a second network would rewrite it as 'professional'
+    whatever the author picked."""
+    post_id = str(uuid.uuid4())
+    generated_ids.append(post_id)
+    client.fake_engine.generate_post.return_value = _generated(post_id)
+
+    res = client.post("/api/posts/generate",
+                      json={"topic": "AI trends", "format": "single", "tone": "casual"})
+    assert _sse_events(res)[-1]["type"] == "complete"
+    assert client.fake_engine.generate_post.call_args.kwargs["tone"] == "casual"
+    assert _stored(client, post_id, "tone") == "casual"
 
 
 def test_generate_streams_error_event_and_still_returns_200(client):

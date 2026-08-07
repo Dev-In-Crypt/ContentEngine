@@ -285,6 +285,10 @@ class PostPreview(BaseModel):
     cta: Optional[str]
     hook: Optional[str]
     platform: Platform = Platform.INSTAGRAM
+    #: Siblings of one idea share this key. A post nobody adapted is a group
+    #: of one keyed by its own id, so it is never null on a row created after
+    #: UX phase 4 — which is what lets the Queue group unconditionally.
+    variant_group_id: Optional[str] = None
     slides: list[SlidePreview]
     #: The rendered video, if this post has one on disk — so the composer can put
     #: the preview (and the publish button inside it) back after a reload instead
@@ -322,6 +326,10 @@ class PostSummary(BaseModel):
     #: guess ends up writing `p.platform || 'instagram'` at every call site —
     #: which is exactly how the SPA came to filter on a field nobody sent.
     platform: str = "instagram"
+    #: Siblings of one idea share this key. A post nobody adapted is a group
+    #: of one keyed by its own id, so it is never null on a row created after
+    #: UX phase 4 — which is what lets the Queue group unconditionally.
+    variant_group_id: Optional[str] = None
     thumb_url: Optional[str] = None      # first slide image, for grid/calendar
     scheduled_at: Optional[datetime] = None
     published_at: Optional[datetime] = None

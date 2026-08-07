@@ -137,6 +137,10 @@ def _to_preview(post: PostModel) -> PostPreview:
         cta=post.cta or "",
         hook=post.hook or "",
         platform=Platform(post.platform or "instagram"),
+        # Read straight through: the 4.1 backfill filled every existing row and
+        # _persist fills every new one, so a COALESCE here would only hide the
+        # day that stops being true.
+        variant_group_id=post.variant_group_id,
         slides=slides,
         video_url=video_url,
         text_model_used=post.text_model or "",
@@ -157,7 +161,14 @@ def _to_preview(post: PostModel) -> PostPreview:
 async def _persist(
     generated: GeneratedPost, db: AsyncSession, template_style: str = "branded_card",
     user_id: Optional[str] = None, managed_account_id: Optional[str] = None,
+    tone: Optional[str] = None,
 ) -> PostModel:
+    """The one place a Post row is built — the only one in api/, services/ or bot/.
+
+    That is why phase 4's two columns are filled here and nowhere else: every
+    creation path already runs through this function, so `variant_group_id`
+    cannot be NULL on a new row however the post was made.
+    """
     post_dir = UPLOADS_DIR / generated.id
     post_dir.mkdir(parents=True, exist_ok=True)
 
@@ -181,6 +192,12 @@ async def _persist(
         text_model=generated.text_model_used,
         image_model=generated.image_model_used,
         pillar=classify_pillar(generated.topic, generated.caption),
+        # A fresh idea is a group of one, keyed by its own id. Adapting to a
+        # second network copies this key rather than minting a new one.
+        variant_group_id=generated.id,
+        # NULL when the caller never offered a choice (the Business draft path),
+        # which is honest: nobody picked a tone, so there is none to preserve.
+        tone=tone,
     )
     db.add(db_post)
 
@@ -348,6 +365,7 @@ async def generate_post(
                     generated, db, body.template_style.value,
                     user_id=user.id,
                     managed_account_id=acct.id,
+                    tone=body.tone,
                 )
                 if body.plan_date is not None:
                     # A batch draft: pin it to its calendar date but leave it a
@@ -422,6 +440,10 @@ async def list_posts(
             format=p.format,
             status=PostStatus(p.status),
             platform=p.platform or "instagram",
+            # Built field by field, so widening the schema alone changes nothing
+            # here — the same trap that left `platform` and `published_url`
+            # unsent in phase 3. Read straight through, no COALESCE: see _to_preview.
+            variant_group_id=p.variant_group_id,
             thumb_url=thumb,
             scheduled_at=p.scheduled_at,
             published_at=p.published_at,
