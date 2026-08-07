@@ -25,7 +25,7 @@ from playwright.sync_api import expect
 
 from models.schemas import LeadOut
 
-from tests.e2e.nav import open_rules, open_section, open_settings
+from tests.e2e.nav import open_create, open_rules, open_section, open_settings
 
 pytestmark = pytest.mark.e2e
 
@@ -71,31 +71,66 @@ def _serve(page, pattern: str, payload):
 
 # ── The Business shell ───────────────────────────────────────────────────────
 
-def test_a_business_account_gets_the_business_navigation(page, signed_in):
-    """One engine, two products, split only by account_type. A business user
-    seeing "Create" — or a creator seeing "Leads" — is the whole split leaking."""
-    signed_in(account_type="business")
-    for section in ("biz-sources", "biz-leads", "biz-rules"):
-        expect(page.locator(f'[data-section="{section}"]')).to_be_visible()
-    for section in ("create", "calendar", "feed"):
-        expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
-    # Queue is shared: both products have work waiting, it is only made of
-    # different things. Its content is what differs, not its existence.
-    expect(page.locator('[data-section="queue"]')).to_be_visible()
-
-
-def test_a_creator_account_is_not_shown_the_business_screens(page, signed_in):
+def test_the_navigation_is_four_buttons(page, signed_in):
+    """The point of phase 3, stated as a test. Fourteen top-level buttons became
+    four; everything else is a tab, a mode or a view inside one of them. A
+    fifth button appearing here is the regression this guards."""
     signed_in()
-    expect(page.locator('[data-section="create"]')).to_be_visible()
-    expect(page.locator('[data-section="queue"]')).to_be_visible()
-    for section in ("biz-sources", "biz-leads", "biz-rules"):
-        expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
+    for section in ("create", "calendar", "queue", "results"):
+        expect(page.locator(f'[data-section="{section}"]')).to_be_visible()
+    assert page.locator("#section-nav .sec-btn:visible").count() == 4
+
+
+def test_a_business_account_gets_the_same_shell(page, signed_in):
+    """One engine, two products — but no longer two navigations. Business gets
+    the same buttons, minus the Calendar it has no use for; what differs is
+    what is inside them. Sources and Rules are Settings tabs now, so their old
+    top-level buttons must not exist for anybody."""
+    signed_in(account_type="business")
+    for section in ("create", "queue", "results"):
+        expect(page.locator(f'[data-section="{section}"]')).to_be_visible()
+    expect(page.locator('[data-section="calendar"]')).to_be_hidden()
+    for gone in ("biz-sources", "biz-leads", "biz-drafts", "biz-rules",
+                 "biz-analytics", "biz-journal", "feed", "analytics"):
+        expect(page.locator(f'[data-section="{gone}"]')).to_have_count(0)
+
+
+def test_create_opens_on_leads_for_a_business_account(page, signed_in):
+    """Leads moved into Create in 3.8, and for Business it IS Create: a post
+    starts from a lead, never from a blank topic box. Landing a Business
+    account on the creator wizard offers a screen whose Generate button their
+    product does not have."""
+    signed_in(account_type="business")
+    _serve(page, "**/api/business/leads*", [_lead()])
+    open_section(page, "create")
+    expect(page.locator("#create-leads-panel")).to_be_visible()
+    expect(page.locator("#create-post-panel")).to_be_hidden()
+    expect(page.locator("#biz-leads-list")).to_contain_text("v4.2 ships")
+
+
+def test_a_creator_is_not_offered_the_leads_mode(page, signed_in):
+    signed_in()
+    open_section(page, "create")
+    expect(page.locator('#create-modes [data-create-mode="leads"]')).to_be_hidden()
+    expect(page.locator("#create-post-panel")).to_be_visible()
+
+
+def test_a_creator_asking_for_the_leads_mode_gets_the_wizard(page, signed_in):
+    """Same shape as the Results tab guard: hiding a mode button is not a guard,
+    because setCreateMode is reachable from anywhere and S.createMode outlives
+    an account switch. A creator must land on the wizard, not on an empty
+    Business panel with no mode button to leave by."""
+    signed_in()
+    open_section(page, "create")
+    page.evaluate("setCreateMode('leads')")
+    expect(page.locator("#create-post-panel")).to_be_visible()
+    expect(page.locator("#create-leads-panel")).to_be_hidden()
 
 
 def test_an_agency_account_gets_the_creator_shell(page, signed_in):
     """account_type has accepted "agency" since UX phase 2.1, and the SPA maps it
     to the creator shell on purpose — its own navigation arrives with the Team
-    screen. Nothing tested that, in any browser test, until now.
+    screen. Nothing tested that, in any browser test, until 3.0.
 
     It matters because of how the gating CSS is built: there is exactly one rule,
     `body[data-account-type="business"] .creator-only { display:none }`. Creator
@@ -106,9 +141,8 @@ def test_an_agency_account_gets_the_creator_shell(page, signed_in):
     """
     signed_in(account_type="agency")
     expect(page.locator('[data-section="create"]')).to_be_visible()
-    expect(page.locator("#view-create")).to_be_visible()
-    for section in ("biz-sources", "biz-leads", "biz-rules"):
-        expect(page.locator(f'[data-section="{section}"]')).to_be_hidden()
+    expect(page.locator("#create-post-panel")).to_be_visible()
+    expect(page.locator('[data-section="calendar"]')).to_be_visible()
 
 
 # ── Sources ──────────────────────────────────────────────────────────────────
@@ -165,7 +199,7 @@ def test_a_deleted_source_leaves_the_list(page, signed_in, live_server):
 def test_a_lead_shows_its_strength_and_its_source(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*", [_lead()])
-    open_section(page, "leads")
+    open_create(page, "leads")
 
     row = page.locator("#biz-leads-list .ce-card").first
     expect(row).to_contain_text("v4.2 ships incremental builds")
@@ -180,7 +214,7 @@ def test_a_sensitive_lead_is_flagged_before_it_is_drafted(page, signed_in):
     it, and it has to be on the row, not in a tooltip."""
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*", [_lead(sensitive=True)])
-    open_section(page, "leads")
+    open_create(page, "leads")
     expect(page.locator("#biz-leads-list")).to_contain_text("Sensitive")
 
 
@@ -190,7 +224,7 @@ def test_the_digest_button_appears_only_once_two_leads_are_picked(page, signed_i
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*",
            [_lead(id="lead-1"), _lead(id="lead-2", what_happened="v4.3 adds caching")])
-    open_section(page, "leads")
+    open_create(page, "leads")
 
     checks = page.locator(".biz-lead-check")
     expect(page.locator("#biz-digest-btn")).to_be_hidden()
@@ -207,7 +241,7 @@ def test_the_digest_button_appears_only_once_two_leads_are_picked(page, signed_i
 def test_choosing_x_reveals_the_post_shape_and_instagram_hides_it(page, signed_in):
     signed_in(account_type="business")
     _serve(page, "**/api/business/leads*", [_lead()])
-    open_section(page, "leads")
+    open_create(page, "leads")
 
     row = page.locator("#biz-leads-list .ce-card").first
     expect(row.locator('[data-role="xmode"]')).to_be_hidden()

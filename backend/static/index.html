@@ -407,14 +407,14 @@
   <div id="app-content" class="flex-1 min-w-0 space-y-5">
 
   <!-- top section nav (scoped to the active network) -->
+  <!-- Four sections. Fourteen buttons, a network rail and a product switcher
+       became this: the two account types share the shell and differ in what is
+       inside it, which is the whole of UX phase 3. -->
   <div id="section-nav" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
-    <button data-section="create" onclick="setSection('create')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
-    <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">▦ Calendar</button>
-    <button data-section="biz-sources" onclick="setSection('biz-sources')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
-    <button data-section="biz-leads" onclick="setSection('biz-leads')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Leads</button>
-    <button data-section="results" onclick="setSection('results')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Results</button>
+    <button data-section="create" onclick="setSection('create')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
+    <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Calendar</button>
     <button data-section="queue" onclick="setSection('queue')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Queue</button>
-    <button data-section="biz-rules" onclick="setSection('biz-rules')" class="business-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Rules</button>
+    <button data-section="results" onclick="setSection('results')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Results</button>
   </div>
 
   <!-- ===== CREATE VIEW (wizard) ===== -->
@@ -425,12 +425,26 @@
        something — so they live here, and the library grid under each generate
        form IS the library. -->
   <div id="create-modes" class="flex gap-1">
-    <button data-create-mode="post" onclick="setCreateMode('post')" class="mode-btn px-3 py-1.5 rounded-lg text-sm">Post</button>
-    <button data-create-mode="photo" onclick="setCreateMode('photo')" class="mode-btn px-3 py-1.5 rounded-lg text-sm">Photo</button>
-    <button data-create-mode="video" onclick="setCreateMode('video')" class="mode-btn px-3 py-1.5 rounded-lg text-sm">Video</button>
+    <button data-create-mode="leads" onclick="setCreateMode('leads')" class="business-only mode-btn px-3 py-1.5 rounded-lg text-sm">Leads</button>
+    <button data-create-mode="post" onclick="setCreateMode('post')" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Post</button>
+    <button data-create-mode="photo" onclick="setCreateMode('photo')" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Photo</button>
+    <button data-create-mode="video" onclick="setCreateMode('video')" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Video</button>
   </div>
 
-  <div id="create-photo-panel" class="hidden space-y-4">
+  <!-- For a Business account this IS Create: a post starts from a lead, never
+       from a blank topic box. Same section, different shape of the same act. -->
+  <div id="create-leads-panel" data-create-panel="leads" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Leads</h2>
+        <span class="text-xs text-gray-400">Newsworthy updates from your sources. Pick one to draft a post.</span>
+        <button id="biz-digest-btn" onclick="makeDigest()" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto hidden">Make digest from selected</button>
+      </div>
+      <div id="biz-leads-list" class="mt-4 space-y-3">Loading…</div>
+    </div>
+  </div><!-- /#create-leads-panel -->
+
+  <div id="create-photo-panel" data-create-panel="photo" class="hidden space-y-4">
     <div class="ce-card p-5">
       <h2 class="text-lg font-semibold" style="color:var(--accent)">Photos</h2>
       <p class="text-xs text-gray-400 mt-1">Generate an image on its own, or upload one — then use it in any post later. Nothing here belongs to a post until you put it in one.</p>
@@ -449,7 +463,7 @@
     </div>
   </div>
 
-  <div id="create-video-panel" class="hidden space-y-4">
+  <div id="create-video-panel" data-create-panel="video" class="hidden space-y-4">
     <div class="ce-card p-5">
       <h2 class="text-lg font-semibold" style="color:var(--accent)">Video</h2>
       <p class="text-xs text-gray-400 mt-1">Generate a short video from a prompt, or animate a photo from your library — then use it as a Reel later. Billed per second by Kling, unlike a photo.</p>
@@ -487,7 +501,7 @@
     </div>
   </div>
 
-  <div id="create-post-panel" class="space-y-8">
+  <div id="create-post-panel" data-create-panel="post" class="space-y-8">
 
   <!-- ===== STEP INDICATOR ===== -->
   <div class="flex items-center justify-center gap-2 select-none">
@@ -1045,6 +1059,8 @@
       <button data-settings-tab="profiles" onclick="openSettings('profiles')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Profiles</button>
       <button data-settings-tab="connections" onclick="openSettings('connections')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Connections</button>
       <button data-settings-tab="keys" onclick="openSettings('keys')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Keys &amp; spend</button>
+      <button data-settings-tab="sources" onclick="openSettings('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
+      <button data-settings-tab="rules" onclick="openSettings('rules')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Brand rules</button>
     </div>
 
     <!-- Credentials. One container on two tabs: they are never on screen
@@ -1183,6 +1199,49 @@
       <button id="save-voice-btn" onclick="saveBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save voice</button>
     </section>
 
+    <section data-settings-tab="sources" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Sources</h2>
+      <p class="text-xs text-gray-400 mt-1">Public links we watch for you — release notes, an RSS feed, a changelog page. We check them hourly and collect what's worth posting into Leads.</p>
+      <div class="mt-4 flex flex-col sm:flex-row gap-2">
+        <input id="biz-source-url" type="url" placeholder="https://github.com/your-org/your-repo" class="ce-input flex-1 px-4 py-3" />
+        <button id="biz-source-add" onclick="addSource()" class="ce-btn px-5 py-3 text-sm">Add source</button>
+      </div>
+      <p id="biz-source-status" class="hidden text-sm text-gray-400 mt-2"></p>
+      <div id="biz-sources-list" class="mt-4 space-y-2">Loading…</div>
+    </div>
+    </section>
+
+    <section data-settings-tab="rules" class="hidden space-y-4">
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">Brand rules</h2>
+      <p class="text-xs text-gray-400 mt-1">Not a legal check — just what your brand allows. Forbidden phrases block approval; required disclaimers must appear in every post. One phrase per line.</p>
+      <div class="mt-4 grid sm:grid-cols-2 gap-4">
+        <div>
+          <div class="text-sm font-semibold mb-1">Forbidden phrases</div>
+          <textarea id="rules-forbidden" rows="6" class="ce-input w-full px-3 py-2 text-sm" placeholder="guaranteed returns&#10;best in the world"></textarea>
+        </div>
+        <div>
+          <div class="text-sm font-semibold mb-1">Required disclaimers</div>
+          <textarea id="rules-disclaimers" rows="6" class="ce-input w-full px-3 py-2 text-sm" placeholder="Not financial advice.&#10;Results may vary."></textarea>
+        </div>
+      </div>
+      <button onclick="saveBrandRules()" class="ce-btn px-5 py-2 text-sm mt-4">Save rules</button>
+      <p id="rules-status" class="hidden text-sm text-gray-400 mt-2"></p>
+    </div>
+
+    <div class="ce-card p-5">
+      <h2 class="text-lg font-semibold" style="color:var(--accent)">⏱ Publishing limits</h2>
+      <p class="text-xs text-gray-400 mt-1">Cap how often posts go out so a channel isn't flooded. Leave blank for no limit. (Publishing itself is coming soon — the cap is enforced once it's on.)</p>
+      <div class="mt-4 flex gap-4 flex-wrap text-sm items-end">
+        <label class="text-gray-400">Max per day<br><input id="limit-day" type="number" min="1" max="100" class="ce-input px-3 py-2 mt-1 w-28"></label>
+        <label class="text-gray-400">Max per week<br><input id="limit-week" type="number" min="1" max="100" class="ce-input px-3 py-2 mt-1 w-28"></label>
+        <button onclick="saveLimits()" class="ce-btn px-5 py-2 text-sm">Save limits</button>
+      </div>
+      <p id="limits-status" class="hidden text-sm text-gray-400 mt-2"></p>
+    </div>
+    </section>
+
     <section id="usage-section" data-settings-tab="keys" class="bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">Usage</h2>
       <div id="admin-usage" class="text-sm text-gray-300 bg-gray-800 rounded-lg p-3">Loading usage…</div>
@@ -1305,64 +1364,8 @@
 
   <!-- ===== LIBRARY: Video (Kling — text-to-video and image-to-video) ===== -->
 
-  <!-- ===== BUSINESS: Sources ===== -->
-  <div id="view-biz-sources" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Sources</h2>
-      <p class="text-xs text-gray-400 mt-1">Public links we watch for you — release notes, an RSS feed, a changelog page. We check them hourly and collect what's worth posting into Leads.</p>
-      <div class="mt-4 flex flex-col sm:flex-row gap-2">
-        <input id="biz-source-url" type="url" placeholder="https://github.com/your-org/your-repo" class="ce-input flex-1 px-4 py-3" />
-        <button id="biz-source-add" onclick="addSource()" class="ce-btn px-5 py-3 text-sm">Add source</button>
-      </div>
-      <p id="biz-source-status" class="hidden text-sm text-gray-400 mt-2"></p>
-      <div id="biz-sources-list" class="mt-4 space-y-2">Loading…</div>
-    </div>
-  </div>
-
-  <!-- ===== BUSINESS: Leads feed ===== -->
-  <div id="view-biz-leads" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <div class="flex items-center gap-2 flex-wrap">
-        <h2 class="text-lg font-semibold" style="color:var(--accent)">Leads</h2>
-        <span class="text-xs text-gray-400">Newsworthy updates from your sources. Pick one to draft a post.</span>
-        <button id="biz-digest-btn" onclick="makeDigest()" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto hidden">Make digest from selected</button>
-      </div>
-      <div id="biz-leads-list" class="mt-4 space-y-3">Loading…</div>
-    </div>
-  </div>
-
   <!-- ===== BUSINESS: Drafts ===== -->
 
-  <!-- ===== BUSINESS: Brand rules ===== -->
-  <div id="view-biz-rules" class="hidden space-y-4">
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">Brand rules</h2>
-      <p class="text-xs text-gray-400 mt-1">Not a legal check — just what your brand allows. Forbidden phrases block approval; required disclaimers must appear in every post. One phrase per line.</p>
-      <div class="mt-4 grid sm:grid-cols-2 gap-4">
-        <div>
-          <div class="text-sm font-semibold mb-1">Forbidden phrases</div>
-          <textarea id="rules-forbidden" rows="6" class="ce-input w-full px-3 py-2 text-sm" placeholder="guaranteed returns&#10;best in the world"></textarea>
-        </div>
-        <div>
-          <div class="text-sm font-semibold mb-1">Required disclaimers</div>
-          <textarea id="rules-disclaimers" rows="6" class="ce-input w-full px-3 py-2 text-sm" placeholder="Not financial advice.&#10;Results may vary."></textarea>
-        </div>
-      </div>
-      <button onclick="saveBrandRules()" class="ce-btn px-5 py-2 text-sm mt-4">Save rules</button>
-      <p id="rules-status" class="hidden text-sm text-gray-400 mt-2"></p>
-    </div>
-
-    <div class="ce-card p-5">
-      <h2 class="text-lg font-semibold" style="color:var(--accent)">⏱ Publishing limits</h2>
-      <p class="text-xs text-gray-400 mt-1">Cap how often posts go out so a channel isn't flooded. Leave blank for no limit. (Publishing itself is coming soon — the cap is enforced once it's on.)</p>
-      <div class="mt-4 flex gap-4 flex-wrap text-sm items-end">
-        <label class="text-gray-400">Max per day<br><input id="limit-day" type="number" min="1" max="100" class="ce-input px-3 py-2 mt-1 w-28"></label>
-        <label class="text-gray-400">Max per week<br><input id="limit-week" type="number" min="1" max="100" class="ce-input px-3 py-2 mt-1 w-28"></label>
-        <button onclick="saveLimits()" class="ce-btn px-5 py-2 text-sm">Save limits</button>
-      </div>
-      <p id="limits-status" class="hidden text-sm text-gray-400 mt-2"></p>
-    </div>
-  </div>
 
   <!-- ===== Brands (managed accounts) Modal ===== -->
   <div id="brands-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-40 p-4">
@@ -2829,7 +2832,7 @@ function goStep(n) {
 
 // Header logo → back to the Create section (works from Account/keys/Calendar/etc.).
 function goHome() {
-  S.createMode = 'post';
+  S.createMode = defaultCreateMode();
   setSection('create');
   showStep(1);
 }
@@ -4331,7 +4334,7 @@ async function openPost(postId) {
     if (!res.ok) throw new Error('Load failed');
     const post = await res.json();
     S.postId = post.id;
-    S.createMode = 'post';
+    S.createMode = defaultCreateMode();
     setView('create');
     renderPreview(post);
     showStep(4);
@@ -4722,17 +4725,32 @@ async function saveXSettings() {
 /** Which of Create's three shapes is on screen. Set only through
  *  setCreateMode, so the buttons and the panels cannot disagree. */
 function setCreateMode(mode) {
-  S.createMode = mode || 'post';
+  S.createMode = mode || defaultCreateMode();
   applyCreateMode();
 }
 
+/** What Create means for this account when nothing else has been chosen. */
+function defaultCreateMode() {
+  return (S.user && S.user.account_type === 'business') ? 'leads' : 'post';
+}
+
 async function applyCreateMode() {
-  const mode = S.createMode || 'post';
+  // A mode this account cannot see is not a mode. The buttons are gated by the
+  // same CSS as the nav, so availability is ASKED OF THE DOM — and it is a real
+  // guard, not decoration: setCreateMode is reachable from anywhere and
+  // S.createMode outlives an account switch, so without the fallback a creator
+  // lands on the Business leads panel, or a Business account on a wizard whose
+  // Generate button their product does not have — in both cases with no mode
+  // button on screen to leave by.
+  let mode = S.createMode || defaultCreateMode();
+  const btn = document.querySelector(`#create-modes [data-create-mode="${mode}"]`);
+  if (!btn || btn.offsetParent === null) mode = defaultCreateMode();
+  S.createMode = mode;
   document.querySelectorAll('#create-modes .mode-btn').forEach(b =>
     b.classList.toggle('mode-active', b.dataset.createMode === mode));
-  document.getElementById('create-post-panel').classList.toggle('hidden', mode !== 'post');
-  document.getElementById('create-photo-panel').classList.toggle('hidden', mode !== 'photo');
-  document.getElementById('create-video-panel').classList.toggle('hidden', mode !== 'video');
+  document.querySelectorAll('#view-create [data-create-panel]').forEach(el =>
+    el.classList.toggle('hidden', el.dataset.createPanel !== mode));
+  if (mode === 'leads') await loadLeads();
   if (mode === 'photo') await loadLibrary('image');
   if (mode === 'video') {
     await loadVideoModels();
@@ -4757,10 +4775,8 @@ function videoGridVisible() {
 // ===== SIDEBAR SECTIONS =====
 function setSection(sec) {
   S.section = sec;
-  const map = { create:'view-create', calendar:'view-calendar',
-                results:'view-results', settings:'view-settings',
-                'biz-sources':'view-biz-sources', 'biz-leads':'view-biz-leads',
-                queue:'view-queue', 'biz-rules':'view-biz-rules' };
+  const map = { create:'view-create', calendar:'view-calendar', queue:'view-queue',
+                results:'view-results', settings:'view-settings' };
   // Every view id is a value in `map` above — deriving the list from it means a
   // section added only to the map (the easy mistake) can no longer end up
   // stuck visible forever, which used to require editing this list separately.
@@ -4772,10 +4788,7 @@ function setSection(sec) {
   else if (sec === 'results') loadResults();
   else if (sec === 'create') applyCreateMode();
   else if (sec === 'settings') loadAdmin();
-  else if (sec === 'biz-sources') loadSources();
-  else if (sec === 'biz-leads') loadLeads();
   else if (sec === 'queue') loadQueue();
-  else if (sec === 'biz-rules') loadBrandRules();
 }
 
 // Back-compat alias for any old callers (grid click etc.).
@@ -5582,6 +5595,11 @@ async function loadAdmin() {
   // = the publishing keys for every network, "keys" = the account-wide ones
   // (OpenRouter, stock, ElevenLabs, Kling) plus spend, backup and GDPR.
   const tab = S.settingsTab || 'profiles';
+  // Sources and Brand rules moved in from the top level in 3.8. They share
+  // nothing with the credential blocks below, so they answer here instead of
+  // falling through a preamble that is entirely about keys and brand identity.
+  if (tab === 'sources') return loadSources();
+  if (tab === 'rules') return loadBrandRules();
   const account = tab === 'keys';
   const keysH = document.getElementById('keys-title');
   if (keysH) keysH.textContent = account ? 'Account keys' : 'Connections';

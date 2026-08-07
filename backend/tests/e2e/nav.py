@@ -16,25 +16,18 @@ mapping says so — when the nav is rewritten, only the mapping moves.
 """
 from playwright.sync_api import expect
 
-#: Destination → the nav button that currently reaches it.
-#: Collapses to four entries in 3.8; `open_settings` and `open_create` take
-#: over the rest.
+#: Destination → its nav button. Four of them, which is the whole point of
+#: phase 3; everything else is reached through `open_settings` or `open_create`.
 _SECTION_BUTTON = {
     "create": "create",
     "calendar": "calendar",
     "results": "results",
     "queue": "queue",
-    "leads": "biz-leads",
 }
 
-#: Settings tabs that live in the Settings screen itself, reached from the
-#: avatar menu. Sources and Rules are still top-level Business buttons; they
-#: move in 3.8, and only this mapping changes when they do.
-_SETTINGS_TAB = {"profiles", "connections", "keys"}
-_SETTINGS_BUTTON = {
-    "sources": "biz-sources",
-    "rules": "biz-rules",
-}
+#: Every Settings tab. Sources and Rules were top-level Business buttons until
+#: 3.8; that they are ordinary tabs now is exactly what this set records.
+_SETTINGS_TAB = {"profiles", "connections", "keys", "sources", "rules"}
 
 #: Create mode → the panel that must be on screen once we arrive. Photo and
 #: Video stopped being sections in 3.5; they are shapes of the same act.
@@ -42,6 +35,7 @@ _CREATE_VIEW = {
     "post": "#create-post-panel",
     "photo": "#create-photo-panel",
     "video": "#create-video-panel",
+    "leads": "#create-leads-panel",
 }
 
 
@@ -56,13 +50,11 @@ def open_section(page, name: str) -> None:
 
 def open_settings(page, tab: str = "profiles") -> None:
     """Open Settings on a given tab, through the avatar menu the product uses."""
-    if tab in _SETTINGS_TAB:
-        page.locator("#avatar-btn").click()
-        page.locator("#avatar-menu").get_by_text("Settings").click()
-        page.locator(f'#settings-tabs [data-settings-tab="{tab}"]').click()
-        expect(page.locator("#view-settings")).to_be_visible()
-        return
-    _click(page, _SETTINGS_BUTTON[tab])
+    assert tab in _SETTINGS_TAB, tab
+    page.locator("#avatar-btn").click()
+    page.locator("#avatar-menu").get_by_text("Settings").click()
+    page.locator(f'#settings-tabs [data-settings-tab="{tab}"]').click()
+    expect(page.locator("#view-settings")).to_be_visible()
 
 
 def open_create(page, mode: str = "post") -> None:
