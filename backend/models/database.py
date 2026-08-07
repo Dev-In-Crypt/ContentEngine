@@ -148,6 +148,17 @@ class Post(Base):
     # every (re)schedule, so a fresh slot always starts with the full budget.
     publish_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     pillar = Column(String(30))            # content pillar (educational/inspirational/...)
+    #: One idea, N networks. Siblings share this key; a post that was never
+    #: adapted is a group of one whose key is its own id, so the column is
+    #: never NULL after the 4.1 backfill and no read site needs COALESCE.
+    #: Deliberately a column and not a table: a sibling stays an ordinary Post,
+    #: so publishing, scheduling, approval and analytics keep working untouched.
+    variant_group_id = Column(String(36), index=True)
+    #: What the caption was written in. Never stored before phase 4 — the
+    #: composer sent it and threw it away — so adapting a post to a second
+    #: network silently rewrote it as "professional". NULL means the post
+    #: predates the column, not that it had no tone.
+    tone = Column(String(30))
     video_path = Column(Text)              # generated Reel MP4 on disk
     # Business origin (Phase 3): a post drafted from a source lead. All nullable —
     # creator posts leave them empty. lead_id is SET NULL so a post survives its

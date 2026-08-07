@@ -65,6 +65,10 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     assert {"status", "media_id", "chunk_index", "video_path", "total_bytes",
             "tweet_id", "thread_parts", "next_attempt_at", "post_id",
             "asset_id"} <= job_cols
+    # UX phase 4: one idea, N networks. A post that was never adapted is a group
+    # of one; `tone` is what its caption was written in, which nothing stored
+    # before this phase.
+    assert {"variant_group_id", "tone"} <= post_cols
 
 
 def test_migrations_autostamp_preexisting_db(tmp_path):
