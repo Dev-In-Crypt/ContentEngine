@@ -308,11 +308,47 @@ async def test_progress_callback_invoked():
     engine, _, _ = make_engine()
     messages = []
 
-    async def progress(msg):
+    async def progress(msg, **kw):
         messages.append(msg)
 
     await engine.generate_post(topic="AI", format=PostFormat.SINGLE, progress=progress)
     assert len(messages) >= 2
+
+
+@pytest.mark.asyncio
+async def test_progress_reports_one_stage_per_image():
+    """A carousel spends most of its wall-clock fetching and branding pictures.
+    Reporting that as one line means the longest part of the wait looks frozen."""
+    engine, _, _ = make_engine()
+    seen = []
+
+    async def progress(msg, **kw):
+        seen.append((msg, kw.get("step"), kw.get("total")))
+
+    await engine.generate_post(topic="AI", format=PostFormat.CAROUSEL_3,
+                               progress=progress)
+    per_image = [m for m, _s, _t in seen if "Image" in m]
+    assert len(per_image) == 3
+    # Every stage is numbered, and the total is the same throughout — a counter
+    # that changes mid-run reads as the finish line moving.
+    totals = {t for _m, _s, t in seen}
+    assert totals == {len(seen)}
+    assert [s for _m, s, _t in seen] == list(range(1, len(seen) + 1))
+
+
+@pytest.mark.asyncio
+async def test_a_text_only_post_reports_no_image_stages():
+    """num is already 0 for text-only, so the count follows for free — but a
+    hardcoded stage list would promise pictures that are never coming."""
+    engine, _, _ = make_engine()
+    seen = []
+
+    async def progress(msg, **kw):
+        seen.append(msg)
+
+    await engine.generate_post(topic="AI", format=PostFormat.SINGLE,
+                               text_only=True, progress=progress)
+    assert not [m for m in seen if "Image" in m]
 
 
 def test_num_slides():

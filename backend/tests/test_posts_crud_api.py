@@ -341,6 +341,34 @@ def test_generate_assigns_a_variant_group(client, generated_ids):
     assert _stored(client, post_id, "variant_group_id") == post_id
 
 
+def test_generate_narrates_a_stage_per_image(client, generated_ids):
+    """A spinner says "something is happening"; stages say what and how far. The
+    channel already existed — the SSE stream and the SPA's checklist both date
+    from the first version — so this is about events, not plumbing.
+
+    The engine is stubbed here, so the assertion is that the ROUTE forwards
+    whatever shape the engine sends, including the step counters. The engine's
+    own stage list is covered in test_content_engine.py against the real thing.
+    """
+    post_id = str(uuid.uuid4())
+    generated_ids.append(post_id)
+
+    async def fake_generate(**kwargs):
+        await kwargs["progress"]("Writing the caption", step=1, total=4)
+        await kwargs["progress"]("Image 1 of 2 ready", step=3, total=4)
+        return _generated(post_id)
+
+    client.fake_engine.generate_post.side_effect = fake_generate
+
+    res = client.post("/api/posts/generate", json={"topic": "AI trends", "format": "single"})
+    events = _sse_events(res)
+    assert {"type": "progress", "message": "Writing the caption", "step": 1, "total": 4} in events
+    assert {"type": "progress", "message": "Image 1 of 2 ready", "step": 3, "total": 4} in events
+    # The saving line still arrives, and still without counters — the route owns
+    # it and does not pretend to know the engine's numbering.
+    assert any(e.get("message", "").startswith("Saving") for e in events)
+
+
 def test_generate_completes_with_the_posts_own_tab(client, generated_ids):
     """The SPA binds the post straight off this event, and the result screen
     draws its tab bar from `variants`. An empty list here would open the editor

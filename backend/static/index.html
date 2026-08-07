@@ -3114,12 +3114,25 @@ async function stageOwnPhotos() {
 }
 
 // ===== GENERATE =====
-function addProgress(msg) {
+/** One line per stage the server reports.
+ *
+ *  The newest line spins and the ones above it are ticked, so the list reads as
+ *  "this is where we are" rather than "here is a log". `step`/`total` are
+ *  optional: an older server (or the business draft stream) sends neither, and
+ *  the header simply stays empty rather than the whole thing breaking. */
+function addProgress(msg, step, total) {
+  const list = document.getElementById('progress-list');
+  // Whatever was spinning is now finished — the next message is proof of it.
+  list.querySelectorAll('[data-spin]').forEach(el => {
+    el.removeAttribute('data-spin');
+    el.innerHTML = '<span class="text-green-400">✓</span>';
+  });
   const li = document.createElement('li');
   li.className = 'flex items-center gap-2';
-  li.innerHTML = `<span class="text-green-400">✓</span> ${msg}`;
-  document.getElementById('progress-list').appendChild(li);
-  document.getElementById('loading-msg').textContent = msg;
+  li.innerHTML = `<span data-spin class="spinner inline-block w-3 h-3 border-2 border-gray-600 border-t-purple-400 rounded-full"></span> ${esc(msg)}`;
+  list.appendChild(li);
+  document.getElementById('loading-msg').textContent =
+    (step && total) ? `Step ${step} of ${total} — ${msg}` : msg;
 }
 
 async function generatePost() {
@@ -3232,7 +3245,7 @@ async function streamGenerate(body, onProgress) {
       let ev;
       try { ev = JSON.parse(line.slice(6)); }
       catch { continue; }            // skip a malformed frame, don't kill the stream
-      if (ev.type === 'progress' && onProgress) onProgress(ev.message);
+      if (ev.type === 'progress' && onProgress) onProgress(ev.message, ev.step, ev.total);
       if (ev.type === 'complete') { sawTerminal = true; post = ev.post; }
       if (ev.type === 'error') { throw new Error(ev.message); }
     }

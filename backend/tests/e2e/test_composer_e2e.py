@@ -258,6 +258,30 @@ def test_the_progress_messages_are_shown_while_it_runs(page, signed_in, keyed):
     expect(page.locator("#progress-list")).to_contain_text("Finding a photo…")
 
 
+def test_the_progress_line_says_how_far_along_it_is(page, signed_in, keyed):
+    """A spinner says something is happening; "step 2 of 4" says how much is
+    left. The counters are optional — the business draft stream sends none — so
+    a frame without them still renders, just without the header."""
+    signed_in()
+    page.route("**/api/posts/generate", lambda r: r.fulfill(
+        status=200, content_type="text/event-stream",
+        body=_sse({"type": "progress", "message": "Writing the caption",
+                   "step": 1, "total": 4},
+                  {"type": "progress", "message": "Image 1 of 2 ready",
+                   "step": 2, "total": 4},
+                  {"type": "complete", "post": _generated_post()})))
+
+    _compose(page)
+    page.locator("#generate-btn").click()
+    expect(page.locator("#step-4")).to_be_visible()
+
+    expect(page.locator("#progress-list")).to_contain_text("Writing the caption")
+    expect(page.locator("#progress-list")).to_contain_text("Image 1 of 2 ready")
+    # The finished stage is ticked, the newest one is still spinning.
+    expect(page.locator("#progress-list li").first).to_contain_text("✓")
+    assert page.locator("#progress-list [data-spin]").count() == 1
+
+
 def test_an_error_frame_offers_the_way_back_instead_of_a_dead_spinner(
         page, signed_in, keyed):
     signed_in()

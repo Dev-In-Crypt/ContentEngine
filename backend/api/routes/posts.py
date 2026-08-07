@@ -334,8 +334,12 @@ async def generate_post(
     async def event_stream() -> AsyncGenerator[str, None]:
         queue: asyncio.Queue = asyncio.Queue()
 
-        async def progress(message: str) -> None:
-            await queue.put({"type": "progress", "message": message})
+        async def progress(message: str, *, step: int | None = None,
+                           total: int | None = None) -> None:
+            event = {"type": "progress", "message": message}
+            if step is not None:
+                event["step"], event["total"] = step, total
+            await queue.put(event)
 
         async def run() -> None:
             try:

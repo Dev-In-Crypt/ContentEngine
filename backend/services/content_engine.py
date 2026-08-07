@@ -48,7 +48,11 @@ class GeneratedPost:
         return [s.image_bytes for s in self.slides]
 
 
-ProgressFn = Callable[[str], Awaitable[None]]
+#: `progress(message, step=..., total=...)`. The counters are keyword-only and
+#: optional so a caller that only wants the text keeps working — the SSE route
+#: passes them straight through, and the SPA ignores keys it does not know, which
+#: is what makes this safe to deploy while an old page is still open.
+ProgressFn = Callable[..., Awaitable[None]]
 
 
 def _num_slides(format: PostFormat) -> int:
@@ -107,9 +111,20 @@ class ContentEngine:
         # but build zero slides (num=0 → steps 2-3 produce nothing).
         num = 0 if text_only else _num_slides(format)
 
+        # Caption, then one line per picture, then branding, then the route's own
+        # save. Derived from `num` rather than written down, so a text-only X post
+        # promises no images and a ten-slide carousel promises ten.
+        total = 2 + num
+        done = 0
+
+        async def step(message: str) -> None:
+            nonlocal done
+            done += 1
+            if progress:
+                await progress(message, step=done, total=total)
+
         # 1. Generate caption + prompts
-        if progress:
-            await progress("Writing caption...")
+        await step("Writing the caption")
         caption_data: GeneratedCaption = await self.caption_gen.generate(
             topic=topic,
             format=format.value,
@@ -141,12 +156,15 @@ class ContentEngine:
             )
 
         # 3. Fetch + brand all slides in parallel
-        if progress:
-            await progress("Fetching & branding images...")
+        #
+        # The tasks run under gather, so these lines arrive out of order — fine
+        # for a checklist, and the alternative (reporting one line for the whole
+        # step) leaves the longest part of the wait looking frozen.
         tasks = [
             self._fetch_and_brand(
                 cfg, num, format, caption_data, apply_branding, topic,
                 template_style, niche_box_color, show_logo, niche,
+                on_done=step,
             )
             for cfg in slide_configs[:num]
         ]
@@ -157,6 +175,7 @@ class ContentEngine:
             if isinstance(r, BaseException):
                 raise r
         slides = sorted(results, key=lambda s: s.slide_number)
+        await step("Applying your brand")
 
         return GeneratedPost(
             id=str(uuid.uuid4()),
@@ -192,6 +211,7 @@ class ContentEngine:
         niche_box_color: Optional[str] = None,
         show_logo: bool = True,
         niche: Optional[str] = None,
+        on_done: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> GeneratedSlide:
         attribution: Optional[dict] = None
         try:
@@ -277,6 +297,9 @@ class ContentEngine:
                 body_text=body,
                 background_image=raw_bytes,
             )
+
+        if on_done:
+            await on_done(f"Image {cfg.slide_number} of {num} ready")
 
         return GeneratedSlide(
             slide_number=cfg.slide_number,
