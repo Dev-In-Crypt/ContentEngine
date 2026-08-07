@@ -23,7 +23,7 @@ from playwright.sync_api import expect
 
 from models.schemas import AISettingsResponse, PostPreview, SlidePreview
 
-from tests.e2e.nav import open_calendar
+from tests.e2e.nav import open_calendar, open_configure
 
 pytestmark = pytest.mark.e2e
 
@@ -139,6 +139,7 @@ def test_back_from_the_format_step_keeps_the_topic(page, signed_in):
 
 def test_switching_to_x_drops_the_instagram_only_fields(page, signed_in):
     signed_in()
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     expect(page.locator("#niche-label-field")).to_be_hidden()   # image label
     expect(page.locator("#length-field")).to_be_hidden()        # caption length
@@ -151,6 +152,7 @@ def test_switching_to_x_drops_the_instagram_only_fields(page, signed_in):
 
 def test_instagram_keeps_its_own_fields_and_hides_the_x_ones(page, signed_in):
     signed_in()
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     page.locator("#net-toggle-ig").click()
     expect(page.locator("#niche-label-field")).to_be_visible()
@@ -166,6 +168,7 @@ def test_a_text_only_post_falls_back_to_stock_when_the_network_becomes_instagram
     send a post with no image to a network that rejects it — the fallback is
     silent, so only the resulting state proves it happened."""
     signed_in()
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     _compose(page)
     page.locator("#src-text-only").click()
@@ -381,6 +384,7 @@ def test_an_x_post_is_generated_as_x_not_as_the_default_network(
 
     page.route("**/api/posts/generate", _capture)
 
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     _compose(page)
     page.locator("#generate-btn").click()
@@ -415,6 +419,7 @@ def test_switching_to_x_drops_a_carousel_format(page, signed_in, keyed):
     assert page.evaluate("S.format") == "carousel_10"
 
     page.get_by_role("button", name="← Back").click()
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     _compose(page)
     page.locator("#generate-btn").click()
@@ -432,7 +437,10 @@ def test_the_network_rail_is_gone(page, signed_in):
     expect(page.locator("#net-instagram")).to_have_count(0)
     expect(page.locator("#net-x")).to_have_count(0)
     expect(page.locator(".rail-net")).to_have_count(0)
-    # …and the composer's own toggle still does the job.
+    # …and the composer's own toggle still does the job — one row down since
+    # 4.8, which is the point: one control for the choice, in the place that
+    # owns it, rather than a second one on every screen.
+    open_configure(page)
     expect(page.locator("#net-toggle-x")).to_be_visible()
 
 
@@ -445,6 +453,7 @@ def test_the_profile_grid_is_reachable_whatever_the_composer_targets(page, signe
     In 3.7 it stopped being a section at all and became a view of the Calendar.
     The claim is unchanged; only the way in is."""
     signed_in()
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     open_calendar(page, "profile")
     # An empty grid has no height, so assert on the screen's own empty state:

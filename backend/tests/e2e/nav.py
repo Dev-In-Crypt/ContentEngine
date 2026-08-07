@@ -98,6 +98,20 @@ def open_calendar(page, mode: str = "calendar") -> None:
     expect(page.locator(_CALENDAR_VIEW[mode])).to_be_visible()
 
 
+def open_configure(page) -> None:
+    """Unfold Create's "Configure" row.
+
+    Everything the composer asks beyond the topic itself lives in a collapsed
+    <details> since 4.8. Playwright cannot fill an input inside a closed one,
+    and — worse — an assertion that a field is hidden would pass for the wrong
+    reason. So a test that touches those fields says so, once, here.
+    """
+    row = page.locator("#configure-row")
+    if not row.evaluate("el => el.open"):
+        page.locator("#configure-summary").click()
+    expect(page.locator("#tone")).to_be_visible()
+
+
 def open_rules(page) -> None:
     """Open the brand-rules screen and wait for it to finish filling itself in.
 

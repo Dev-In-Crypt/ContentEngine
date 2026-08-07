@@ -10,7 +10,7 @@ from playwright.sync_api import expect
 
 from models.schemas import MediaAssetDetail, VideoPublishJobStatus
 
-from tests.e2e.nav import open_create
+from tests.e2e.nav import open_configure, open_create
 
 pytestmark = pytest.mark.e2e
 
@@ -274,6 +274,7 @@ def test_the_card_copy_follows_the_posts_platform(page, signed_in):
 
 def test_an_instagram_post_keeps_the_reel_wording(page, signed_in):
     signed_in()
+    open_configure(page)
     page.locator("#net-toggle-x").click()
     _reach_step4(page, _composer_post("e2e-post-ig", "instagram"))
     expect(page.locator("#make-reel-btn")).to_have_text("Make Reel")
@@ -307,6 +308,7 @@ def test_clicking_publish_on_an_instagram_post_reaches_the_reel_route(page, sign
     sides of the dispatch rather than a page.evaluate() standing in for it.
     """
     signed_in()
+    open_configure(page)
     page.locator("#net-toggle-x").click()          # the composer is aimed at X…
     _reach_step4(page, _composer_post("e2e-post-ig", "instagram"))  # …the post isn't
     hit = _record_publish_routes(page)

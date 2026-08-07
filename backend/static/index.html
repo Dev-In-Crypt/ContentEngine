@@ -531,6 +531,20 @@
     <h2 class="text-lg font-semibold text-purple-300">What should the post be about?</h2>
 
     <div>
+      <label class="block text-sm text-gray-400 mb-1">Topic</label>
+      <input id="topic" type="text" placeholder="e.g. 5 AI tools every marketer needs in 2026"
+        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+    </div>
+
+    <!-- Everything else the composer could ask, folded into one row that says
+         what it currently holds. Nothing is removed and no id changes:
+         setNetwork toggles half of these by id, and the X block stays here so
+         the thread choice is one click away rather than buried in Settings. -->
+    <details id="configure-row" class="rounded-xl border border-gray-800">
+      <summary id="configure-summary" class="cursor-pointer select-none px-4 py-2 text-sm text-gray-400"></summary>
+      <div class="px-4 pb-4 pt-1 space-y-5" oninput="updateConfigureSummary()" onchange="updateConfigureSummary()">
+
+    <div>
       <label class="block text-sm text-gray-400 mb-1">Post to</label>
       <div class="flex gap-2" id="net-toggle">
         <button type="button" onclick="setNetwork('instagram')" id="net-toggle-ig"
@@ -538,12 +552,6 @@
         <button type="button" onclick="setNetwork('x')" id="net-toggle-x"
           class="flex-1 rounded-xl py-2 text-sm font-medium border border-gray-700 bg-gray-800 text-gray-300 transition">𝕏 X</button>
       </div>
-    </div>
-
-    <div>
-      <label class="block text-sm text-gray-400 mb-1">Topic</label>
-      <input id="topic" type="text" placeholder="e.g. 5 AI tools every marketer needs in 2026"
-        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
     </div>
 
     <div class="grid grid-cols-2 gap-4">
@@ -637,6 +645,9 @@
         </p>
       </div>
     </div>
+
+      </div>
+    </details>
 
     <button onclick="goStep(2)" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
       Next →
@@ -5014,6 +5025,7 @@ function setNetwork(net) {
     if (!isIG && planFmt.value.startsWith('carousel')) planFmt.value = 'single';
   }
   setSection(S.section || 'create');
+  updateConfigureSummary();
 }
 
 // ===== X POST TYPES =====
@@ -6605,12 +6617,33 @@ async function resetSlideStyle() {
 
 // Pre-fill the composer niche/audience from the saved profile, only when empty
 // so a user's in-progress edits are never clobbered.
+/** What the collapsed Configure row says it is holding.
+ *
+ *  A row labelled only "Configure" makes people open it to find out whether it
+ *  matters; showing the values answers that without a click. Read off the
+ *  controls rather than from S, so it cannot drift from what the form will
+ *  actually send. */
+function updateConfigureSummary() {
+  const el = document.getElementById('configure-summary');
+  if (!el) return;
+  const val = id => (document.getElementById(id) || {}).value || '';
+  const tone = document.getElementById('tone');
+  const parts = [
+    (S.platform === 'x') ? '\ud835\udd4f X' : '\ud83d\udcf8 Instagram',
+    val('niche'),
+    val('audience'),
+    tone && tone.selectedIndex >= 0 ? tone.options[tone.selectedIndex].text : '',
+  ].filter(Boolean);
+  el.textContent = '\u2699 ' + parts.join(' \u00b7 ');
+}
+
 function prefillComposerFromProfile() {
   const p = S.profile || {};
   const niche = document.getElementById('niche');
   const aud = document.getElementById('audience');
   if (niche && !niche.value && p.niche) niche.value = p.niche;
   if (aud && !aud.value && p.target_audience) aud.value = p.target_audience;
+  updateConfigureSummary();
 }
 
 // ===== ONBOARDING (first login, skippable) =====
