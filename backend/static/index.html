@@ -4909,7 +4909,7 @@ async function publishVideoToX() {
     if (!res.ok) {
       const msg = data.detail || 'Publish failed';
       if (res.status === 400 && /credential|X \(Twitter\)/i.test(msg)) {
-        needKey('Connect your X account', msg, 'account');
+        needKey('Connect your X account', msg, 'connections');
         return;
       }
       throw new Error(msg);
@@ -5137,9 +5137,15 @@ function videoGridVisible() {
 
 // ===== SIDEBAR SECTIONS =====
 function setSection(sec) {
-  S.section = sec;
   const map = { create:'view-create', calendar:'view-calendar', queue:'view-queue',
                 results:'view-results', settings:'view-settings' };
+  // An unknown name hides every view and leaves a blank page — the list below is
+  // derived from the map, so nothing matches and everything gets `hidden`. That
+  // has happened twice already (a section id removed while a caller kept asking
+  // for it), and it fails silently: no throw, no log, just an empty screen. A
+  // caller that asks for somewhere that no longer exists gets Create.
+  if (!Object.hasOwn(map, sec)) sec = 'create';
+  S.section = sec;
   // Every view id is a value in `map` above — deriving the list from it means a
   // section added only to the map (the easy mistake) can no longer end up
   // stuck visible forever, which used to require editing this list separately.
@@ -5320,7 +5326,7 @@ async function generateLibraryImage() {
       // The two guard messages both point at the same fix; send the user there
       // instead of leaving them staring at an error with nowhere to go.
       if (res.status === 400 && /provider|model/i.test(msg)) {
-        needKey('Set up image generation', msg, 'account');
+        needKey('Set up image generation', msg, 'keys');
         status.classList.add('hidden');
         return;
       }
@@ -5430,7 +5436,7 @@ async function generateLibraryVideo() {
       const err = await res.json().catch(() => ({}));
       const msg = err.detail || `Server error ${res.status}`;
       if (res.status === 400 && /kling|key/i.test(msg)) {
-        needKey('Set up video generation', msg, 'account');
+        needKey('Set up video generation', msg, 'keys');
         status.classList.add('hidden');
         return;
       }
@@ -5686,7 +5692,7 @@ async function submitEditVideo() {
       const err = await res.json().catch(() => ({}));
       const msg = err.detail || `Server error ${res.status}`;
       if (res.status === 400 && /elevenlabs/i.test(msg)) {
-        needKey('Set up voiceover', msg, 'account');
+        needKey('Set up voiceover', msg, 'keys');
         status.classList.add('hidden');
         return;
       }
@@ -5742,7 +5748,7 @@ async function submitPublishToX() {
       const err = await res.json().catch(() => ({}));
       const msg = err.detail || `Server error ${res.status}`;
       if (res.status === 400 && /credential|X \(Twitter\)/i.test(msg)) {
-        needKey('Connect your X account', msg, 'account');
+        needKey('Connect your X account', msg, 'connections');
         status.classList.add('hidden');
         return;
       }
@@ -5864,9 +5870,13 @@ function hasKey(key) {
   return !!(S.creds && S.creds[key] && S.creds[key].set);
 }
 
-let _needKeySection = 'keys';
-function needKey(title, msg, section) {
-  _needKeySection = section;
+//: A Settings TAB, not a section — which is the whole bug this name records.
+//: `gotoNeedKey` used to hand it to setSection, whose map knows five section
+//: names and none of them is 'keys'; every view hid and the page went blank one
+//: click after the product had just explained what was missing.
+let _needKeyTab = 'keys';
+function needKey(title, msg, tab) {
+  _needKeyTab = tab;
   document.getElementById('need-key-title').textContent = title;
   document.getElementById('need-key-msg').textContent = msg;
   document.getElementById('need-key-modal').classList.remove('hidden');
@@ -5876,7 +5886,7 @@ function closeNeedKey() {
   document.getElementById('need-key-modal').classList.add('hidden');
   onModalClose();
 }
-function gotoNeedKey() { closeNeedKey(); setSection(_needKeySection); }
+function gotoNeedKey() { closeNeedKey(); openSettings(_needKeyTab); }
 
 // True if OK to generate; otherwise shows the onboarding modal and returns false.
 // Generation needs a text provider + model + that provider's key. The image
@@ -5899,16 +5909,16 @@ async function guardGenerateKeys() {
   if (text) {
     needKey('Set up your AI model',
       text === 'choose'
-        ? 'Pick who writes your posts — provider and model — under Account → AI models.'
-        : 'Add the API key for your chosen text provider under Account → AI models.',
-      'account');
+        ? 'Pick who writes your posts — provider and model — under Settings → Keys & spend.'
+        : 'Add the API key for your chosen text provider under Settings → Keys & spend.',
+      'keys');
     return false;
   }
   if (S.source === 'ai_gen' && needs('image')) {
     needKey('Set up image generation',
-      'AI images need an image provider, model and key under Account → AI models. '
+      'AI images need an image provider, model and key under Settings → Keys & spend. '
       + 'Or switch the image source to Stock photos.',
-      'account');
+      'keys');
     return false;
   }
   return true;

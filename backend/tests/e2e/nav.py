@@ -16,6 +16,12 @@ mapping says so — when the nav is rewritten, only the mapping moves.
 """
 from playwright.sync_api import expect
 
+#: First-run setup: the container, and the control that leaves it. Both change
+#: shape in UX phase 5 (a modal becomes a full screen); nothing outside this
+#: module should name either.
+_ONBOARDING = "#onboarding-modal"
+_ONBOARDING_DISMISS = "Close setup"
+
 #: Destination → its nav button. Four of them, which is the whole point of
 #: phase 3; everything else is reached through `open_settings` or `open_create`.
 _SECTION_BUTTON = {
@@ -110,6 +116,37 @@ def open_configure(page) -> None:
     if not row.evaluate("el => el.open"):
         page.locator("#configure-summary").click()
     expect(page.locator("#tone")).to_be_visible()
+
+
+def dismiss_onboarding(page) -> None:
+    """Get first-run setup out of the way, then carry on.
+
+    It has to be WAITED for rather than polled once: it opens a tick after load,
+    so an immediate is_visible() says no and the dismissal never happens. A
+    timeout is not fatal — whether setup appears at all is its own tests'
+    business, not every other screen's.
+
+    This lived in four copies (the signed_in fixture and three in the account
+    file) because nav.py never held it. UX phase 5 replaces the modal with a
+    real screen, and the whole point of this module is that such a change costs
+    one function rather than a sweep.
+    """
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+    box = page.locator(_ONBOARDING)
+    try:
+        box.wait_for(state="visible", timeout=5000)
+    except PlaywrightTimeout:
+        return
+    page.get_by_text(_ONBOARDING_DISMISS).click()
+    box.wait_for(state="hidden")
+
+
+def open_onboarding(page) -> None:
+    """Re-enter first-run setup the way the product offers it."""
+    page.locator("#avatar-btn").click()
+    page.locator("#avatar-menu").get_by_text("Setup guide").click()
+    expect(page.locator(_ONBOARDING)).to_be_visible()
 
 
 def open_rules(page) -> None:
