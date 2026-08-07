@@ -102,3 +102,22 @@ async def send_reset_email(to: str, token: str) -> bool:
         f"<p>This link expires in 1 hour. If you didn't request it, ignore this message.</p>"
     )
     return await send_email(to, "Reset your password · Content Engine", html)
+
+
+async def send_team_invite_email(to: str, token: str, owner_email: str) -> bool:
+    """Invite somebody to an agency's team.
+
+    Says plainly that accepting grants nothing yet. The alternative — a warm
+    welcome to a workspace they then cannot open — turns our own half-built
+    feature into their support ticket.
+    """
+    url = _link("/team/accept", token)
+    html = (
+        f"<p><b>{owner_email}</b> invited you to their team on Content Engine.</p>"
+        f'<p><a href="{url}">Accept the invitation</a></p>'
+        f"<p>Accepting records that you're on their team. It does <b>not</b> yet "
+        f"give you access to their brands, posts or keys — shared access is "
+        f"still being built, and we'll email you when it arrives.</p>"
+        f"<p>If you weren't expecting this, ignore the message.</p>"
+    )
+    return await send_email(to, "You've been invited to a team · Content Engine", html)

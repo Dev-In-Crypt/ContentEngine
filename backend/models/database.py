@@ -549,3 +549,41 @@ class ManagedAccount(Base):
               sqlite_where=text("is_primary = 1"),
               postgresql_where=text("is_primary")),
     )
+
+
+class TeamInvitation(Base):
+    """An agency asking somebody to join their team.
+
+    Deliberately NOT a membership: accepting one changes nothing about what the
+    invitee may do. Shared access is a later phase, and the screen says so in
+    plain words — a person who accepts and then finds nothing is a bug report we
+    would deserve.
+
+    There is no role column, for the same reason. A role that nothing consults
+    is a lie in the schema, and it would be read as a promise the product does
+    not keep. It arrives with the code that enforces it.
+    """
+    __tablename__ = "team_invitations"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"),
+                           index=True, nullable=False)
+    #: Folded to lower case on the way in. Two rows differing only in case are
+    #: two live invitations to one person, and the index below would miss it.
+    email = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, server_default="pending")
+    #: Set on accept. SET NULL rather than CASCADE: if the invitee later erases
+    #: their account, the agency keeps its own record of having invited someone.
+    accepted_user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    accepted_at = Column(DateTime(timezone=True))
+
+    __table_args__ = (
+        # Partial on purpose: one PENDING invitation per address per agency, but
+        # a revoked or accepted row must not block inviting the same person
+        # again. Makes a double-submit an IntegrityError instead of two live
+        # invitations, only one of which anybody would ever revoke.
+        Index("ux_team_invitations_pending", "owner_user_id", "email", unique=True,
+              sqlite_where=text("status = 'pending'"),
+              postgresql_where=text("status = 'pending'")),
+    )

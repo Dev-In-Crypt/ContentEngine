@@ -15,8 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from models.database import (
-    AuditEntry, Base, Lead, LLMUsage, MediaAsset, Post, Slide, Source, User,
-    UserCredentials, VideoPublishJob, Workspace,
+    AuditEntry, Base, Lead, LLMUsage, MediaAsset, Post, Slide, Source,
+    TeamInvitation, User, UserCredentials, VideoPublishJob, Workspace,
 )
 from services import gdpr
 from services.auth import hash_password
@@ -433,3 +433,58 @@ def test_a_post_id_cannot_escape_the_uploads_root(tmp_path):
 
     gdpr.delete_user_files("u1", ["../../keepme"], uploads)
     assert victim.exists()
+
+
+# --------------------------------------------------------- team invitations
+
+@pytest.fixture
+def crossed(sm, two):
+    """One invitation this account SENT, and one it ACCEPTED from somebody else.
+
+    Both rows name the account and only one of them belongs to it, which is the
+    whole reason erasure has to look down two different columns. Delete both and
+    you destroy another agency's record of their own team; delete neither and a
+    dangling accepted_user_id outlives the person it points at.
+    """
+    async def _go():
+        async with sm() as db:
+            db.add(TeamInvitation(owner_user_id=two["mine"]["user"].id,
+                                  email="hired@example.com", status="pending"))
+            db.add(TeamInvitation(owner_user_id=two["theirs"]["user"].id,
+                                  email="mine@example.com", status="accepted",
+                                  accepted_user_id=two["mine"]["user"].id))
+            await db.commit()
+    asyncio.run(_go())
+    return two
+
+
+def test_export_carries_invitations_in_both_directions(sm, crossed):
+    data = _collect(sm, crossed["mine"]["user"])
+    assert [i["email"] for i in data["team_invitations_sent"]] == ["hired@example.com"]
+    assert [i["email"] for i in data["team_invitations_accepted"]] == ["mine@example.com"]
+
+
+def test_export_never_contains_another_agencys_invitation(sm, crossed):
+    """The bystander's pending invitation names nobody here and must not appear."""
+    data = _collect(sm, crossed["mine"]["user"])
+    everything = data["team_invitations_sent"] + data["team_invitations_accepted"]
+    assert "hired@example.com" not in [i["email"] for i in data["team_invitations_accepted"]]
+    assert all(i["owner_user_id"] in (crossed["mine"]["user"].id,
+                                      crossed["theirs"]["user"].id) for i in everything)
+
+
+def test_erase_removes_invitations_the_account_sent(sm, crossed):
+    _erase(sm, crossed["mine"]["user"])
+    assert _rows(sm, TeamInvitation,
+                 TeamInvitation.owner_user_id == crossed["mine"]["user"].id) == []
+
+
+def test_erase_releases_invitations_the_account_accepted(sm, crossed):
+    """Mutation guard: the row belongs to the OTHER agency, so it survives — but
+    stripped of the pointer to a user who no longer exists."""
+    _erase(sm, crossed["mine"]["user"])
+    rows = _rows(sm, TeamInvitation,
+                 TeamInvitation.owner_user_id == crossed["theirs"]["user"].id)
+    assert len(rows) == 1
+    assert rows[0].accepted_user_id is None
+    assert rows[0].email == "mine@example.com"      # the record itself is theirs to keep

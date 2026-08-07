@@ -95,6 +95,17 @@ def test_a_business_account_gets_the_same_shell(page, signed_in):
         expect(page.locator(f'[data-section="{gone}"]')).to_have_count(0)
 
 
+def test_a_business_account_lands_on_a_screen_that_exists(page, signed_in):
+    """Regression from 3.8, found in 3.9. startApp sent a Business account to
+    setSection('biz-sources') — an id that stopped existing when Sources became
+    a Settings tab. Nothing threw: setSection hid every view because none of
+    them matched, so the first thing a Business user saw after signing in was an
+    empty page. Landing anywhere is not the claim; landing somewhere VISIBLE is."""
+    signed_in(account_type="business")
+    expect(page.locator("#view-create")).to_be_visible()
+    expect(page.locator("#create-leads-panel")).to_be_visible()
+
+
 def test_create_opens_on_leads_for_a_business_account(page, signed_in):
     """Leads moved into Create in 3.8, and for Business it IS Create: a post
     starts from a lead, never from a blank topic box. Landing a Business

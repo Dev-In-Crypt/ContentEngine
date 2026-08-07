@@ -83,6 +83,14 @@
     body[data-account-type="business"] .business-only{ display:block; }
     body[data-account-type="business"] .creator-only{ display:none; }
     body[data-account-type="business"] #section-nav .business-only{ display:inline-block; }
+    /* Agency is the third value, added in 3.9. Note what is NOT here: no rule
+       hides .creator-only for it. Creator is the DEFAULT rather than a positive
+       match, so the "symmetric" edit -- hiding creator-only for agency the way
+       it is hidden for business -- would blank the entire application for every
+       agency account. test_an_agency_account_gets_the_creator_shell exists for
+       exactly that keystroke. */
+    .agency-only{ display:none; }
+    body[data-account-type="agency"] .agency-only{ display:block; }
     .soon-badge{ font-size:9px; font-weight:700; letter-spacing:.04em; padding:1px 4px; border-radius:5px; background:var(--accent-dim); color:var(--muted); text-transform:uppercase; }
     /* muted status dot (fits the monochrome look) */
     .bg-green-400{ background-color:#5aa17c !important; }
@@ -1061,6 +1069,7 @@
       <button data-settings-tab="keys" onclick="openSettings('keys')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Keys &amp; spend</button>
       <button data-settings-tab="sources" onclick="openSettings('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
       <button data-settings-tab="rules" onclick="openSettings('rules')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Brand rules</button>
+      <button data-settings-tab="team" onclick="openSettings('team')" class="agency-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Team</button>
     </div>
 
     <!-- Credentials. One container on two tabs: they are never on screen
@@ -1240,6 +1249,22 @@
       </div>
       <p id="limits-status" class="hidden text-sm text-gray-400 mt-2"></p>
     </div>
+    </section>
+
+    <section data-settings-tab="team" class="hidden space-y-4">
+      <div class="ce-card p-5">
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Team</h2>
+        <!-- Said here, and again in the invitation email. An invitation that
+             reads like a door and opens nothing is a support ticket we would
+             have earned. -->
+        <p class="text-xs text-gray-400 mt-1">Invite the people you work with. For now an invitation only records that someone is on your team &mdash; <b>it does not give them access</b> to your brands, posts or keys. Shared access is still being built, and we'll email everyone you've invited when it arrives.</p>
+        <div class="mt-4 flex flex-col sm:flex-row gap-2">
+          <input id="team-email" type="email" placeholder="colleague@example.com" class="ce-input flex-1 px-4 py-3" />
+          <button id="team-invite-btn" onclick="inviteTeammate()" class="ce-btn px-5 py-3 text-sm">Send invitation</button>
+        </div>
+        <p id="team-status" class="hidden text-sm text-gray-400 mt-2"></p>
+        <div id="team-list" class="mt-4 space-y-2">Loading&hellip;</div>
+      </div>
     </section>
 
     <section id="usage-section" data-settings-tab="keys" class="bg-gray-900 rounded-2xl p-6 space-y-4">
@@ -2224,10 +2249,14 @@ async function startApp() {
   S.appStarted = true;
   refreshCost();
   setInterval(refreshCost, 60000);
-  // Business is a separate app-shell: land on Sources, skip the creator composer
-  // loaders entirely. The creator experience below is untouched.
+  redeemTeamInvite();
+  // Business lands on Create, which for them is Leads, and skips the creator
+  // composer loaders entirely. It used to land on 'biz-sources' -- a section id
+  // that stopped existing in 3.8, when Sources became a Settings tab. That left
+  // a Business account looking at an empty page after login, and nothing threw:
+  // setSection simply hid every view, because none of them matched.
   if (S.user && S.user.account_type === 'business' && !S.user.is_local) {
-    setSection('biz-sources');
+    setSection('create');
     maybeShowOnboarding();   // an empty workspace needs a key and a source, same as a creator
     return;
   }
@@ -2550,7 +2579,11 @@ function renderUserChrome() {
   // screens don't exist yet (Phase 2); expose the flag on <body> so future
   // Business-only sections can gate on it without re-reading S everywhere.
   const business = cloud && S.user.account_type === 'business';
-  document.body.dataset.accountType = business ? 'business' : 'creator';
+  const agency = cloud && S.user.account_type === 'agency';
+  // Three values now. An agency gets the creator shell plus the Team tab, which
+  // is why this says 'agency' rather than folding it into 'creator': the CSS
+  // needs something to match on, and only .agency-only keys off it.
+  document.body.dataset.accountType = business ? 'business' : (agency ? 'agency' : 'creator');
   // Product switcher (Creators ↔ Business): one email = one login, so this
   // in-app toggle is the only way to move between the two products. Cloud only
   // (local desktop is creator-only and exempt from the business gate).
@@ -2730,6 +2763,82 @@ async function resendVerification() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+// ===== TEAM (agency invitations) =====
+
+async function loadTeam() {
+  const box = document.getElementById('team-list');
+  box.innerHTML = 'Loading…';
+  try {
+    const rows = await (await apiFetch(`${API}/api/team/invitations`)).json();
+    if (!rows.length) {
+      box.innerHTML = '<div class="text-sm text-gray-500">Nobody invited yet.</div>';
+      return;
+    }
+    const dot = { pending: '⚪', accepted: '🟢', revoked: '⚫' };
+    box.innerHTML = rows.map(r => `<div class="ce-card p-3 flex items-center gap-3 text-sm">
+      <span>${dot[r.status] || '⚪'}</span>
+      <div class="flex-1 min-w-0"><div class="text-gray-200 truncate">${esc(r.email)}</div>
+        <div class="text-xs text-gray-500">${esc(r.status)}</div></div>
+      ${r.status === 'pending'
+        ? `<button data-act="revoke" onclick="revokeInvite('${esc(r.id)}')" class="ce-btn-ghost px-3 py-1 text-xs">Revoke</button>`
+        : ''}
+    </div>`).join('');
+  } catch (e) { box.innerHTML = `<div class="text-sm text-red-400">${esc(e.message)}</div>`; }
+}
+
+async function inviteTeammate() {
+  const input = document.getElementById('team-email');
+  const status = document.getElementById('team-status');
+  const email = (input.value || '').trim();
+  status.classList.remove('hidden');
+  // The server validates this too. Asking it first costs a round-trip to be told
+  // what the field already knew, and the answer belongs next to the field.
+  if (!email.includes('@')) { status.textContent = 'Enter a valid email address.'; return; }
+  status.textContent = 'Sending…';
+  try {
+    const res = await apiFetch(`${API}/api/team/invitations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || 'Could not send the invitation.');
+    status.textContent = 'Invitation sent.';
+    input.value = '';
+    await loadTeam();
+  } catch (e) { status.textContent = e.message; }
+}
+
+async function revokeInvite(id) {
+  if (!confirm('Revoke this invitation? The link in the email stops working.')) return;
+  try {
+    await apiFetch(`${API}/api/team/invitations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await loadTeam();
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
+/** Redeem an invitation the user arrived with.
+ *
+ *  Accepting is an authenticated call, but the link lands on a signed-out
+ *  browser as often as not -- so the token is parked in sessionStorage and spent
+ *  once the app has a user. sessionStorage rather than S, because the sign-in
+ *  round trip reloads the page. */
+async function redeemTeamInvite() {
+  let token = null;
+  try { token = sessionStorage.getItem('team_invite_token'); } catch { return; }
+  if (!token) return;
+  try { sessionStorage.removeItem('team_invite_token'); } catch {}
+  try {
+    const res = await apiFetch(`${API}/api/team/invitations/accept`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const body = await res.json();
+    toast(res.ok ? "✅ You're on the team. Shared access is coming — nothing has changed yet."
+                 : '❌ ' + (body.detail || 'That invitation could not be accepted.'),
+          res.ok ? 'success' : 'error');
+  } catch (e) { toast('❌ ' + e.message, 'error'); }
+}
+
 function _clearAuthQuery() {
   // Drop /verify?token / /reset?token from the address bar without a reload.
   try { history.replaceState(null, '', '/'); } catch {}
@@ -2748,6 +2857,13 @@ async function handleAuthLink() {
     } catch { toast('Network error verifying email.', 'error'); }
     _clearAuthQuery();
     return false;   // continue normal boot (initAuth)
+  }
+  if (path === '/team/accept') {
+    // Park it and carry on booting: accepting needs a signed-in user, and this
+    // link routinely arrives in a browser that has never seen the app.
+    try { sessionStorage.setItem('team_invite_token', token); } catch {}
+    _clearAuthQuery();
+    return false;
   }
   if (path === '/reset') {
     S.resetToken = token;
@@ -5599,6 +5715,7 @@ async function loadAdmin() {
   // nothing with the credential blocks below, so they answer here instead of
   // falling through a preamble that is entirely about keys and brand identity.
   if (tab === 'sources') return loadSources();
+  if (tab === 'team') return loadTeam();
   if (tab === 'rules') return loadBrandRules();
   const account = tab === 'keys';
   const keysH = document.getElementById('keys-title');

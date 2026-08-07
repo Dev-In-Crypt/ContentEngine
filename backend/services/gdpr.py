@@ -28,8 +28,8 @@ from sqlalchemy import select
 
 from models.database import (
     AuditEntry, BrandRules, Lead, LLMUsage, ManagedAccount, MediaAsset, Post,
-    PostInsight, Slide, Source, SourceSnapshot, User, UserCredentials,
-    VideoPublishJob, Workspace,
+    PostInsight, Slide, Source, SourceSnapshot, TeamInvitation, User,
+    UserCredentials, VideoPublishJob, Workspace,
 )
 from services.scheduler import cancel_publish
 
@@ -129,6 +129,17 @@ async def collect_user_data(db, user: User) -> dict:
         "video_publish_jobs": [_row(j) for j in (await db.execute(
             select(VideoPublishJob).where(VideoPublishJob.user_id == user.id)
             .order_by(VideoPublishJob.created_at)
+        )).scalars().all()],
+        # Both directions, because both are personal data about this account and
+        # only one of them is this account's row to own: what they sent, and what
+        # they accepted from somebody else.
+        "team_invitations_sent": [_row(i) for i in (await db.execute(
+            select(TeamInvitation).where(TeamInvitation.owner_user_id == user.id)
+            .order_by(TeamInvitation.created_at)
+        )).scalars().all()],
+        "team_invitations_accepted": [_row(i) for i in (await db.execute(
+            select(TeamInvitation).where(TeamInvitation.accepted_user_id == user.id)
+            .order_by(TeamInvitation.created_at)
         )).scalars().all()],
         "workspace": await _collect_workspace(db, user),
     }
@@ -327,6 +338,17 @@ async def delete_user_data(db, user: User, *, root: Path = UPLOADS_ROOT) -> dict
     await _delete(ManagedAccount, ManagedAccount.owner_user_id == user.id,
                   "managed_accounts")
     await _delete(UserCredentials, UserCredentials.user_id == user.id, "credentials")
+    # Two directions, two different answers. Invitations this account SENT are
+    # its own records and go. Invitations it ACCEPTED belong to another agency —
+    # destroying their history of their own team would be erasing somebody
+    # else's data — so only the pointer to the departing user is released.
+    await _delete(TeamInvitation, TeamInvitation.owner_user_id == user.id,
+                  "team_invitations_sent")
+    accepted = (await db.execute(select(TeamInvitation).where(
+        TeamInvitation.accepted_user_id == user.id))).scalars().all()
+    for inv in accepted:
+        inv.accepted_user_id = None
+    counts["team_invitations_released"] = len(accepted)
     if ws is not None:
         await db.delete(ws)
     counts["workspaces"] = 1 if ws is not None else 0

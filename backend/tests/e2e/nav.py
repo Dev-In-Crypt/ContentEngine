@@ -27,7 +27,7 @@ _SECTION_BUTTON = {
 
 #: Every Settings tab. Sources and Rules were top-level Business buttons until
 #: 3.8; that they are ordinary tabs now is exactly what this set records.
-_SETTINGS_TAB = {"profiles", "connections", "keys", "sources", "rules"}
+_SETTINGS_TAB = {"profiles", "connections", "keys", "sources", "rules", "team"}
 
 #: Create mode → the panel that must be on screen once we arrive. Photo and
 #: Video stopped being sections in 3.5; they are shapes of the same act.

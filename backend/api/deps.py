@@ -218,6 +218,19 @@ def require_business(user: Annotated[UserModel, Depends(get_current_user)]) -> N
     return None
 
 
+def require_agency(user: Annotated[UserModel, Depends(get_current_user)]) -> None:
+    """Gate the Team screen on account_type == 'agency'.
+
+    Shaped exactly like require_business, including the desktop exemption: the
+    local owner is the only account on their machine and gates there protect
+    nobody. A 'creator' or 'business' cloud account gets 403 — inviting people
+    to a team is the one thing the agency plan is for.
+    """
+    if not user.is_local and (user.account_type or "creator") != "agency":
+        raise HTTPException(status_code=403, detail="Agency account required")
+    return None
+
+
 async def owned_post(db: AsyncSession, post_id: str, user: UserModel, *, options=()) -> PostModel:
     """Fetch a post the user is allowed to touch, else 404 (not 403 — don't reveal
     that another tenant's post exists). The local desktop user owns everything, so

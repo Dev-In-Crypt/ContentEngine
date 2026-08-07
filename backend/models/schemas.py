@@ -922,3 +922,31 @@ class BrandExtractResponse(BaseModel):
     target_audience: str = ""
     colors: list[str] = []
     logo_data_url: Optional[str] = None
+
+
+# ── Team invitations (UX phase 3.9) ─────────────────────────────────────────
+
+class TeamInviteRequest(BaseModel):
+    #: Validated as an address by the route, which folds it; the house style
+    #: here is a plain constrained str rather than pydantic[email].
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class TeamInviteAccept(BaseModel):
+    token: str = Field(..., min_length=1, max_length=4000)
+
+
+class TeamInvitationOut(BaseModel):
+    """What the agency sees about an invitation it sent.
+
+    No token field, deliberately: the token is a bearer credential that grants
+    the accept, and this list is rendered on a screen. It belongs in the email
+    and nowhere else.
+    """
+    id: str
+    email: str
+    status: str
+    created_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
