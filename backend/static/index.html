@@ -1998,7 +1998,7 @@ function renderDraftRow(p) {
     `<button class="ce-btn px-3 py-1.5 text-xs" data-act="approve"${blocked ? ' disabled title="Fix brand-rule issues first"' : ''}>Approve</button>` +
     `<button class="ce-btn-ghost px-3 py-1.5 text-xs" data-act="reject">Reject</button>`;
   const editable = status === 'draft' || status === 'in_review';
-  const netLabel = p.platform === 'x' ? '𝕏' : '📸 IG';
+  const netLabel = netBadge(p);
   const threadN = (p.thread_parts || []).length;
   row.innerHTML = `
     <div class="flex items-center gap-2 mb-1 flex-wrap">
@@ -3181,12 +3181,11 @@ async function generatePost() {
 
     try {
       const post = await streamGenerate(body, addProgress);
-      S.postId = post.id;
       // The photos belong to this post now; the next one starts empty rather than
       // silently reusing them.
       S.ownPhotos = [];
       renderOwnPhotos();
-      renderPreview(post);
+      bindPost(post);
       showStep(4);
     } catch(e) {
       document.getElementById('loading-spinner').classList.add('hidden');
@@ -3254,6 +3253,30 @@ function postPlatform() {
  *  surfaces (insights, reels, SEO keywords). */
 function postIsInstagram(p) {
   return (((p && p.platform) || postPlatform()) === 'instagram');
+}
+
+/** Put a post in the editor, and let go of the last one.
+ *
+ *  Three pointers say which post is on screen — S.postId (read by roughly
+ *  fourteen step-4 actions), S.post (the editor chrome's platform) and
+ *  S.currentPost (schedule + fact check). They were assigned in two different
+ *  functions, so nothing made them agree; that survived only because there was
+ *  one way in. Phase 4's network tabs swap the bound post without leaving the
+ *  screen, and then a stale pointer publishes the wrong network's post.
+ *
+ *  It also clears what renderPreview does not. S.slideOriginals is keyed by
+ *  slide number, so a three-slide post followed by a one-slide post left
+ *  entries 2 and 3 behind for the Reset button to read; S.editingSlide aimed
+ *  the replace/upload calls at a slide the new post may not even have. */
+function bindPost(post) {
+  S.postId = post.id;
+  S.post = post;
+  S.currentPost = post;
+  S.slideOriginals = {};
+  if (S.editingSlide !== null) closeEditSlide();
+  const variations = document.getElementById('variations-modal');
+  if (variations && !variations.classList.contains('hidden')) closeVariations();
+  renderPreview(post);
 }
 
 function renderPreview(post) {
@@ -4369,6 +4392,18 @@ function _todayRef() { const d = new Date(); return { year: d.getFullYear(), mon
 // — a field /api/posts did not send. `undefined || 'instagram'` made the filter
 // a no-op on Instagram and a match against nothing on X, so switching networks
 // emptied the calendar, the feed grid and analytics. The field is sent now.
+/** The glyphs for a group of sibling posts, one per network, deduped.
+ *  Used by the collapsed group cards in the Queue. */
+function netBadges(posts) {
+  const seen = new Set();
+  return (posts || []).map(p => {
+    const k = p.platform || 'instagram';
+    if (seen.has(k)) return '';
+    seen.add(k);
+    return netBadge(p);
+  }).join('');
+}
+
 function netBadge(p) {
   const x = (p.platform || 'instagram') === 'x';
   return `<span title="${x ? 'X' : 'Instagram'}" class="text-[10px]">${x ? '𝕏' : '📸'}</span>`;
@@ -4439,7 +4474,10 @@ async function loadGrid() {
 
 async function ensurePosts() {
   try {
-    const res = await apiFetch(`${API}/api/posts`);
+    // 500 is the server's own maximum (posts.py list_posts). The default is 100,
+    // and phase 4 puts two rows on screen where there used to be one, so the
+    // default would start dropping history the day siblings arrive.
+    const res = await apiFetch(`${API}/api/posts?limit=500`);
     if (res.ok) S.posts = await res.json();
   } catch(e) { /* ignore */ }
 }
@@ -4449,10 +4487,9 @@ async function openPost(postId) {
     const res = await apiFetch(`${API}/api/posts/${postId}`);
     if (!res.ok) throw new Error('Load failed');
     const post = await res.json();
-    S.postId = post.id;
     S.createMode = defaultCreateMode();
     setView('create');
-    renderPreview(post);
+    bindPost(post);
     showStep(4);
   } catch(e) { toast('❌ ' + e.message, 'error'); }
 }

@@ -31,7 +31,7 @@ def _post(**over):
 
 
 def _serve_posts(page, *posts):
-    page.route("**/api/posts", lambda r: r.fulfill(
+    page.route("**/api/posts*", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps(list(posts))))
 
 

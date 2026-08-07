@@ -349,7 +349,7 @@ def _open_post_from_calendar(page, preview: dict) -> None:
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
         created_at=datetime.now(timezone.utc),
     ).model_dump(mode="json")
-    page.route("**/api/posts", lambda r: r.fulfill(
+    page.route("**/api/posts*", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps([summary])))
     page.route(f"**/api/posts/{preview['id']}", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps(preview)))
