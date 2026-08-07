@@ -422,9 +422,20 @@
     <!-- 2. your brand. The website field arrives in 5.4; this is the fallback
          it falls back TO, so it ships first and stays. -->
     <section id="onb-s2" class="hidden space-y-4">
-      <h1 class="text-2xl font-semibold">Tell us about your brand</h1>
-      <p class="text-sm" style="color:var(--muted)">Your first post gets written from this, so a couple of words is enough.</p>
-      <div class="space-y-3">
+      <h1 class="text-2xl font-semibold">What's your website?</h1>
+      <p class="text-sm" style="color:var(--muted)">We'll read it and fill in the rest. Everything we find is a guess you can correct.</p>
+
+      <div id="onb-site-row" class="space-y-3">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="onb-site" type="url" placeholder="https://your-site.com" class="ce-input flex-1 px-4 py-3" />
+          <button id="onb-read-site" onclick="onbExtract()" class="ce-btn px-5 py-3">Read it</button>
+        </div>
+        <button id="onb-no-site" onclick="onbNoSite()" class="text-sm" style="color:var(--muted)">I don't have a website</button>
+      </div>
+
+      <!-- Everything below is the same form whether it was filled by the site
+           or by hand: one code path, two entrances. -->
+      <div id="onb-fields" class="hidden space-y-3">
         <div>
           <label class="block text-sm mb-1" style="color:var(--muted)">What's your niche?</label>
           <input id="onb-niche" type="text" maxlength="120" placeholder="Sourdough baking, B2B SaaS, personal finance…" class="ce-input w-full px-4 py-3" />
@@ -437,9 +448,19 @@
           <label class="block text-sm mb-1" style="color:var(--muted)">Brand name <span class="text-xs">(optional)</span></label>
           <input id="onb-brand" type="text" maxlength="120" placeholder="Crumb &amp; Co" class="ce-input w-full px-4 py-3" />
         </div>
+        <div id="onb-colors-row" class="hidden">
+          <label class="block text-sm mb-1" style="color:var(--muted)">Your colour</label>
+          <div id="onb-colors" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div id="onb-logo-row" class="hidden flex items-center gap-3">
+          <img id="onb-logo" alt="" class="w-12 h-12 object-contain rounded" />
+          <label class="text-sm flex items-center gap-2" style="color:var(--muted)">
+            <input id="onb-logo-use" type="checkbox" checked /> Use this as your logo
+          </label>
+        </div>
       </div>
       <p id="onb-brand-status" class="hidden text-sm"></p>
-      <button id="onb-continue-brand" onclick="onbSaveBrand()" class="ce-btn w-full py-3">Continue</button>
+      <button id="onb-continue-brand" onclick="onbSaveBrand()" class="hidden ce-btn w-full py-3">Continue</button>
     </section>
 
     <!-- 3. one network -->
@@ -6764,6 +6785,9 @@ function startOnboarding(opts) {
   set('onb-niche', prof.niche);
   set('onb-audience', prof.target_audience);
   set('onb-brand', prof.brand_name);
+  // A second pass starts at the website field again, but somebody who already
+  // has a brand on file should see it rather than an empty form behind a link.
+  if (prof.niche) onbShowFields();
   showOnboardingScreen(at);
 }
 
@@ -6819,6 +6843,115 @@ async function onbPickType(kind) {
 
 // ── screen 2: your brand ────────────────────────────────────────────────────
 
+//: What the site told us, kept until the user presses Continue. Nothing here is
+//: saved on arrival: every field is a guess from markup nobody is obliged to get
+//: right, so it is a proposal until somebody accepts it.
+S.onbRead = null;
+
+/** Reveal the brand form. One code path whether the site filled it or not. */
+function onbShowFields() {
+  document.getElementById('onb-fields').classList.remove('hidden');
+  document.getElementById('onb-continue-brand').classList.remove('hidden');
+}
+
+function onbNoSite() {
+  document.getElementById('onb-site-row').classList.add('hidden');
+  onbShowFields();
+}
+
+async function onbExtract() {
+  const url = document.getElementById('onb-site').value.trim();
+  if (!url) { onbBrandSay('Paste your website address, or say you have none.', false); return; }
+  const btn = document.getElementById('onb-read-site');
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Reading…';
+  try {
+    const res = await apiFetch(`${API}/api/brand/extract`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const body = await res.json();
+    // The message is the server's: the refusal text for a blocked address is
+    // deliberately uniform, and rewording it here would leak which kind of
+    // address was refused.
+    if (!res.ok) { onbBrandSay(body.detail || "We couldn't read that site.", false); return; }
+
+    S.onbRead = body;
+    const set = (id, v) => { if (v) document.getElementById(id).value = v; };
+    set('onb-brand', body.name);
+    set('onb-audience', body.target_audience);
+    // A tenant with no text model gets an empty niche back — the guess is the one
+    // part of extraction that needs a model. That is the ordinary case for a
+    // brand-new account, so it is a half-success, not a failure: the description
+    // seeds the field and the person edits a sentence instead of an empty box.
+    if (body.niche) {
+      set('onb-niche', body.niche);
+    } else {
+      set('onb-niche', (body.description || body.name || '').slice(0, 120));
+      onbBrandSay("We read your site but couldn't guess your niche — put it in a few words.", false);
+    }
+
+    const colors = document.getElementById('onb-colors');
+    colors.innerHTML = (body.colors || []).map((c, i) =>
+      `<button type="button" data-onb-color="${esc(c)}" onclick="onbPickColor('${esc(c)}')"
+         class="w-8 h-8 rounded-full border-2 ${i === 0 ? 'border-white' : 'border-transparent'}"
+         style="background:${esc(c)}" title="${esc(c)}"></button>`).join('');
+    document.getElementById('onb-colors-row').classList.toggle('hidden', !(body.colors || []).length);
+    S.onbColor = (body.colors || [])[0] || null;
+
+    const logoRow = document.getElementById('onb-logo-row');
+    if (body.logo_data_url) {
+      document.getElementById('onb-logo').src = body.logo_data_url;
+      logoRow.classList.remove('hidden');
+    } else {
+      logoRow.classList.add('hidden');
+    }
+
+    document.getElementById('onb-site-row').classList.add('hidden');
+    onbShowFields();
+  } catch (e) {
+    onbBrandSay(e.message || "We couldn't read that site.", false);
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+
+function onbPickColor(c) {
+  S.onbColor = c;
+  document.querySelectorAll('#onb-colors [data-onb-color]').forEach(b =>
+    b.classList.toggle('border-white', b.dataset.onbColor === c));
+}
+
+/** Save the colour, if one was chosen. Non-blocking on purpose — see onbSaveBrand. */
+async function onbSaveColor() {
+  if (!S.onbColor) return;
+  try {
+    await apiFetch(`${API}/api/settings/slide-style`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accent_color: S.onbColor }),
+    });
+  } catch (e) { /* reported below, never fatal */ }
+}
+
+/** Save the logo the site gave us, if the user kept the tick. Also non-blocking.
+ *
+ *  The data URL is turned back into bytes and posted as a file, which is what
+ *  the logo endpoint takes — the same call the brand editor already makes. */
+async function onbSaveLogo() {
+  const use = document.getElementById('onb-logo-use');
+  const read = S.onbRead;
+  if (!read || !read.logo_data_url || !use || !use.checked) return;
+  const acctId = S.user && S.user.active_account_id;
+  if (!acctId) return;
+  try {
+    const blob = await (await fetch(read.logo_data_url)).blob();
+    const fd = new FormData();
+    fd.append('file', blob, 'logo.png');
+    await apiFetch(`${API}/api/accounts/${encodeURIComponent(acctId)}/logo`,
+                   { method: 'POST', body: fd });
+  } catch (e) { /* reported below, never fatal */ }
+}
+
 function onbBrandSay(msg, ok) {
   const el = document.getElementById('onb-brand-status');
   if (!el) return;
@@ -6836,12 +6969,19 @@ async function onbSaveBrand() {
     return;
   }
   const btn = document.getElementById('onb-continue-brand');
+  // The profile is BLOCKING: the first post is written from it, so advancing
+  // without it would promise something we cannot deliver.
   const ok = await _putProfile(
     niche,
     document.getElementById('onb-audience').value.trim(),
     document.getElementById('onb-brand').value.trim(),
     btn);
   if (ok === false) { onbBrandSay("Couldn't save that — try again.", false); return; }
+  // The colour and the logo are NOT blocking. They are decoration on a post that
+  // will exist either way, and losing a favicon must not strand somebody in
+  // setup with no way forward.
+  await onbSaveColor();
+  await onbSaveLogo();
   showOnboardingScreen('3');
 }
 
