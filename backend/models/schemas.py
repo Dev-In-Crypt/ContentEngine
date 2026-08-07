@@ -273,6 +273,18 @@ class VerifiedClaim(BaseModel):
     evidence: str = ""                # verbatim source support, only when confirmed
 
 
+class PostVariant(BaseModel):
+    """One network's post within an idea's group — a tab, essentially.
+
+    Three fields and no caption: the tab bar needs to know the network exists,
+    which post to bind when it is clicked, and which dot to draw. Carrying the
+    whole sibling would ship the entire group's text on every preview.
+    """
+    id: str
+    platform: str = "instagram"
+    status: PostStatus
+
+
 class PostPreview(BaseModel):
     id: str
     topic: str
@@ -289,6 +301,13 @@ class PostPreview(BaseModel):
     #: of one keyed by its own id, so it is never null on a row created after
     #: UX phase 4 — which is what lets the Queue group unconditionally.
     variant_group_id: Optional[str] = None
+    #: Every post in this idea's group, including this one. Filled ONLY by the
+    #: three endpoints the SPA binds a post from (GET /{id}, the generate
+    #: stream's `complete`, and /adapt); everything else leaves it empty rather
+    #: than paying for a query nothing reads. An empty list therefore means
+    #: "not asked", never "no siblings" — the tab bar rebuilds on a change of
+    #: variant_group_id, not on this being short.
+    variants: list[PostVariant] = []
     slides: list[SlidePreview]
     #: The rendered video, if this post has one on disk — so the composer can put
     #: the preview (and the publish button inside it) back after a reload instead

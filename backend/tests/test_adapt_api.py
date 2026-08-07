@@ -405,6 +405,68 @@ def test_a_missing_source_file_does_not_fail_the_whole_adapt(client, sm, owner):
     assert r.json()["caption"] == "Adapted for the other network."
 
 
+# ── the tab bar's data ──────────────────────────────────────────────────────
+
+def test_a_lone_post_lists_only_itself(client, owner):
+    """A group of one is still a group, and the tab bar has to render something
+    for it — a post nobody adapted must not come back with an empty variant
+    list and lose its own tab."""
+    r = client.get(f"/api/posts/{owner['post_id']}", headers=owner["headers"])
+    assert [v["platform"] for v in r.json()["variants"]] == ["instagram"]
+
+
+def test_the_group_is_listed_from_either_end(client, owner):
+    """Whichever sibling is open, the tab bar is the same — it is a property of
+    the group, not of the post you happen to be looking at."""
+    sibling = client.post(f"/api/posts/{owner['post_id']}/adapt/x",
+                          headers=owner["headers"]).json()
+
+    assert sorted(v["platform"] for v in sibling["variants"]) == ["instagram", "x"]
+    from_source = client.get(f"/api/posts/{owner['post_id']}",
+                             headers=owner["headers"]).json()
+    assert sorted(v["platform"] for v in from_source["variants"]) == ["instagram", "x"]
+    assert {v["id"] for v in from_source["variants"]} == {owner["post_id"], sibling["id"]}
+
+
+def test_a_variant_carries_the_status_its_tab_has_to_show(client, sm, owner):
+    """The tab shows a dot per network, so the status travels with the row."""
+    async def _publish():
+        async with sm() as db:
+            p = await db.get(PostModel, owner["post_id"])
+            p.status = "published"
+            await db.commit()
+    asyncio.run(_publish())
+
+    r = client.get(f"/api/posts/{owner['post_id']}", headers=owner["headers"])
+    assert r.json()["variants"][0]["status"] == "published"
+
+
+def test_another_users_post_never_appears_in_a_group(client, sm, owner):
+    """variant_group_id is a plain uuid with no owner of its own. A row carrying
+    someone else's group key must not be listed as a tab — that would put a
+    stranger's post id in the response and one click from the editor."""
+    other_headers = _register(client, "stranger@ex.com")
+    stranger = _user_id(sm, "stranger@ex.com")
+    _seed_post(sm, stranger, platform="x", variant_group_id=owner["post_id"])
+
+    r = client.get(f"/api/posts/{owner['post_id']}", headers=owner["headers"])
+    assert [v["platform"] for v in r.json()["variants"]] == ["instagram"]
+    assert other_headers                      # registered, and sees nothing here
+
+
+def test_editing_a_caption_does_not_claim_the_group_is_empty(client, owner):
+    """Only the three endpoints the SPA binds from fill this list. PUT /caption
+    returns [] — and the SPA must not read that as "the group lost its tabs",
+    which is why it rebuilds the bar only when the group id changes."""
+    client.post(f"/api/posts/{owner['post_id']}/adapt/x", headers=owner["headers"])
+    r = client.put(f"/api/posts/{owner['post_id']}/caption",
+                   headers=owner["headers"],
+                   json={"caption": "Edited.", "hashtags": [], "seo_keywords": []})
+    assert r.status_code == 200
+    assert r.json()["variants"] == []
+    assert r.json()["variant_group_id"] == owner["post_id"]
+
+
 # ── failure ─────────────────────────────────────────────────────────────────
 
 def test_a_sibling_that_appears_mid_generation_is_not_duplicated(client, sm, owner):

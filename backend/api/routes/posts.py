@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Optional
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
@@ -39,7 +39,8 @@ from models.database import (
 )
 from models.schemas import (
     CaptionUpdate, GenerateRequest, ImageSource, OverlayUpdateRequest, Platform,
-    PostInsightSchema, PostPreview, PostStatus, PostSummary, RegenFieldRequest,
+    PostInsightSchema, PostPreview, PostStatus, PostSummary, PostVariant,
+    RegenFieldRequest,
     RegenFieldResponse, ReelRequest, ReplaceSlideRequest, ScheduleRequest, SlidePreview,
     PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
     PostFormat, VideoPublishJobStatus, XPostMode, XStyle,
@@ -68,6 +69,27 @@ def _preview_opts():
     return (
         selectinload(PostModel.slides),
     )
+
+
+async def _group_variants(db: AsyncSession, post: PostModel) -> list[PostVariant]:
+    """Every post of this idea, for the result screen's tab bar.
+
+    Scoped by user_id as well as by group: `variant_group_id` is a plain uuid
+    with no owner of its own, so a row carrying someone else's key would
+    otherwise be listed as a tab — putting a stranger's post id in the response
+    and one click away from the editor.
+    """
+    group_id = post.variant_group_id or post.id
+    rows = (await db.execute(
+        select(PostModel)
+        .where(PostModel.variant_group_id == group_id,
+               PostModel.user_id == post.user_id)
+        .order_by(PostModel.created_at.asc())
+    )).scalars().all()
+    if not rows:
+        rows = [post]           # a hand-seeded row with no group of its own
+    return [PostVariant(id=r.id, platform=r.platform or "instagram",
+                        status=PostStatus(r.status)) for r in rows]
 
 
 def _slide_path(post_id: str, slide_num: int) -> Path:
@@ -102,7 +124,8 @@ def _build_slide_preview(post: PostModel, slide: SlideModel, cache_bust: bool = 
     )
 
 
-def _to_preview(post: PostModel) -> PostPreview:
+def _to_preview(post: PostModel,
+                variants: Sequence[PostVariant] = ()) -> PostPreview:
     slides = [
         _build_slide_preview(post, s)
         for s in sorted(post.slides, key=lambda s: s.slide_number)
@@ -143,6 +166,7 @@ def _to_preview(post: PostModel) -> PostPreview:
         # _persist fills every new one, so a COALESCE here would only hide the
         # day that stops being true.
         variant_group_id=post.variant_group_id,
+        variants=list(variants),
         slides=slides,
         video_url=video_url,
         text_model_used=post.text_model or "",
@@ -374,7 +398,7 @@ async def generate_post(
                     # preview — no publish job. The user reviews, then schedules.
                     db_post.scheduled_at = body.plan_date
                     await db.commit()
-                preview = _to_preview(db_post)
+                preview = _to_preview(db_post, await _group_variants(db, db_post))
                 # Persist any buffered LLM usage from this generation.
                 try:
                     from api.routes.admin import _flush_usage
@@ -463,7 +487,7 @@ async def get_post(
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> PostPreview:
     post = await owned_post(db, post_id, user, options=_preview_opts())
-    return _to_preview(post)
+    return _to_preview(post, await _group_variants(db, post))
 
 
 @router.put("/{post_id}/caption", response_model=PostPreview)
@@ -1302,7 +1326,7 @@ async def adapt_post(
     group_id = source.variant_group_id or source.id
     existing = await _sibling_for(db, group_id, platform.value, source.user_id)
     if existing is not None:
-        return _to_preview(existing)
+        return _to_preview(existing, await _group_variants(db, existing))
 
     text_model = source.text_model or resolve_ai_choice(user, settings, "text")[1]
     if not text_model:
@@ -1343,7 +1367,7 @@ async def adapt_post(
     # never is — and the second caller still gets a sibling back.
     raced = await _sibling_for(db, group_id, platform.value, source.user_id)
     if raced is not None:
-        return _to_preview(raced)
+        return _to_preview(raced, await _group_variants(db, raced))
 
     sibling_id = str(uuid.uuid4())
     sibling = PostModel(
@@ -1381,7 +1405,7 @@ async def adapt_post(
 
     await db.commit()
     fresh = await owned_post(db, sibling_id, user, options=_preview_opts())
-    return _to_preview(fresh)
+    return _to_preview(fresh, await _group_variants(db, fresh))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

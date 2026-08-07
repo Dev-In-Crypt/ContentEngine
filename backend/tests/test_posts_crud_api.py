@@ -341,6 +341,20 @@ def test_generate_assigns_a_variant_group(client, generated_ids):
     assert _stored(client, post_id, "variant_group_id") == post_id
 
 
+def test_generate_completes_with_the_posts_own_tab(client, generated_ids):
+    """The SPA binds the post straight off this event, and the result screen
+    draws its tab bar from `variants`. An empty list here would open the editor
+    with no tab for the post it is showing."""
+    post_id = str(uuid.uuid4())
+    generated_ids.append(post_id)
+    client.fake_engine.generate_post.return_value = _generated(post_id)
+
+    res = client.post("/api/posts/generate", json={"topic": "AI trends", "format": "single"})
+    post = _sse_events(res)[-1]["post"]
+    assert [v["id"] for v in post["variants"]] == [post_id]
+    assert post["variants"][0]["platform"] == "instagram"
+
+
 def test_generate_records_the_tone_it_was_written_in(client, generated_ids):
     """The composer has always sent a tone and _persist has always dropped it,
     so adapting a post to a second network would rewrite it as 'professional'
