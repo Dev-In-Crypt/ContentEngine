@@ -72,6 +72,10 @@
     .sec-btn{ color:var(--muted); transition:background .12s,color .12s; }
     .sec-btn:hover{ background:var(--accent-dim); color:var(--text); }
     .sec-btn.sec-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
+    .tab-btn{ color:var(--muted); transition:background .12s,color .12s; }
+    .tab-btn:hover{ background:var(--accent-dim); color:var(--text); }
+    .tab-btn.tab-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
+    .tab-btn:disabled{ opacity:.55; cursor:progress; }
     .set-btn{ color:var(--muted); transition:background .12s,color .12s; }
     .set-btn:hover{ background:var(--accent-dim); color:var(--text); }
     .set-btn.set-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
@@ -754,6 +758,10 @@
 
   <!-- ===== STEP 4: PREVIEW + EDIT ===== -->
   <section id="step-4" class="step-section hidden bg-gray-900 rounded-2xl p-6 space-y-6">
+    <!-- One idea, a tab per network. A tab with no post behind it says
+         "＋ Adapt" rather than switching, because pressing it spends a caption
+         generation on the user's own key — browsing tabs must never cost. -->
+    <div id="result-tabs" class="flex gap-1"></div>
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold text-purple-300">Preview & Edit</h2>
       <div class="flex items-center gap-2">
@@ -3255,6 +3263,113 @@ function postIsInstagram(p) {
   return (((p && p.platform) || postPlatform()) === 'instagram');
 }
 
+//: The networks a result tab may exist for. Mirrors the server's
+//: ADAPTABLE_PLATFORMS: LinkedIn generates but cannot be published, so a tab
+//: for it would offer to spend money on a post that could never go out.
+const RESULT_TABS = [
+  { platform: 'instagram', label: '\ud83d\udcf8 Instagram' },
+  { platform: 'x',         label: '\ud835\udd4f X' },
+];
+
+/** Draw the tab bar for the bound post's idea.
+ *
+ *  The list comes from `post.variants`, which ONLY the three endpoints that
+ *  bind a post fill in — GET /{id}, the generate stream and /adapt. Everything
+ *  else returns it empty because filling it costs a query nothing reads. So an
+ *  empty list means "not asked", never "no siblings": the bar is keyed on
+ *  variant_group_id and a response that does not change the group leaves it
+ *  alone. Reading `variants.length` instead would collapse the whole bar every
+ *  time somebody saved a caption. */
+function renderResultTabs() {
+  const box = document.getElementById('result-tabs');
+  if (!box) return;
+  const post = S.post;
+  if (!post) { box.innerHTML = ''; return; }
+  const group = post.variant_group_id || post.id;
+  if (post.variants.length) {
+    S.resultGroup = group;
+    S.resultVariants = post.variants;
+  } else if (S.resultGroup !== group) {
+    // A different idea, and nobody told us its siblings: show the one tab we
+    // can prove exists rather than the last idea's bar.
+    S.resultGroup = group;
+    S.resultVariants = [{ id: post.id, platform: post.platform, status: post.status }];
+  }
+  // Same idea, empty list -> keep what we have. That branch is the whole point:
+  // most endpoints return `variants: []` because filling it costs a query
+  // nothing reads, and reading its length as truth would collapse the bar every
+  // time somebody saved a caption.
+  const byNet = {};
+  (S.resultVariants || []).forEach(v => { byNet[v.platform] = v; });
+  const dot = { published: '\ud83d\udfe2', scheduled: '\ud83d\udfe3', failed: '\ud83d\udd34' };
+  const here = postPlatform();
+  box.innerHTML = RESULT_TABS.map(t => {
+    const v = byNet[t.platform];
+    const busy = S.adapting === t.platform;
+    const cls = 'tab-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap'
+      + (v && t.platform === here ? ' tab-active' : '');
+    const tail = busy ? ' \u2026' : (v ? (dot[v.status] ? ' ' + dot[v.status] : '') : ' \uff0b Adapt');
+    return `<button data-result-tab="${t.platform}" ${busy ? 'disabled' : ''} `
+      + `onclick="setResultTab('${t.platform}')" class="${cls}">${t.label}${tail}</button>`;
+  }).join('');
+}
+
+/** Show this idea written for another network.
+ *
+ *  Deliberately NOT setNetwork(): that one belongs to the composer — it rewrites
+ *  S.platform, coerces the format and image source, edits the plan-a-week
+ *  options and re-enters setSection. Using it here would change what the NEXT
+ *  generation targets and re-render the section under the editor. The two share
+ *  glyphs and nothing else. */
+async function setResultTab(platform) {
+  if (S.adapting) return;                       // one adaptation at a time
+  if (platform === postPlatform()) return;
+
+  // The editor autosaves to localStorage under the post's own key, so text
+  // typed and then left behind by a switch would sit somewhere the user never
+  // goes back to. If it cannot be saved, stay put: losing words silently is
+  // worse than not switching.
+  if (resultEditsPending() && !(await saveCaption())) return;
+
+  const known = (S.resultVariants || []).find(v => v.platform === platform);
+  try {
+    if (known) {
+      const res = await apiFetch(`${API}/api/posts/${encodeURIComponent(known.id)}`);
+      if (!res.ok) throw new Error('Could not open that version.');
+      bindPost(await res.json());
+      return;
+    }
+    // Nothing there yet: this is the press that spends.
+    S.adapting = platform;
+    renderResultTabs();
+    const res = await apiFetch(
+      `${API}/api/posts/${encodeURIComponent(S.postId)}/adapt/${platform}`,
+      { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || 'Could not adapt this post.');
+    S.adapting = null;
+    bindPost(body);
+  } catch (e) {
+    toast('\u274c ' + e.message, 'error');
+  } finally {
+    S.adapting = null;
+    renderResultTabs();
+  }
+}
+
+/** Is there text on screen the server has not been told about? */
+function resultEditsPending() {
+  const post = S.post;
+  if (!post) return false;
+  const thread = S.threadParts || [];
+  const caption = thread.length
+    ? thread.join('\n\n')
+    : (document.getElementById('caption-edit') || {}).value;
+  if (caption !== undefined && caption !== (post.caption || '')) return true;
+  const same = (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []);
+  return !same(S.hashtags, post.hashtags) || !same(S.seoKeywords, post.seo_keywords);
+}
+
 /** Put a post in the editor, and let go of the last one.
  *
  *  Three pointers say which post is on screen — S.postId (read by roughly
@@ -3274,9 +3389,11 @@ function bindPost(post) {
   S.currentPost = post;
   S.slideOriginals = {};
   if (S.editingSlide !== null) closeEditSlide();
+  S.threadParts = post.thread_parts ? [...post.thread_parts] : [];
   const variations = document.getElementById('variations-modal');
   if (variations && !variations.classList.contains('hidden')) closeVariations();
   renderPreview(post);
+  renderResultTabs();
 }
 
 function renderPreview(post) {
@@ -4102,7 +4219,11 @@ async function saveCaption() {
         thread_parts: thread.length ? thread : null,
       }),
     });
-    if (!res.ok) throw new Error('Save failed');
+    if (!res.ok) {
+      let detail = 'Save failed';
+      try { detail = (await res.json()).detail || detail; } catch(e) {}
+      throw new Error(detail);
+    }
     // The response recomputes the claim flags from the saved text, so an edit that
     // removes a number clears its warning right away.
     try { renderClaims(await res.json()); } catch(e){ /* body already consumed */ }
@@ -4112,8 +4233,12 @@ async function saveCaption() {
     S.undoStack = [];
     document.getElementById('undo-btn').classList.add('hidden');
     toast('✅ Caption saved!', 'success');
+    return true;
   } catch(e) {
     toast('❌ ' + e.message, 'error');
+    // Reported, not swallowed: setResultTab abandons a switch whose save failed
+    // rather than carrying the user away from text that never reached the server.
+    return false;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = prev; }
   }
