@@ -5,6 +5,7 @@ import logging
 import re
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Optional
@@ -41,9 +42,10 @@ from models.schemas import (
     PostInsightSchema, PostPreview, PostStatus, PostSummary, RegenFieldRequest,
     RegenFieldResponse, ReelRequest, ReplaceSlideRequest, ScheduleRequest, SlidePreview,
     PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
-    VideoPublishJobStatus, XPostMode,
+    PostFormat, VideoPublishJobStatus, XPostMode, XStyle,
 )
 from services import media_store, staging
+from services.publishing.factory import PUBLISHABLE_PLATFORMS
 from services.claims import find_claims
 from services.content_engine import ContentEngine, GeneratedPost, _num_slides
 from services.content_plan import plan_topics
@@ -1141,6 +1143,245 @@ async def regenerate_field(
         raise HTTPException(status_code=502, detail=f"Regeneration failed: {e}") from e
 
     return RegenFieldResponse(field=body.field, variants=variants)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Adapt one idea to a second network
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Networks a sibling may be written for. Aliased to the publishable set rather
+#: than restated: LinkedIn generates but has no publisher, so a LinkedIn sibling
+#: would be a row that could never leave the Queue. When a publisher lands, this
+#: stops being a restriction on its own.
+ADAPTABLE_PLATFORMS = PUBLISHABLE_PLATFORMS
+
+
+def _slides_for_platform(
+    slides: list[SlideModel], platform: Platform, source_format: str,
+) -> tuple[list[SlideModel], str]:
+    """Which of the source's slides the sibling gets, and in what format.
+
+    X collapses to one. It has never had more than a single image in this
+    product — the composer already forces a carousel down to `single` the moment
+    you switch it to X — so a ten-slide X post would be a shape neither the
+    publisher nor the preview has ever seen.
+    """
+    ordered = sorted(slides, key=lambda s: s.slide_number)
+    if platform is Platform.X:
+        return ordered[:1], "single"
+    return ordered, source_format
+
+
+def _sibling_slides(
+    source_slides: list[SlideModel], sibling_id: str, overlays: list[str],
+    brand_engine: PillowBrandEngine,
+) -> list[SlideModel]:
+    """Copy the source's pictures into the sibling's own directory, re-rendering
+    the overlay from the newly generated caption.
+
+    The bytes are copied rather than the path shared: `regenerate_slide` and
+    `PUT /overlay` write in place, so a shared file means editing one network's
+    picture silently rewrites the other's — and deleting either post would
+    orphan the other's pixels, since cleanup keys orphan directories on post id.
+
+    Re-rendering rather than copying the finished JPEG is what keeps Instagram
+    wording, written for a caption that no longer exists, off the X post. It
+    needs the unbranded original: with no `raw_image_path` on disk there is
+    nothing to re-render from, so the finished picture is copied as-is and the
+    old overlay rides along. That is the honest degradation — losing the whole
+    adaptation because a file is missing would be worse.
+    """
+    out: list[SlideModel] = []
+    for i, src in enumerate(source_slides):
+        num = i + 1
+        dst = _slide_path(sibling_id, num)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+        overlay = overlays[i] if i < len(overlays) else (src.original_overlay_text or "")
+        params = dict(src.render_params or {})
+        raw_src = Path(src.raw_image_path) if src.raw_image_path else None
+        raw_dst: Optional[str] = None
+
+        if raw_src and raw_src.exists():
+            raw_bytes = raw_src.read_bytes()
+            raw_dst_path = _slide_raw_path(sibling_id, num)
+            raw_dst_path.write_bytes(raw_bytes)
+            raw_dst = str(raw_dst_path)
+            if overlay:
+                params["overlay_text"] = overlay
+            dst.write_bytes(_rebrand_slide_bytes(raw_bytes, params, brand_engine))
+        else:
+            src_path = Path(src.image_path) if src.image_path else None
+            if src_path and src_path.exists():
+                dst.write_bytes(src_path.read_bytes())
+            else:
+                continue                      # nothing on disk; the row would point at air
+            overlay = src.original_overlay_text or ""
+
+        out.append(SlideModel(
+            post_id=sibling_id,
+            slide_number=num,
+            image_source=src.image_source,
+            image_path=str(dst),
+            raw_image_path=raw_dst,
+            search_query=src.search_query,
+            gen_prompt=src.gen_prompt,
+            gen_model=src.gen_model,
+            attribution=src.attribution,
+            render_params=params,
+            original_overlay_text=overlay,
+            original_niche_text=src.original_niche_text,
+            page_number=src.page_number,
+            canva_template_id=src.canva_template_id,
+            media_asset_id=src.media_asset_id,
+        ))
+    return out
+
+
+async def _sibling_for(
+    db: AsyncSession, group_id: str, platform: str, user_id: Optional[str],
+) -> Optional[PostModel]:
+    """The group's post for this network, if it already has one.
+
+    One query answers two questions: adapting twice returns the first sibling
+    instead of spending a second generation, and adapting a post to its OWN
+    network returns the post itself — no separate branch for either.
+    """
+    stmt = (
+        select(PostModel)
+        .where(PostModel.variant_group_id == group_id,
+               PostModel.platform == platform)
+        .order_by(PostModel.created_at.asc())
+        .options(*_preview_opts())
+    )
+    if user_id is not None:
+        stmt = stmt.where(PostModel.user_id == user_id)
+    return (await db.execute(stmt)).scalars().first()
+
+
+@router.post("/{post_id}/adapt/{platform}", response_model=PostPreview)
+@limiter.limit("15/minute;150/hour")
+async def adapt_post(
+    post_id: str,
+    platform: Platform,
+    request: Request,
+    engine: Annotated[ContentEngine, Depends(get_content_engine)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> PostPreview:
+    """Write the same idea for another network, as a sibling post.
+
+    The sibling is an ordinary `Post` sharing the source's `variant_group_id`,
+    which is the whole design: publishing, scheduling, business approval and
+    analytics keep working on it with nothing changed. A child table holding
+    per-network text would have meant rewriting every place that writes publish
+    state.
+
+    Costs one caption generation on the user's own key, so the SPA only calls it
+    from an explicit "Adapt" button — never on hover, never prefetched.
+    """
+    source = await owned_post(db, post_id, user, options=_preview_opts())
+
+    if platform.value not in ADAPTABLE_PLATFORMS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{platform.value} posts can't be published yet, so there's "
+                   f"nothing to adapt them for.",
+        )
+    # A Business draft carries an LLM verdict (claim_check) about the exact text
+    # this would replace. Copying it attributes that verdict to words nobody
+    # checked; dropping it lets an approver sign off on an unchecked draft.
+    if source.workspace_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Business drafts can't be adapted yet — their fact check "
+                   "belongs to the text that's already there.",
+        )
+
+    group_id = source.variant_group_id or source.id
+    existing = await _sibling_for(db, group_id, platform.value, source.user_id)
+    if existing is not None:
+        return _to_preview(existing)
+
+    text_model = source.text_model or resolve_ai_choice(user, settings, "text")[1]
+    if not text_model:
+        raise HTTPException(
+            status_code=400,
+            detail="No text model selected. Choose a provider and model in Account → AI models.",
+        )
+
+    acct = await brand_for_post(db, source, user)
+    profile = resolve_user_profile(acct)
+    target_slides, target_format = _slides_for_platform(
+        list(source.slides), platform, source.format)
+
+    try:
+        caption = await engine.caption_gen.generate(
+            topic=source.topic,
+            format=PostFormat(target_format),
+            num_slides=len(target_slides),
+            text_model=text_model,
+            tone=source.tone or "professional",
+            niche=profile["niche"],
+            target_audience=profile["target_audience"],
+            brand_voice=resolve_user_brand_voice(acct),
+            brand_name=profile["brand_name"],
+            platform=platform,
+            # One short post, never a thread. The user reaches a thread through
+            # the composer's existing Split button, which also keeps this route
+            # clear of the X-Premium gate that only the LONG mode needs.
+            x_mode=XPostMode.SHORT,
+            x_style=XStyle.STANDARD,
+        )
+    except Exception as e:
+        log.exception("Adapt failed for post=%s platform=%s", post_id, platform.value)
+        raise HTTPException(status_code=502, detail=f"Adaptation failed: {e}") from e
+
+    # Two clicks a millisecond apart both miss the lookup above and both pay for
+    # a generation. Re-checking here means the work is duplicated but the row
+    # never is — and the second caller still gets a sibling back.
+    raced = await _sibling_for(db, group_id, platform.value, source.user_id)
+    if raced is not None:
+        return _to_preview(raced)
+
+    sibling_id = str(uuid.uuid4())
+    sibling = PostModel(
+        id=sibling_id,
+        user_id=source.user_id,
+        managed_account_id=source.managed_account_id,
+        variant_group_id=group_id,
+        topic=source.topic,
+        format=target_format,
+        status="preview",          # it has never been anywhere
+        platform=platform.value,
+        caption=caption.caption,
+        thread_parts=caption.thread_parts or None,
+        hashtags=caption.hashtags,
+        seo_keywords=caption.seo_keywords,
+        sources=caption.sources or source.sources,
+        cta=caption.cta,
+        hook=caption.hook,
+        alt_text=caption.alt_text,
+        tone=source.tone,
+        template_style=source.template_style,
+        brand_engine=source.brand_engine,
+        text_model=text_model,
+        image_model=source.image_model,
+        pillar=classify_pillar(source.topic, caption.caption),
+    )
+    db.add(sibling)
+
+    brand_cfg = apply_brand_slide_style(
+        await load_brand_config(db, None), acct, is_local=bool(user.is_local))
+    for slide in _sibling_slides(target_slides, sibling_id,
+                                 caption.slide_overlays or [],
+                                 PillowBrandEngine(brand_cfg)):
+        db.add(slide)
+
+    await db.commit()
+    fresh = await owned_post(db, sibling_id, user, options=_preview_opts())
+    return _to_preview(fresh)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
