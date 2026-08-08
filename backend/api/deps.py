@@ -310,17 +310,22 @@ def get_demo_text_provider(settings: Annotated[Settings, Depends(get_settings)])
     return _ai_provider_or_none("openrouter", settings.openrouter_api_key, settings)
 
 
-def get_content_engine(
-    text_provider: Annotated[object, Depends(get_text_provider)],
-    image_provider: Annotated[object, Depends(get_image_provider)],
-    stock: Annotated[StockClient, Depends(get_stock)],
-    brand_engine: Annotated[PillowBrandEngine, Depends(get_brand_engine)],
-    user: Annotated[UserModel, Depends(get_current_user)],
-) -> ContentEngine:
+def assemble_content_engine(text_provider, image_provider, stock: StockClient,
+                            brand_engine: PillowBrandEngine,
+                            user: UserModel) -> ContentEngine:
+    """Put an engine together from parts that are already resolved.
+
+    Separate from the dependency below because the free-generation path (UX
+    phase 6.2) needs an engine built from the APPLICATION's credentials rather
+    than the caller's, and a FastAPI dependency can only ever hand back the
+    caller's. Same assembly either way; only whose keys went into the parts
+    differs.
+    """
     # Text and images are independent: a tenant may use OpenRouter for copy and
     # Google for images, so these are two different objects.
     caption_gen = CaptionGenerator(text_provider)
     # Bound to THIS user: an upload id from another tenant must not resolve.
+    # Their own photos stay theirs no matter whose key writes the caption.
     def read_upload(upload_id: str) -> bytes:
         return staging.read(str(user.id), upload_id)
 
@@ -328,3 +333,39 @@ def get_content_engine(
                                upload_reader=read_upload)
     exporter = TemplateExporter()
     return ContentEngine(caption_gen, image_router, brand_engine, exporter)
+
+
+def build_content_engine(settings: Settings, user: UserModel, *,
+                         actor: Optional[UserModel],
+                         brand_engine: Optional[PillowBrandEngine] = None) -> ContentEngine:
+    """An engine that generates on `settings`, choosing models as `actor` would.
+
+    `actor=None` means the platform's own defaults — `resolve_ai_choice` already
+    reads it that way, which is why the free path needs no second resolver.
+    `user` is still the caller: their uploads, their brand, our bill.
+    """
+    text_provider, text_key = _resolve_provider(actor, settings, "text")
+    image_provider, image_key = _resolve_provider(actor, settings, "image")
+    stock = _get_stock_client(settings.unsplash_access_key, settings.pexels_api_key,
+                              settings.ssl_verify)
+    return assemble_content_engine(
+        _ai_provider_or_none(text_provider, text_key, settings),
+        _ai_provider_or_none(image_provider, image_key, settings),
+        stock, brand_engine or _get_brand_engine(), user)
+
+
+def _resolve_provider(actor: Optional[UserModel], settings: Settings,
+                      kind: str) -> tuple[Optional[str], str]:
+    provider, _model, api_key = resolve_ai_choice(actor, settings, kind)
+    return provider, api_key
+
+
+def get_content_engine(
+    text_provider: Annotated[object, Depends(get_text_provider)],
+    image_provider: Annotated[object, Depends(get_image_provider)],
+    stock: Annotated[StockClient, Depends(get_stock)],
+    brand_engine: Annotated[PillowBrandEngine, Depends(get_brand_engine)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> ContentEngine:
+    return assemble_content_engine(text_provider, image_provider, stock,
+                                   brand_engine, user)

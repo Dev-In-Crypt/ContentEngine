@@ -87,13 +87,21 @@ def test_reserving_spends_one(sm):
     assert _used(sm, uid) == 1
 
 
-def test_a_second_free_post_is_refused(sm):
-    """The whole point of the counter. Without this the onboarding endpoint is
-    an unlimited generator on the app's own key."""
+def test_the_post_after_the_last_one_is_refused(sm):
+    """The whole point of the counter. Without it every route that spends the
+    application's key is an unlimited generator.
+
+    Written against FREE_POST_LIMIT rather than a literal: the number moved from
+    1 to 5 in UX phase 6.2 and will move again, and a test that hard-codes it
+    stops testing the guard and starts testing the constant."""
     uid = _user(sm)
-    _run(sm, free_generation.reserve, uid)
+    for _ in range(free_generation.FREE_POST_LIMIT):
+        assert _run(sm, free_generation.reserve, uid) is True
+
     assert _run(sm, free_generation.reserve, uid) is False
-    assert _used(sm, uid) == 1          # a refused attempt costs nothing
+    # A refused attempt costs nothing — it must not push the counter past the
+    # limit, or a later increase would hand back posts nobody was owed.
+    assert _used(sm, uid) == free_generation.FREE_POST_LIMIT
 
 
 def test_the_reservation_is_committed_not_merely_pending(sm):

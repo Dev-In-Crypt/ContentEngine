@@ -169,27 +169,17 @@ def test_the_desktop_owner_still_gets_the_whole_env(sm, platform_settings):
 
 # ── the route that made it reachable ────────────────────────────────────────
 
-def test_picking_a_provider_does_not_buy_the_platforms_key(client):
-    """The exploit path, in the order it was available: register, name a
-    provider and a model — neither requires a key — and generate.
-
-    `PUT /api/settings/ai` still accepts a provider without a key, and that is
-    correct: choosing a model before pasting its key is a reasonable order to do
-    things in. What must not follow is a generation.
-    """
-    hdr = _register(client)
-    r = client.put("/api/settings/ai",
-                   json={"text_provider": "openrouter",
-                         "text_model": "anthropic/claude-sonnet-4"}, headers=hdr)
-    assert r.status_code == 200
-
-    gen = client.post("/api/posts/generate",
-                      json={"topic": "AI trends in 2026", "format": "single"},
-                      headers=hdr)
-    assert gen.status_code == 400
-    # About the KEY, not the model: a model is named, so "choose a model" would
-    # send the user to a screen where everything already looks right.
-    assert "key" in gen.json()["detail"].lower()
+# The exploit this file was written for — register, name a provider and a model
+# (neither needs a key), generate on ours — is no longer refused outright, and
+# that is deliberate: UX phase 6.2 gives an account with NO key of its own a few
+# generations on the application's key, so that "paste an API key" arrives after
+# somebody has seen the product work. What used to be an open tap is now metered.
+#
+# The bounds live where the harness for them is, in test_generation_on_our_key.py:
+# `test_our_key_runs_our_models` (their model choice never becomes our bill) and
+# `test_the_allowance_runs_out_and_asks_for_a_key` (the door closes again). The
+# posture asserted HERE is the one that has no allowance and never will: their
+# own credentials are theirs, and the platform's are the platform's.
 
 
 def test_every_route_that_writes_copy_refuses_the_same_way(client, sm):
@@ -202,6 +192,12 @@ def test_every_route_that_writes_copy_refuses_the_same_way(client, sm):
     call site, which a per-route test would not.
     """
     hdr = _register(client)
+    # A key for one vendor, a model chosen from another: a realistic half-configured
+    # state, and the one that still reaches this guard now that an account with
+    # no key at all has an allowance instead. They hold a key, so they are on
+    # their own path — and the provider they named has no client to build.
+    client.put("/api/settings/credentials",
+               json={"anthropic_api_key": "their-anthropic-key"}, headers=hdr)
     client.put("/api/settings/ai",
                json={"text_provider": "openrouter",
                      "text_model": "anthropic/claude-sonnet-4"}, headers=hdr)

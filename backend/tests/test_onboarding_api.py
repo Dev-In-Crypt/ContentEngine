@@ -195,13 +195,22 @@ def test_the_allowance_is_spent(client, ready, sm):
     assert _used(sm, "new@example.com") == 1
 
 
-def test_a_second_free_post_is_refused(client, ready, sm, caption_gen):
-    client.post("/api/onboarding/first-post", headers=ready, json={"platform": "instagram"})
-    r = client.post("/api/onboarding/first-post", headers=ready, json={"platform": "instagram"})
+def test_a_sample_post_beyond_the_allowance_is_refused(client, ready, sm, caption_gen):
+    """Onboarding shares the allowance with ordinary generation (UX phase 6.2)
+    rather than holding one of its own — otherwise "free posts" would mean one
+    number in the composer and a different one during setup."""
+    from services.free_generation import FREE_POST_LIMIT
+
+    for _ in range(FREE_POST_LIMIT):
+        client.post("/api/onboarding/first-post", headers=ready,
+                    json={"platform": "instagram"})
+    r = client.post("/api/onboarding/first-post", headers=ready,
+                    json={"platform": "instagram"})
 
     assert r.status_code == 409
-    assert caption_gen.generate.call_count == 1     # the refusal cost nothing
-    assert _used(sm, "new@example.com") == 1
+    # The refusal cost nothing: no extra call, no extra count.
+    assert caption_gen.generate.call_count == FREE_POST_LIMIT
+    assert _used(sm, "new@example.com") == FREE_POST_LIMIT
 
 
 def test_the_allowance_is_spent_before_the_model_is_called(client, ready, sm, caption_gen):

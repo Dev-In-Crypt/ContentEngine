@@ -100,8 +100,17 @@ def _cleanup_post_dir(post_id: str) -> None:
 
 
 @pytest.fixture
-def client(db_url):
+def client(db_url, monkeypatch):
     import asyncio
+
+    import services.user_settings as user_settings
+
+    # The module-level getter as well as the dependency. Since UX phase 6.2 the
+    # generate route resolves models through build_settings_for_user, which calls
+    # config.get_settings() itself — it also serves the scheduler, which has no
+    # request to hang an override on. Patching only the dependency left these
+    # tests asserting the developer's own .env models.
+    monkeypatch.setattr(user_settings, "get_settings", lambda: _settings(db_url))
 
     eng = create_async_engine(db_url)
 

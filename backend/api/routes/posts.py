@@ -19,9 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.deps import (
-    get_content_engine, get_current_user, get_db, get_effective_settings, get_settings,
-    get_text_provider, load_brand_config, owned_post, require_local, require_token,
-    require_verified,
+    build_content_engine, get_content_engine, get_current_user, get_db,
+    get_effective_settings, get_settings, get_text_provider, load_brand_config,
+    owned_post, require_local, require_token, require_verified,
 )
 from api.ratelimit import limiter
 from api.routes.media import _owned_asset as _owned_media_asset
@@ -45,7 +45,10 @@ from models.schemas import (
     PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
     PostFormat, VideoPublishJobStatus, XPostMode, XStyle,
 )
-from services import media_store, staging
+from services import free_generation, media_store, staging
+from services.app_spend import flush_usage
+from services.generation_credits import claim_generation_credentials
+from services.openrouter import current_user_id
 from services.publishing.factory import PUBLISHABLE_PLATFORMS
 from services.claims import find_claims
 from services.content_engine import ContentEngine, GeneratedPost, _num_slides
@@ -266,6 +269,16 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
+async def _refund_free_generation(db: AsyncSession, user: UserModel) -> None:
+    """Refunding must never be the reason a request dies: the user has already
+    lost their post, and losing the error frame too would leave them looking at
+    a spinner. Same shape as the onboarding route, for the same reason."""
+    try:
+        await free_generation.refund(db, user)
+    except Exception:
+        log.exception("Could not refund a free generation for user=%s", user.id)
+
+
 def _require_text_provider(engine: ContentEngine, provider: Optional[str]) -> None:
     """Refuse before the model call when no client could be built for it.
 
@@ -296,6 +309,7 @@ async def generate_post(
     body: GenerateRequest,
     engine: Annotated[ContentEngine, Depends(get_content_engine)],
     settings: Annotated[Settings, Depends(get_settings)],
+    effective: Annotated[Settings, Depends(get_effective_settings)],
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> StreamingResponse:
@@ -334,18 +348,26 @@ async def generate_post(
                         f"but {len(body.upload_ids)} were uploaded."),
             )
 
-    # The model comes from the tenant's own AI settings (they pay for it), with an
-    # optional per-post override. No platform default in cloud.
-    _tp, _tm, _ = resolve_ai_choice(user, settings, "text")
-    _ip, _im, _ = resolve_ai_choice(user, settings, "image")
-    text_model = body.text_model or _tm
-    image_model = body.image_model or _im
+    # Whose key writes this post. Their own if they have one — their provider,
+    # their models, their bill, exactly as before. Otherwise this claims one of
+    # the free generations (UX phase 6.2) and refuses in every case where it
+    # cannot: no key anywhere, allowance spent, or our own daily ceiling reached.
+    # It commits the claim, so from here on a failure owes them a refund.
+    creds = await claim_generation_credentials(
+        db, user, effective=effective, base=settings,
+        text_model_override=body.text_model,
+        image_model_override=body.image_model)
+    if creds.on_our_key:
+        # Built from OUR settings, choosing models as the platform would. The
+        # caller is still `user`: their uploads and their brand, our bill.
+        engine = build_content_engine(creds.settings, user, actor=None)
+    text_model, image_model = creds.text_model, creds.image_model
     if not text_model:
         raise HTTPException(
             status_code=400,
             detail="No text model selected. Choose a provider and model in Account → AI models.",
         )
-    _require_text_provider(engine, _tp)
+    _require_text_provider(engine, creds.text_provider)
     # Long-form X posts only exist for Premium accounts; X itself would reject the
     # tweet, so refuse before spending a generation on it.
     if (body.platform == Platform.X and body.x_mode == XPostMode.LONG
@@ -367,6 +389,14 @@ async def generate_post(
 
         async def run() -> None:
             try:
+                if creds.on_our_key:
+                    # Our key, our bill. `record_usage` stamps whatever this
+                    # holds, and the auth dependency set it to the caller —
+                    # leaving it would put our spend on their usage dashboard,
+                    # which contradicts the one thing we told them: you pay the
+                    # vendor directly. Set inside the task, so only this
+                    # generation is affected.
+                    current_user_id.set(None)
                 # Brand identity comes from the active profile — always a row
                 # since UX phase 2, never the User's own columns. Keys and
                 # x_premium stay on `user` (the owner's).
@@ -412,6 +442,9 @@ async def generate_post(
                     x_style=body.x_style,
                     thread_min=body.thread_min,
                     thread_max=body.thread_max,
+                    # Live web search is a surcharge per call, and a free trial
+                    # post is not worth buying it. On their own key it stays on.
+                    web_grounded=not creds.on_our_key,
                     progress=progress,
                 )
                 await progress("Saving to database...")
@@ -427,10 +460,12 @@ async def generate_post(
                     db_post.scheduled_at = body.plan_date
                     await db.commit()
                 preview = _to_preview(db_post, await _group_variants(db, db_post))
-                # Persist any buffered LLM usage from this generation.
+                # Persist any buffered LLM usage from this generation. On our key
+                # the row lands un-attributed, which is what the daily ceiling
+                # counts — so this is also how the next request learns the price
+                # of this one.
                 try:
-                    from api.routes.admin import _flush_usage
-                    await _flush_usage(db)
+                    await flush_usage(db)
                 except Exception:
                     pass
                 await queue.put({"type": "complete", "post": preview.model_dump(mode="json")})
@@ -438,6 +473,12 @@ async def generate_post(
                 # Log the detail server-side; don't leak internals (incl. upstream
                 # API text) to the client.
                 log.exception("Post generation failed")
+                if creds.on_our_key:
+                    # The allowance bought nothing: no post reached the user, so
+                    # hand it back. Deliberately only on failure — a refund after
+                    # a successful generation would mint free posts out of a
+                    # retry, which is the direction that costs money.
+                    await _refund_free_generation(db, user)
                 await queue.put({"type": "error",
                                  "message": "Generation failed. Please try again."})
             finally:

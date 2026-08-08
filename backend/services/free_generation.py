@@ -22,10 +22,15 @@ from models.database import User
 
 log = logging.getLogger(__name__)
 
-#: One. Enough to end onboarding on something real, few enough that the worst an
-#: attacker gets per account is a single short completion about a niche they
-#: typed in themselves. UX phase 6 raises this and adds the anonymous half.
-FREE_POST_LIMIT = 1
+#: Five, including the one onboarding spends on its sample post. Enough to use
+#: the product properly — generate, adapt, try another angle — before being asked
+#: for a key, which is the whole point of moving that question off the doorstep.
+#:
+#: Five and not fifteen because a generation here is a full post: up to ten AI
+#: images on our key, so the worst case per account is dollars rather than cents.
+#: The number that actually protects the bill is the daily ceiling in
+#: services/app_spend.py; this one decides when a person is asked for a key.
+FREE_POST_LIMIT = 5
 
 
 def remaining(user: User) -> int:

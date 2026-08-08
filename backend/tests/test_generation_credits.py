@@ -1,0 +1,272 @@
+"""Who pays for a generation, and what happens when the answer is "we do".
+
+This is the only place in the product where somebody who has given us nothing
+can spend our money, so the tests are mostly about refusing — and about the
+ORDER of the refusals, which carries as much weight as the refusals themselves:
+
+  * anything that will be refused is refused before it costs anything;
+  * the allowance is claimed before the model is called, never after;
+  * a refusal that is about us (our daily ceiling) must not consume something
+    that belongs to them (their remaining free post).
+
+The other half is what the free path is allowed to do with our key: our models,
+never theirs, and never a mixture where their cheap text key buys our images.
+"""
+import asyncio
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+import services.openrouter as openrouter
+from config import Settings
+from models.database import Base, User
+from services import app_spend, free_generation
+from services.user_settings import _CRED_FIELDS
+from services.generation_credits import claim_generation_credentials
+
+def _settings(**overrides) -> Settings:
+    """Settings with every credential explicitly blank, then the overrides.
+
+    `Settings()` reads backend/.env, and a developer machine has real keys in
+    it — so a constant named NO_KEYS quietly carried the author's own OpenRouter
+    key, every free-path test took the own-key branch, and they all passed for
+    the wrong reason. They did, until this function existed.
+    """
+    blank = {field: "" for field in _CRED_FIELDS}
+    return Settings(app_mode="cloud", **{**blank, **overrides})
+
+
+#: The platform, configured: our key, our models. Nothing here reaches a cloud
+#: tenant on its own since UX phase 6.0 — it is reachable only by spending an
+#: allowance, which is what this module decides.
+BASE = _settings(
+    openrouter_api_key="app-key",
+    default_text_provider="openrouter",
+    default_text_model="our/cheap-text-model",
+    default_image_provider="openrouter",
+    default_image_model="our/cheap-image-model",
+    app_daily_spend_usd=10.0,
+)
+
+#: A tenant who has pasted nothing: since 6.0 every credential is empty.
+NO_KEYS = _settings()
+
+#: A tenant with their own key and their own choice of model.
+OWN = _settings(openrouter_api_key="their-key")
+
+
+@pytest.fixture(autouse=True)
+def empty_buffer():
+    openrouter.drain_usage()
+    yield
+    openrouter.drain_usage()
+
+
+@pytest.fixture
+def sm(tmp_path):
+    eng = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'credits.db'}")
+
+    async def _create():
+        async with eng.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    asyncio.run(_create())
+    yield async_sessionmaker(eng, expire_on_commit=False)
+    asyncio.run(eng.dispose())
+
+
+def _user(sm, **fields) -> str:
+    async def _go():
+        async with sm() as db:
+            user = User(email="t@example.com", **fields)
+            db.add(user)
+            await db.commit()
+            return user.id
+    return asyncio.run(_go())
+
+
+def _claim(sm, user_id: str, *, effective=NO_KEYS, base=BASE, **kw):
+    async def _go():
+        async with sm() as db:
+            user = await db.get(User, user_id)
+            return await claim_generation_credentials(
+                db, user, effective=effective, base=base, **kw)
+    return asyncio.run(_go())
+
+
+def _used(sm, user_id: str) -> int:
+    async def _go():
+        async with sm() as db:
+            return (await db.execute(
+                select(User.free_generations_used).where(User.id == user_id))).scalar_one()
+    return asyncio.run(_go())
+
+
+# ── their key ───────────────────────────────────────────────────────────────
+
+def test_an_account_with_its_own_key_pays_for_itself(sm):
+    uid = _user(sm, text_provider="openrouter", text_model="their/model")
+    creds = _claim(sm, uid, effective=OWN)
+
+    assert creds.on_our_key is False
+    assert creds.text_model == "their/model"
+    assert creds.settings is OWN
+    assert _used(sm, uid) == 0        # no allowance touched, nothing to refund
+
+
+def test_any_of_the_four_text_keys_counts_as_having_one(sm):
+    """OpenRouter is the one the product recommends and the one we ourselves
+    use, which makes it the easy thing to check for — and checking only it would
+    hand free generations to every account paying Anthropic directly."""
+    uid = _user(sm, text_provider="anthropic", text_model="claude-sonnet-5")
+    creds = _claim(sm, uid, effective=_settings(anthropic_api_key="their-key"))
+
+    assert creds.on_our_key is False
+    assert _used(sm, uid) == 0
+
+
+def test_a_key_with_no_model_chosen_is_still_their_problem(sm):
+    """Halfway through setup: a key pasted, no model picked. They get today's
+    "choose a provider and model" refusal from the route, because text_model
+    comes back empty — not a free generation. Paying for somebody who already
+    holds a key would be the wrong way to be generous."""
+    uid = _user(sm)
+    creds = _claim(sm, uid, effective=OWN)
+
+    assert creds.on_our_key is False
+    assert not creds.text_model
+    assert _used(sm, uid) == 0
+
+
+def test_the_desktop_owner_is_not_a_tenant(sm):
+    """On the desktop the platform and the user are the same person, and the
+    keys come from .env. An allowance there would be an allowance against
+    yourself."""
+    uid = _user(sm, is_local=True)
+    creds = _claim(sm, uid, effective=BASE)
+
+    assert creds.on_our_key is False
+    assert _used(sm, uid) == 0
+
+
+# ── our key ─────────────────────────────────────────────────────────────────
+
+def test_an_account_with_no_key_gets_one_of_ours(sm):
+    uid = _user(sm)
+    creds = _claim(sm, uid)
+
+    assert creds.on_our_key is True
+    assert creds.settings is BASE
+    assert creds.actor is None            # the platform's choice, not theirs
+    assert _used(sm, uid) == 1            # claimed before anything was called
+
+
+def test_our_key_runs_our_models(sm):
+    """Choosing an expensive model in Settings must not be a decision about our
+    spending, made by somebody who does not pay the bill."""
+    uid = _user(sm, text_provider="openrouter", text_model="anthropic/expensive",
+                image_provider="openrouter", image_model="also/expensive")
+    creds = _claim(sm, uid)
+
+    assert creds.text_model == "our/cheap-text-model"
+    assert creds.image_model == "our/cheap-image-model"
+
+
+def test_the_request_cannot_pick_the_model_we_pay_for(sm):
+    """Same rule one level lower: the composer sends a per-post override, and on
+    our key it is ignored rather than honoured."""
+    uid = _user(sm)
+    creds = _claim(sm, uid, text_model_override="anthropic/expensive",
+                   image_model_override="also/expensive")
+
+    assert creds.text_model == "our/cheap-text-model"
+    assert creds.image_model == "our/cheap-image-model"
+
+
+def test_the_override_is_still_honoured_on_their_own_key(sm):
+    """The other half: it is their money, so a per-post model is theirs to pick.
+    Without this the guard above could be "ignore overrides", which would break
+    a feature instead of protecting a bill."""
+    uid = _user(sm, text_provider="openrouter", text_model="their/model")
+    creds = _claim(sm, uid, effective=OWN, text_model_override="their/other-model")
+
+    assert creds.text_model == "their/other-model"
+
+
+# ── refusals, in order ──────────────────────────────────────────────────────
+
+def test_no_key_anywhere_reads_as_it_always_did(sm):
+    """Nothing to spend on either side. From where the user sits nothing about
+    UX phase 6 happened, so the words do not change."""
+    uid = _user(sm)
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid, base=NO_KEYS)
+
+    assert refusal.value.status_code == 400
+    assert "model" in refusal.value.detail.lower()
+    assert _used(sm, uid) == 0
+
+
+def test_a_spent_allowance_asks_for_a_key(sm):
+    uid = _user(sm, free_generations_used=free_generation.FREE_POST_LIMIT)
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid)
+
+    assert refusal.value.status_code == 409
+    assert "key" in refusal.value.detail.lower()
+    assert _used(sm, uid) == free_generation.FREE_POST_LIMIT   # not pushed past it
+
+
+def test_a_capped_day_refuses_without_spending_their_allowance(sm):
+    """The ceiling is about us. Charging them a free post for our bad day would
+    take something they can never get back, for a reason that is not theirs."""
+    uid = _user(sm)
+    asyncio.run(_spend(sm, 10.0))
+
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid)
+
+    assert refusal.value.status_code == 503
+    assert _used(sm, uid) == 0
+
+
+def test_the_ceiling_sees_spend_that_is_still_buffered(sm):
+    """The whole reason 6.1 exists, asserted from the caller that depends on it:
+    a ceiling reading only committed rows would let a burst through while the
+    money sat in a list in memory."""
+    uid = _user(sm)
+    openrouter.record_usage("m", {"total_tokens": 1, "cost": 11.0})
+
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid)
+    assert refusal.value.status_code == 503
+
+
+def test_their_own_allowance_is_checked_before_our_ceiling(sm):
+    """Both are exhausted. They should be told the thing they can act on — add
+    a key — rather than "come back tomorrow", which would be true today and
+    still true tomorrow."""
+    uid = _user(sm, free_generations_used=free_generation.FREE_POST_LIMIT)
+    asyncio.run(_spend(sm, 10.0))
+
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid)
+    assert refusal.value.status_code == 409
+
+
+def test_a_capped_day_does_not_stop_somebody_paying_their_own_way(sm):
+    """Our ceiling is our problem. An account with a key must not be caught by
+    it — nothing they do costs us anything."""
+    uid = _user(sm, text_provider="openrouter", text_model="their/model")
+    asyncio.run(_spend(sm, 99.0))
+
+    creds = _claim(sm, uid, effective=OWN)
+    assert creds.on_our_key is False
+
+
+async def _spend(sm, usd: float) -> None:
+    """Money already on our bill today, written the way the app writes it."""
+    openrouter.record_usage("m", {"total_tokens": 1, "cost": usd})
+    async with sm() as db:
+        await app_spend.flush_usage(db)

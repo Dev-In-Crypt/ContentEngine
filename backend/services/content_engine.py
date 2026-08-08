@@ -105,6 +105,7 @@ class ContentEngine:
         x_style: XStyle = XStyle.STANDARD,
         thread_min: int = 3,
         thread_max: int = 7,
+        web_grounded: bool = True,
         progress: Optional[ProgressFn] = None,
     ) -> GeneratedPost:
         # Text-only (X): a pure-text post with no image. Still write the caption,
@@ -142,6 +143,12 @@ class ContentEngine:
             x_style=x_style,
             thread_min=thread_min,
             thread_max=thread_max,
+            # Live web search is a per-call surcharge on whoever holds the key,
+            # and only OpenRouter offers it — which is also what the application's
+            # own key is. Default on, as it has always been; the free-generation
+            # path (UX phase 6.2) turns it off, because a trial post is not worth
+            # buying search for.
+            web_grounded=web_grounded,
         )
 
         # 2. Build per-slide configs if not supplied
