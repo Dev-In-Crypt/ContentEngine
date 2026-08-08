@@ -272,6 +272,141 @@ def test_skipping_the_network_still_moves_on(page, signup):
     expect(page.locator("#onb-s4")).to_be_visible()
 
 
+# ── screen 4: your first post ───────────────────────────────────────────────
+
+def _sse(*frames):
+    return "".join("data: " + json.dumps(f) + "\n\n" for f in frames)
+
+
+def _first_post(page, body=None, status=200, frames=None):
+    def _handler(route):
+        if frames is not None:
+            route.fulfill(status=200, content_type="text/event-stream", body=_sse(*frames))
+        else:
+            route.fulfill(status=status, content_type="application/json",
+                          body=json.dumps(body or {}))
+    page.route("**/api/onboarding/first-post", _handler)
+
+
+def _to_last_screen(page):
+    _to_brand(page)
+    page.locator("#onb-no-site").click()
+    page.locator("#onb-niche").fill("Sourdough baking")
+    page.locator("#onb-continue-brand").click()
+    expect(page.locator("#onb-s3")).to_be_visible()
+    page.locator("#onb-skip-net").click()
+    expect(page.locator("#onb-s4")).to_be_visible()
+
+
+def test_the_last_screen_shows_the_post_it_wrote(page, signup):
+    signup()
+    _first_post(page, frames=[
+        {"type": "progress", "message": "Writing your first post…"},
+        {"type": "complete", "post": {
+            "topic": "One useful thing about Sourdough baking",
+            "platform": "instagram", "hook": "Your starter is not dead.",
+            "caption": "It is asleep. Feed it twice and it wakes up.",
+            "cta": "Save this.", "hashtags": ["#sourdough", "#baking"]}},
+    ])
+    _to_last_screen(page)
+
+    expect(page.locator("#onb-post")).to_contain_text("Your starter is not dead.")
+    expect(page.locator("#onb-post")).to_contain_text("Feed it twice")
+    expect(page.locator("#onb-post")).to_contain_text("#sourdough")
+    expect(page.locator("#onb-copy")).to_be_visible()
+
+
+def test_the_progress_line_is_shown_while_it_writes(page, signup):
+    """The wait is a model call, so it says what it is doing rather than
+    spinning — the same choice made for the composer in 4.6."""
+    signup()
+    _first_post(page, frames=[
+        {"type": "progress", "message": "Writing your first post…"},
+        {"type": "complete", "post": {"topic": "t", "platform": "instagram",
+                                      "hook": "h", "caption": "c", "cta": "",
+                                      "hashtags": []}},
+    ])
+    _to_last_screen(page)
+    expect(page.locator("#onb-post")).to_contain_text("c")
+
+
+def test_without_an_app_key_you_can_still_start(page, signup):
+    """503 is the permanent state of a deployment with no app key — and of the
+    e2e server. Onboarding must not end in a dead end because of it."""
+    signup()
+    _first_post(page, body={"detail": "Sample posts are temporarily unavailable."},
+                status=503)
+    _to_last_screen(page)
+
+    expect(page.locator("#onb-post")).to_contain_text("temporarily unavailable")
+    expect(page.locator("#onb-finish")).to_be_visible()
+    expect(page.locator("#onb-finish")).to_be_enabled()
+
+
+def test_a_used_up_allowance_still_lets_you_start(page, signup):
+    """409 — somebody who came back through the Setup guide after spending it."""
+    signup()
+    _first_post(page, body={"detail": "You've used your free sample post."}, status=409)
+    _to_last_screen(page)
+
+    expect(page.locator("#onb-post")).to_contain_text("free sample post")
+    expect(page.locator("#onb-finish")).to_be_enabled()
+
+
+def test_a_broken_stream_still_lets_you_start(page, signup):
+    """An error frame rather than an HTTP status — the third way this can fail,
+    and the one where the allowance was already spent and refunded."""
+    signup()
+    _first_post(page, frames=[
+        {"type": "progress", "message": "Writing your first post…"},
+        {"type": "error", "message": "We couldn't write your sample post."},
+    ])
+    _to_last_screen(page)
+
+    expect(page.locator("#onb-post")).to_contain_text("couldn't write")
+    expect(page.locator("#onb-finish")).to_be_enabled()
+
+
+def test_starting_lands_in_the_composer_with_the_topic_ready(page, signup):
+    """The point of the whole flow: the first thing after setup is a composer
+    that already knows what it is about."""
+    signup()
+    _first_post(page, frames=[
+        {"type": "complete", "post": {
+            "topic": "One useful thing about Sourdough baking",
+            "platform": "instagram", "hook": "h", "caption": "c", "cta": "",
+            "hashtags": []}},
+    ])
+    _to_last_screen(page)
+    page.locator("#onb-finish").click()
+
+    expect(page.locator(SCREEN)).to_be_hidden()
+    expect(page.locator("#create-post-panel")).to_be_visible()
+    expect(page.locator("#topic")).to_have_value(
+        "One useful thing about Sourdough baking")
+    assert _state(page) == "done"
+
+
+def test_the_post_is_asked_for_once(page, signup):
+    """It costs money. Arriving on the screen twice — a resume, a back — must
+    not buy a second one, and the server's own cap only saves the row."""
+    signup()
+    calls = []
+    page.on("request", lambda r: calls.append(r.url)
+            if "onboarding/first-post" in r.url else None)
+    _first_post(page, frames=[
+        {"type": "complete", "post": {"topic": "t", "platform": "instagram",
+                                      "hook": "h", "caption": "c", "cta": "",
+                                      "hashtags": []}},
+    ])
+    _to_last_screen(page)
+    expect(page.locator("#onb-post")).to_contain_text("c")
+
+    page.evaluate("showOnboardingScreen('4')")
+    page.wait_for_timeout(400)
+    assert len(calls) == 1, calls
+
+
 # ── leaving, and coming back ────────────────────────────────────────────────
 
 def test_leaving_setup_puts_you_in_the_app(page, signup):

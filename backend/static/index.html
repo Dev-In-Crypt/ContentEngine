@@ -484,8 +484,13 @@
          has a screen to name and the flow already ends somewhere. -->
     <section id="onb-s4" class="hidden space-y-4">
       <h1 class="text-2xl font-semibold">Your first post</h1>
-      <div id="onb-post" class="text-sm" style="color:var(--muted)">Ready when you are.</div>
-      <button id="onb-finish" onclick="closeOnboarding('done')" class="ce-btn w-full py-3">Start creating</button>
+      <div id="onb-post" class="text-sm space-y-3" style="color:var(--muted)">Ready when you are.</div>
+      <div class="flex gap-2">
+        <button id="onb-copy" onclick="onbCopyPost()" class="hidden ce-btn-ghost px-4 py-3">Copy</button>
+        <!-- Always enabled, in every outcome. A setup screen whose last button
+             depends on a model answering is a dead end on the day it doesn't. -->
+        <button id="onb-finish" onclick="onbFinish()" class="ce-btn flex-1 py-3">Start creating</button>
+      </div>
     </section>
   </div>
 </div>
@@ -6768,6 +6773,7 @@ function showOnboardingScreen(n) {
     const el = document.getElementById('onb-s' + k);
     if (el) el.classList.toggle('hidden', k !== want);
   });
+  if (want === '4') onbGenerateFirstPost();
   const idx = ONB_SCREENS.indexOf(want);
   const prog = document.getElementById('onb-progress');
   if (prog) prog.textContent = idx >= 0 ? `Step ${idx + 1} of ${ONB_SCREENS.length}` : '';
@@ -6776,6 +6782,7 @@ function showOnboardingScreen(n) {
 
 function startOnboarding(opts) {
   const restart = !!(opts && opts.restart);
+  if (restart) { S.onbAsked = false; S.onbPost = null; }
   document.getElementById('onboarding-screen').classList.remove('hidden');
   const at = restart ? '1' : (ONB_SCREENS.includes(onbState()) ? onbState() : '1');
   // Prefill from the server rather than from whatever was typed last time: a
@@ -6999,6 +7006,101 @@ function onbSkipNetwork() {
   // A skip that does nothing but move on. The composer already has a default,
   // and picking one here is a convenience rather than a requirement.
   showOnboardingScreen('4');
+}
+
+// ── screen 4: the first post ───────────────────────────────────────────────
+
+//: The post we were given, kept so Copy and the composer prefill can read it.
+S.onbPost = null;
+
+/** Ask for the sample post, once.
+ *
+ *  Once matters: it costs real money on OUR key, and arriving at this screen
+ *  twice — a resume, a back, a re-render — must not buy a second one. The
+ *  server's own cap protects the row but not the spend. */
+async function onbGenerateFirstPost() {
+  if (S.onbAsked) return;
+  S.onbAsked = true;
+  const box = document.getElementById('onb-post');
+  box.textContent = 'Writing your first post…';
+  try {
+    const res = await apiFetch(`${API}/api/onboarding/first-post`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: postPlatform() === 'x' ? 'x' : 'instagram' }),
+    });
+    if (!res.ok) {
+      // 503 (no app key), 409 (allowance spent) and anything else all land here.
+      // The message is the server's; the way forward stays open either way.
+      const body = await res.json().catch(() => ({}));
+      onbPostSay(body.detail || "We couldn't write a sample post — you can start anyway.");
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let post = null;
+    let failed = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+        if (ev.type === 'progress') box.textContent = ev.message;
+        if (ev.type === 'complete') post = ev.post;
+        if (ev.type === 'error') failed = ev.message;
+      }
+    }
+    if (post) { S.onbPost = post; onbRenderPost(post); }
+    else onbPostSay(failed || "We couldn't write a sample post — you can start anyway.");
+  } catch (e) {
+    onbPostSay(e.message || "We couldn't write a sample post — you can start anyway.");
+  }
+}
+
+function onbPostSay(msg) {
+  const box = document.getElementById('onb-post');
+  box.textContent = msg;
+  document.getElementById('onb-copy').classList.add('hidden');
+}
+
+function onbRenderPost(post) {
+  const tags = (post.hashtags || []).join(' ');
+  document.getElementById('onb-post').innerHTML =
+    `<div class="ce-card p-4 space-y-2 text-left">
+       <div class="font-semibold" style="color:var(--text)">${esc(post.hook || '')}</div>
+       <div style="color:var(--text)">${esc(post.caption || '')}</div>
+       ${post.cta ? `<div class="text-sm">${esc(post.cta)}</div>` : ''}
+       ${tags ? `<div class="text-sm" style="color:var(--accent)">${esc(tags)}</div>` : ''}
+     </div>
+     <p class="text-xs">This one is just to show you the shape — it isn't saved. The next one will be.</p>`;
+  document.getElementById('onb-copy').classList.remove('hidden');
+}
+
+function onbCopyPost() {
+  const p = S.onbPost;
+  if (!p) return;
+  const text = [p.hook, p.caption, p.cta, (p.hashtags || []).join(' ')]
+    .filter(Boolean).join('\n\n');
+  try { navigator.clipboard.writeText(text); toast('Copied', 'success'); }
+  catch (e) { toast("Couldn't copy", 'error'); }
+}
+
+/** Leave setup, carrying the topic across.
+ *
+ *  The whole point of the flow: the first thing after setup is a composer that
+ *  already knows what it is about, rather than an empty box. */
+function onbFinish() {
+  const topic = S.onbPost && S.onbPost.topic;
+  closeOnboarding('done');
+  if (topic) {
+    const el = document.getElementById('topic');
+    if (el && !el.value) el.value = topic;
+  }
 }
 
 // ===== YOUR DATA: export + erasure =====
