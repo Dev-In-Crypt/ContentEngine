@@ -14,7 +14,7 @@ from collections.abc import AsyncGenerator, Sequence
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -47,7 +47,7 @@ from models.schemas import (
 )
 from services import free_generation, media_store, staging
 from services.app_spend import flush_usage
-from services.generation_credits import claim_generation_credentials
+from services.generation_credits import claim_generation_credentials, no_key_detail
 from services.openrouter import current_user_id
 from services.publishing.factory import PUBLISHABLE_PLATFORMS
 from services.claims import find_claims
@@ -295,11 +295,7 @@ def _require_text_provider(engine: ContentEngine, provider: Optional[str]) -> No
     """
     if engine.caption_gen.text_provider is not None:
         return
-    named = f" for {provider}" if provider else ""
-    raise HTTPException(
-        status_code=400,
-        detail=f"No API key{named}. Add it in Account → AI models.",
-    )
+    raise HTTPException(status_code=400, detail=no_key_detail(provider))
 
 
 @router.post("/generate")
@@ -501,21 +497,44 @@ async def list_posts(
     user: Annotated[UserModel, Depends(get_current_user)],
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None, description="filter by post status, e.g. 'failed'"),
+    status: Optional[list[str]] = Query(None, description="filter by post status, repeatable"),
+    since: Optional[datetime] = Query(None, description="scheduled/published at or after"),
+    until: Optional[datetime] = Query(None, description="scheduled/published before"),
 ) -> list[PostSummary]:
-    # Paginated newest-first. Default 100 is generous enough that the SPA's
-    # calendar/grid (which fetch without paging) keep working at small scale;
-    # callers can page with ?limit=&offset= as volume grows.
+    """Newest first, paginated, and filterable by status and by calendar window.
+
+    The filters are not conveniences — they are what lets each screen ask for its
+    own rows instead of everyone sharing one cache of "the newest 500". That
+    cache truncated silently: a scheduled post older than the newest 500 stayed
+    out of the Queue while still publishing on time, and a month further back
+    than 500 posts rendered as an empty calendar. Both look like "you have
+    nothing", which is the one wrong answer a list can give.
+
+    `status` repeats (`?status=draft&status=scheduled`) because the Queue is
+    four statuses and asking four times, or asking for everything, were the only
+    alternatives.
+    """
     stmt = (select(PostModel).order_by(PostModel.created_at.desc())
             .options(selectinload(PostModel.slides)).limit(limit).offset(offset))
-    if status is not None:
+    if status:
         # Reject an unknown value rather than returning []: a typo would otherwise
         # read as "you have no failed posts", which is the opposite of the truth.
-        try:
-            wanted = PostStatus(status)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown status: {status!r}") from None
-        stmt = stmt.where(PostModel.status == wanted.value)
+        wanted = []
+        for value in status:
+            try:
+                wanted.append(PostStatus(value).value)
+            except ValueError:
+                raise HTTPException(status_code=400,
+                                    detail=f"Unknown status: {value!r}") from None
+        stmt = stmt.where(PostModel.status.in_(wanted))
+    # When a post sits on the calendar is `scheduled_at`, or `published_at` once
+    # it has gone out — the same COALESCE the calendar itself draws with. Filter
+    # on anything else and a published post moves off the day it was published.
+    when = func.coalesce(PostModel.scheduled_at, PostModel.published_at)
+    if since is not None:
+        stmt = stmt.where(when >= since)
+    if until is not None:
+        stmt = stmt.where(when < until)
     if not user.is_local:
         stmt = stmt.where(PostModel.user_id == user.id)
         # Agency multi-account (Phase 7): scope the view to the active brand. NULL =

@@ -323,3 +323,35 @@ def _get(sm, user_id: str) -> User:
         async with sm() as db:
             return await db.get(User, user_id)
     return asyncio.run(_go())
+
+
+# ── saying what is actually missing ─────────────────────────────────────────
+
+def test_a_chosen_model_with_no_key_is_told_about_the_key(sm):
+    """Found on prod right after the phase-6 deploy. The account had named a
+    provider and a model, held no key, and the platform holds none either — and
+    the refusal said "No text model selected. Choose a provider and model."
+
+    A model IS selected. Sending them to a screen where everything already looks
+    right is the least useful thing the sentence could do, and this is the
+    permanent state of every self-hosted install, so it is the first refusal a
+    new operator reads.
+    """
+    uid = _user(sm, text_provider="openrouter", text_model="their/model")
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid, base=NO_KEYS)
+
+    assert refusal.value.status_code == 400
+    assert "key" in refusal.value.detail.lower()
+    assert "openrouter" in refusal.value.detail.lower()
+
+
+def test_an_account_that_has_chosen_nothing_is_told_to_choose(sm):
+    """The other half, and the reason the first is not simply "always say key":
+    somebody who has picked no provider cannot paste a key for it."""
+    uid = _user(sm)
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid, base=NO_KEYS)
+
+    assert refusal.value.status_code == 400
+    assert "model" in refusal.value.detail.lower()

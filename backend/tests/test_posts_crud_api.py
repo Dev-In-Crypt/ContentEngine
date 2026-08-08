@@ -826,3 +826,81 @@ def test_list_posts_survives_a_business_status(client):
     res = client.get("/api/posts")
     assert res.status_code == 200, res.text
     assert res.json()[0]["status"] == "in_review"
+
+
+# ── asking for a slice instead of everything ────────────────────────────────
+#
+# One cache of "the newest 500" served the Queue, the Calendar and the profile
+# grid. It truncated silently, and silence is the problem: a scheduled post
+# older than those 500 stayed out of the Queue and published anyway, and a month
+# further back than 500 posts drew an empty calendar. Both read as "you have
+# nothing", which is the one wrong answer a list can give.
+
+
+def _seed_dated(client, *, scheduled=None, published=None, status="scheduled",
+                topic="dated") -> str:
+    import asyncio
+    pid = str(uuid.uuid4())
+
+    async def _s():
+        async with client.app.state.sessionmaker() as db:
+            db.add(PostModel(id=pid, topic=topic, format="single", status=status,
+                             scheduled_at=scheduled, published_at=published))
+            await db.commit()
+    asyncio.run(_s())
+    return pid
+
+
+def test_the_queue_can_ask_for_its_four_statuses_at_once(client):
+    """The Queue is draft, preview, scheduled and failed. Four requests, or one
+    request for everything and a filter in the browser, were the alternatives —
+    and the second is what truncated."""
+    draft = _seed_status(client, "draft")
+    scheduled = _seed_status(client, "scheduled")
+    _seed_status(client, "published")
+
+    body = client.get("/api/posts?status=draft&status=scheduled").json()
+    assert sorted(p["id"] for p in body) == sorted([draft, scheduled])
+
+
+def test_one_bad_status_among_several_still_refuses(client):
+    """A typo in the middle of a list must not quietly narrow the answer."""
+    _seed_status(client, "draft")
+    r = client.get("/api/posts?status=draft&status=fialed")
+    assert r.status_code == 400
+    assert "fialed" in r.json()["detail"]
+
+
+def test_a_calendar_month_asks_only_for_that_month(client):
+    from datetime import datetime, timezone
+
+    august = _seed_dated(client, scheduled=datetime(2026, 8, 14, tzinfo=timezone.utc))
+    _seed_dated(client, scheduled=datetime(2026, 7, 31, 23, tzinfo=timezone.utc))
+    _seed_dated(client, scheduled=datetime(2026, 9, 1, tzinfo=timezone.utc))
+
+    body = client.get("/api/posts?since=2026-08-01T00:00:00Z"
+                      "&until=2026-09-01T00:00:00Z").json()
+    assert [p["id"] for p in body] == [august]
+
+
+def test_a_published_post_sits_on_the_day_it_went_out(client):
+    """The window reads scheduled_at, or published_at once it has gone — the same
+    COALESCE the calendar draws with. Filtering on either alone moves half the
+    month's posts off the calendar."""
+    from datetime import datetime, timezone
+
+    published = _seed_dated(client, published=datetime(2026, 8, 3, tzinfo=timezone.utc),
+                            status="published")
+
+    body = client.get("/api/posts?since=2026-08-01T00:00:00Z"
+                      "&until=2026-09-01T00:00:00Z").json()
+    assert [p["id"] for p in body] == [published]
+
+
+def test_an_undated_post_is_not_in_any_month(client):
+    """A draft nobody has scheduled belongs in the Queue, not on a day."""
+    _seed_status(client, "draft")
+
+    body = client.get("/api/posts?since=2026-01-01T00:00:00Z"
+                      "&until=2027-01-01T00:00:00Z").json()
+    assert body == []

@@ -49,6 +49,18 @@ _TEXT_KEY_FIELDS = ("openrouter_api_key", "openai_api_key",
 _NO_MODEL = "No text model selected. Choose a provider and model in Account → AI models."
 
 
+def no_key_detail(provider: Optional[str]) -> str:
+    """The refusal for "you named this provider and never pasted its key".
+
+    One sentence in one place because two routes and this module all have to say
+    it, and a user who reads "choose a provider and model" while looking at a
+    screen where both are chosen learns nothing about what to do next. Found
+    exactly that way: on prod, minutes after the phase-6 deploy.
+    """
+    named = f" for {provider}" if provider else ""
+    return f"No API key{named}. Add it in Account → AI models."
+
+
 @dataclass(frozen=True)
 class GenerationCreds:
     """Everything the route needs to build an engine and know who is paying."""
@@ -139,10 +151,16 @@ async def claim_generation_credentials(
                     text_model_override=text_model_override,
                     image_model_override=image_model_override)
 
-    # 2. No key of theirs and none of ours — nothing to spend either way. Same
-    #    words as before UX phase 6, because from where they sit nothing changed.
+    # 2. No key of theirs and none of ours — nothing to spend either way, and
+    #    the sentence has to name whichever half is actually missing. An account
+    #    that picked a provider and a model needs a key; one that picked nothing
+    #    cannot paste a key for a provider it has not chosen.
+    their_provider, their_model, _their_key = resolve_ai_choice(user, effective, "text")
     our_provider, our_model, our_key = resolve_ai_choice(None, base, "text")
     if not (our_key and our_model):
+        if their_provider and their_model:
+            raise HTTPException(status_code=400,
+                                detail=no_key_detail(their_provider))
         raise HTTPException(status_code=400, detail=_NO_MODEL)
 
     # 3. Their allowance, checked before our ceiling: this refusal is about them

@@ -10,6 +10,7 @@ schema change breaks them here rather than silently in the product.
 """
 import json
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from playwright.sync_api import expect
@@ -31,8 +32,39 @@ def _post(**over):
 
 
 def _serve_posts(page, *posts):
-    page.route("**/api/posts*", lambda r: r.fulfill(
-        status=200, content_type="application/json", body=json.dumps(list(posts))))
+    """Serve /api/posts the way the server does — honouring the query.
+
+    It used to hand every caller the whole list. That was harmless while the SPA
+    filtered in the browser, and became a lie the moment each screen started
+    asking for its own slice: the Queue's "published work is not in the Queue"
+    test passed only because the client re-filtered, and would have kept passing
+    with no filter anywhere at all.
+
+    So the stub filters on `status` and on the calendar window, on the same
+    COALESCE(scheduled_at, published_at) the route uses. A fake that answers
+    differently from the thing it stands for tests the fake.
+    """
+    def handler(route, request):
+        params = parse_qs(urlparse(request.url).query)
+        rows = list(posts)
+        wanted = params.get("status")
+        if wanted:
+            rows = [p for p in rows if p["status"] in wanted]
+        since, until = params.get("since"), params.get("until")
+        if since or until:
+            def when(p):
+                stamp = p.get("scheduled_at") or p.get("published_at")
+                return datetime.fromisoformat(stamp) if stamp else None
+            rows = [p for p in rows if when(p) is not None
+                    and (not since or when(p) >= datetime.fromisoformat(since[0]))
+                    and (not until or when(p) < datetime.fromisoformat(until[0]))]
+        offset = int(params.get("offset", ["0"])[0])
+        limit = int(params.get("limit", ["500"])[0])
+        rows = rows[offset:offset + limit]
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(rows))
+
+    page.route("**/api/posts*", handler)
 
 
 def _on(day_offset=1, **over):
@@ -360,3 +392,61 @@ def test_a_business_queue_is_the_approval_pipeline(page, signed_in):
     expect(page.locator("#biz-drafts-list")).to_contain_text("A drafted lead")
     expect(page.locator("#queue-list")).to_be_hidden()
     expect(page.locator("#view-queue")).not_to_contain_text("A creator draft")
+
+
+# ---------------------------------------------- asking for a slice, not for all
+
+def test_the_calendar_asks_only_for_the_month_it_is_drawing(page, signed_in):
+    """One cache of the newest 500 used to feed every screen, and a month
+    further back than those 500 drew blank. Now the window is the request, so
+    what arrives is already the month — and a post outside it never travels."""
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/api/posts?" in r.url else None)
+    signed_in()
+    _serve_posts(page, _on(day_offset=1, id="c1", topic="This month"))
+    open_calendar(page)
+
+    assert asked, "the calendar fetched nothing"
+    assert "since=" in asked[-1] and "until=" in asked[-1]
+    expect(page.locator("#cal-grid")).to_contain_text("This month")
+
+
+def test_the_queue_asks_for_its_own_statuses(page, signed_in):
+    """Four statuses in one request. The alternative was fetching everything and
+    filtering in the browser, which is exactly what truncated."""
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/api/posts?" in r.url else None)
+    signed_in()
+    _serve_posts(page, _post(id="q1", topic="A draft", status="draft"))
+    open_section(page, "queue")
+
+    expect(page.locator("#queue-list")).to_contain_text("A draft")
+    for wanted in ("draft", "preview", "scheduled", "failed"):
+        assert f"status={wanted}" in asked[-1], f"{wanted} was not asked for"
+
+
+def test_the_profile_grid_offers_more_when_a_page_comes_back_full(page, signed_in):
+    """The one screen that genuinely wants all of history, so the one that
+    pages. A full page means there may be more; a short one means there is not,
+    and asking again to find out would be a wasted request on every visit."""
+    signed_in()
+    _serve_posts(page, *[_post(id=f"g{i}", topic=f"Post {i}", status="published")
+                         for i in range(90)])
+    open_calendar(page, "profile")
+
+    expect(page.locator("#grid-more")).to_be_visible()
+    expect(page.locator("#grid-container div.relative")).to_have_count(60)
+
+    page.locator("#grid-more").click()
+
+    expect(page.locator("#grid-container div.relative")).to_have_count(90)
+    expect(page.locator("#grid-more")).to_be_hidden()      # 30 < a full page
+
+
+def test_a_short_first_page_offers_nothing_more(page, signed_in):
+    signed_in()
+    _serve_posts(page, _post(id="g1", topic="Only one", status="published"))
+    open_calendar(page, "profile")
+
+    expect(page.locator("#grid-container")).to_contain_text("Only one")
+    expect(page.locator("#grid-more")).to_be_hidden()

@@ -156,3 +156,106 @@ def test_a_refused_invitation_shows_the_servers_reason(page, signed_in):
     page.locator("#team-email").fill("dup@example.com")
     page.locator("#team-invite-btn").click()
     expect(page.locator("#team-status")).to_contain_text("already has a pending invitation")
+
+
+# ── arriving on an invitation link ──────────────────────────────────────────
+#
+# The one journey in the product where a second person enters somebody else's
+# account, and until now the only part of it under test was the route. The link
+# lands on a browser that has usually never seen the app, so the token is parked
+# in sessionStorage and spent after the boot has a user — three moving parts
+# (the URL handler, the store, the redeemer) that no test had ever run in order.
+
+
+def _accepting(page, *, ok=True, detail="That invitation could not be accepted."):
+    """Catch the accept call and record the token it carried."""
+    seen = []
+
+    def handler(route, request):
+        seen.append(json.loads(request.post_data or "{}").get("token"))
+        if ok:
+            route.fulfill(status=200, content_type="application/json",
+                          body=json.dumps(_invitation(status="accepted")))
+        else:
+            route.fulfill(status=400, content_type="application/json",
+                          body=json.dumps({"detail": detail}))
+
+    page.route("**/api/team/invitations/accept", handler)
+    return seen
+
+
+def test_an_invitation_link_is_redeemed_once_the_app_has_a_user(page, signed_in, live_server):
+    """The link arrives in a signed-out browser far more often than not, and
+    accepting is an authenticated call — so landing on it must not spend the
+    token, and signing in afterwards must."""
+    accepted = _accepting(page)
+    _serve(page, [])
+
+    page.goto(f"{live_server}/team/accept?token=invite-token-abc")
+    assert accepted == [], "the token was spent before there was anybody to accept as"
+
+    signed_in()
+
+    expect(page.locator("#toast")).to_contain_text("on the team")
+    assert accepted == ["invite-token-abc"]
+
+
+def test_the_token_does_not_stay_in_the_address_bar(page, live_server):
+    """It is a credential. Leaving it in the URL puts it in the history, in a
+    screenshot, and in whatever the next "share this page" does with it.
+
+    Asserted on the landing itself, not after signing in: the sign-in fixture
+    navigates to the root, so a check made afterwards passes whether or not the
+    URL was ever cleaned. It did — until this test stopped signing in.
+    """
+    _accepting(page)
+    _serve(page, [])
+
+    page.goto(f"{live_server}/team/accept?token=invite-token-abc")
+    page.wait_for_load_state("networkidle")
+
+    assert "invite-token-abc" not in page.url
+    # Parked rather than dropped: the token still has to survive the sign-in.
+    assert page.evaluate("sessionStorage.getItem('team_invite_token')") == "invite-token-abc"
+
+
+def test_an_invitation_is_not_redeemed_twice(page, signed_in, live_server):
+    """A reload must not re-post it. The parked token is removed before the call
+    rather than after, so even a failed accept is not retried silently — which
+    is the right way round: the reason it failed is shown, and a second attempt
+    is the user's to make."""
+    accepted = _accepting(page)
+    _serve(page, [])
+
+    page.goto(f"{live_server}/team/accept?token=invite-token-abc")
+    signed_in()
+    expect(page.locator("#toast")).to_contain_text("on the team")
+
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    assert accepted == ["invite-token-abc"]
+
+
+def test_a_refused_invitation_says_why(page, signed_in, live_server):
+    """The address on the invitation is checked server-side, so the ordinary
+    failure is "this was addressed to somebody else" — which is only useful if
+    the person reading it is told."""
+    _accepting(page, ok=False, detail="That invitation was sent to a different address.")
+    _serve(page, [])
+
+    page.goto(f"{live_server}/team/accept?token=invite-token-abc")
+    signed_in()
+
+    expect(page.locator("#toast")).to_contain_text("different address")
+
+
+def test_an_ordinary_sign_in_accepts_nothing(page, signed_in):
+    """Nothing parked, nothing spent. Without this the redeemer could POST on
+    every boot and the tests above would still pass."""
+    accepted = _accepting(page)
+    _serve(page, [])
+
+    signed_in()
+    page.wait_for_load_state("networkidle")
+
+    assert accepted == []

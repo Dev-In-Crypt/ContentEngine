@@ -1169,6 +1169,13 @@
       </div>
       <div id="grid-frame" class="mx-auto transition-all" style="max-width:430px">
         <div id="grid-container" class="grid grid-cols-3 gap-1"></div>
+        <!-- The profile grid is the one screen that legitimately wants all of
+             history, so it is the one that pages. The button disappears when a
+             short page comes back, which is how we know there is no more. -->
+        <button id="grid-more" onclick="loadMoreGrid()"
+                class="hidden mt-3 w-full bg-gray-700 hover:bg-gray-600 transition rounded-lg py-2 text-sm">
+          Load older posts
+        </button>
       </div>
       <p id="grid-empty" class="text-sm text-gray-500 text-center hidden">No posts yet.</p>
     </section>
@@ -2031,8 +2038,9 @@ async function loadQueue() {
   biz.classList.toggle('hidden', !business);
   if (business) return loadDrafts();
 
-  await ensurePosts();
-  const rows = S.posts.filter(p => QUEUE_STATUSES.includes(p.status));
+  // The Queue is bounded by how much work is waiting, not by how much history
+  // exists — so it asks for its four statuses rather than filtering everything.
+  const rows = await fetchPosts({ status: QUEUE_STATUSES });
   if (!rows.length) {
     own.innerHTML = '<div class="text-gray-500">Nothing waiting. Anything you make lands here until it goes out.</div>';
     return;
@@ -4711,10 +4719,15 @@ async function renderCalendar() {
   document.getElementById('cal-title').textContent =
     new Date(year, month, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
   renderPillars();
-  await ensurePosts();
-  // Map posts to day keys
+  // Exactly the month on screen. The server windows on the same
+  // COALESCE(scheduled_at, published_at) this loop reads, so a published post
+  // stays on the day it went out.
+  const monthPosts = await fetchPosts({
+    since: new Date(Date.UTC(year, month, 1)).toISOString(),
+    until: new Date(Date.UTC(year, month + 1, 1)).toISOString(),
+  });
   const byDay = {};
-  S.posts.forEach(p => {
+  monthPosts.forEach(p => {
     const when = p.scheduled_at || p.published_at;
     if (!when) return;
     const d = new Date(when);
@@ -4747,8 +4760,26 @@ async function renderCalendar() {
 }
 
 // ===== GRID =====
+//: How many tiles a page of the profile grid holds. Three columns, so a
+//: multiple of three keeps the last row full.
+const GRID_PAGE = 60;
+
 async function loadGrid() {
-  await ensurePosts();
+  S.gridOffset = 0;
+  document.getElementById('grid-container').innerHTML = '';
+  await loadMoreGrid();
+}
+
+async function loadMoreGrid() {
+  const page = await fetchPosts({ limit: GRID_PAGE, offset: S.gridOffset || 0 });
+  S.gridOffset = (S.gridOffset || 0) + page.length;
+  // A short page means the end. Asking again to find out would be one wasted
+  // request per visit, forever.
+  document.getElementById('grid-more').classList.toggle('hidden', page.length < GRID_PAGE);
+  renderGridPage(page);
+}
+
+function renderGridPage(posts_page) {
   // Instagram only, and deliberately so: this screen simulates an Instagram
   // profile page — a 4:5 ring grid. A tweet in it wouldn't be "unfiltered",
   // it would be wrong. So it is a property of the view, not of a global
@@ -4758,10 +4789,12 @@ async function loadGrid() {
   // holds at most one Instagram post, so the filter already yields one tile per
   // idea. Adding grouping here would be wrong, and dropping the filter would put
   // a tweet in a simulated Instagram profile.
-  const posts = S.posts.filter(p => (p.platform || 'instagram') === 'instagram');
+  const posts = posts_page.filter(p => (p.platform || 'instagram') === 'instagram');
   const c = document.getElementById('grid-container');
-  document.getElementById('grid-empty').classList.toggle('hidden', posts.length > 0);
-  c.innerHTML = '';
+  // Empty only when nothing has been drawn at all — a later page that happens
+  // to be all X posts must not blank a grid that already has tiles in it.
+  document.getElementById('grid-empty').classList.toggle(
+    'hidden', posts.length > 0 || c.childElementCount > 0);
   const ring = { scheduled: 'ring-purple-500', published: 'ring-green-500', failed: 'ring-red-500' };
   posts.forEach(p => {
     const div = document.createElement('div');
@@ -4775,14 +4808,27 @@ async function loadGrid() {
   });
 }
 
-async function ensurePosts() {
+/** Fetch posts for one screen. Every caller says what it needs.
+ *
+ *  There used to be a single `ensurePosts()` caching the newest 500 for the
+ *  Queue, the Calendar and the profile grid alike. It truncated in silence,
+ *  which is the worst way to be wrong about a list: a scheduled post older than
+ *  those 500 stayed out of the Queue and published anyway, and a month further
+ *  back drew an empty calendar. Both read as "you have nothing".
+ *
+ *  Nothing is cached across screens either — the shared cache also meant the
+ *  Queue rendered whatever the Calendar happened to have fetched first. */
+async function fetchPosts(params = {}) {
+  const qs = new URLSearchParams();
+  (params.status || []).forEach(v => qs.append('status', v));
+  if (params.since) qs.set('since', params.since);
+  if (params.until) qs.set('until', params.until);
+  qs.set('limit', params.limit || 500);
+  if (params.offset) qs.set('offset', params.offset);
   try {
-    // 500 is the server's own maximum (posts.py list_posts). The default is 100,
-    // and phase 4 puts two rows on screen where there used to be one, so the
-    // default would start dropping history the day siblings arrive.
-    const res = await apiFetch(`${API}/api/posts?limit=500`);
-    if (res.ok) S.posts = await res.json();
-  } catch(e) { /* ignore */ }
+    const res = await apiFetch(`${API}/api/posts?${qs}`);
+    return res.ok ? await res.json() : [];
+  } catch(e) { return []; }
 }
 
 async function openPost(postId) {
