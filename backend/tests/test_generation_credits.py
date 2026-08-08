@@ -24,7 +24,9 @@ from config import Settings
 from models.database import Base, User
 from services import app_spend, free_generation
 from services.user_settings import _CRED_FIELDS
-from services.generation_credits import claim_generation_credentials
+from services.generation_credits import (
+    claim_generation_credentials, free_allowance,
+)
 
 def _settings(**overrides) -> Settings:
     """Settings with every credential explicitly blank, then the overrides.
@@ -270,3 +272,54 @@ async def _spend(sm, usd: float) -> None:
     openrouter.record_usage("m", {"total_tokens": 1, "cost": usd})
     async with sm() as db:
         await app_spend.flush_usage(db)
+
+
+# ── what the interface is told ──────────────────────────────────────────────
+#
+# The counter beside the Generate button and the wall in front of it read the
+# same function, on purpose. Two readings of "does this account have a key"
+# would eventually disagree, and both ways of disagreeing are bad: a count next
+# to a button the server refuses, or a wall in front of somebody it would serve.
+
+
+def test_an_account_on_the_free_tier_is_told_what_is_left(sm):
+    uid = _user(sm)
+    assert free_allowance(_get(sm, uid), NO_KEYS, BASE) == {
+        "remaining": free_generation.FREE_POST_LIMIT,
+        "limit": free_generation.FREE_POST_LIMIT,
+    }
+
+    _claim(sm, uid)
+    assert free_allowance(_get(sm, uid), NO_KEYS, BASE)["remaining"] == \
+        free_generation.FREE_POST_LIMIT - 1
+
+
+def test_nothing_is_said_to_somebody_paying_their_own_way(sm):
+    """None rather than a number: for them it is not a smaller count, it is not
+    a subject."""
+    uid = _user(sm)
+    assert free_allowance(_get(sm, uid), OWN, BASE) is None
+
+
+def test_nothing_is_said_on_the_desktop(sm):
+    uid = _user(sm, is_local=True)
+    assert free_allowance(_get(sm, uid), BASE, BASE) is None
+
+
+def test_nothing_is_said_where_nothing_is_offered(sm):
+    """A self-hosted deployment with no application key. "5 free posts left"
+    followed by a refusal would be a promise the install cannot keep."""
+    uid = _user(sm)
+    assert free_allowance(_get(sm, uid), NO_KEYS, NO_KEYS) is None
+
+
+def test_a_spent_allowance_reads_zero_rather_than_going_negative(sm):
+    uid = _user(sm, free_generations_used=free_generation.FREE_POST_LIMIT + 3)
+    assert free_allowance(_get(sm, uid), NO_KEYS, BASE)["remaining"] == 0
+
+
+def _get(sm, user_id: str) -> User:
+    async def _go():
+        async with sm() as db:
+            return await db.get(User, user_id)
+    return asyncio.run(_go())

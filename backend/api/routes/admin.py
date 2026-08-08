@@ -15,10 +15,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_current_user, get_db, get_settings, require_admin
+from api.deps import (
+    get_current_user, get_db, get_effective_settings, get_settings, require_admin,
+)
 from config import Settings
 from models.database import LLMUsage, User as UserModel
 from services.app_spend import flush_usage
+from services.generation_credits import free_allowance
 
 router = APIRouter(prefix="/api", tags=["admin"])
 
@@ -41,9 +44,17 @@ _flush_usage = flush_usage
 async def get_usage(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    effective: Annotated[Settings, Depends(get_effective_settings)],
 ) -> dict:
     """Flush buffered LLM usage and return today/month aggregates + by-model,
-    scoped to the current user (the local desktop user sees everything)."""
+    scoped to the current user (the local desktop user sees everything).
+
+    Also carries what is left of the free allowance (UX phase 6.4). It rides
+    here rather than on an endpoint of its own because the header already polls
+    this one on a timer, and a second poll for one integer would be a second
+    thing to keep in step with the first.
+    """
     await _flush_usage(db)
     now = datetime.now(timezone.utc)
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -75,6 +86,10 @@ async def get_usage(
         "today": await _agg(day_start),
         "month": await _agg(month_start),
         "by_model": by_model,
+        # None when the subject does not apply — desktop, an account with its
+        # own key, or a deployment that offers nothing free. The SPA shows
+        # nothing at all in that case rather than "0 left".
+        "free": free_allowance(user, effective, settings),
     }
 
 

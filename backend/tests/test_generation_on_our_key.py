@@ -269,3 +269,27 @@ def test_an_account_with_a_key_is_untouched_by_any_of_this(env, sm):
     assert env.theirs.calls[0]["web_grounded"] is True
     assert _used(sm, "nokey@example.com") == 0
     assert env.built == []
+
+
+# ── what /api/usage carries ─────────────────────────────────────────────────
+
+def test_the_usage_endpoint_carries_what_is_left(env, sm):
+    """The header already polls this on a timer. A second endpoint for one
+    integer would be a second thing to keep in step with the first."""
+    headers = _register(env)
+
+    before = env.get("/api/usage", headers=headers).json()
+    assert before["free"] == {"remaining": FREE_POST_LIMIT, "limit": FREE_POST_LIMIT}
+
+    _generate(env, headers)
+
+    after = env.get("/api/usage", headers=headers).json()
+    assert after["free"]["remaining"] == FREE_POST_LIMIT - 1
+
+
+def test_an_account_with_a_key_is_told_nothing_about_an_allowance(env):
+    headers = _register(env)
+    env.put("/api/settings/credentials",
+            json={"openrouter_api_key": "their-own-key"}, headers=headers)
+
+    assert env.get("/api/usage", headers=headers).json()["free"] is None

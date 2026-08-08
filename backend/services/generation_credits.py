@@ -64,8 +64,31 @@ class GenerationCreds:
     on_our_key: bool
 
 
-def _has_own_text_key(effective: Settings) -> bool:
+def has_own_text_key(effective: Settings) -> bool:
     return any(getattr(effective, field, "") for field in _TEXT_KEY_FIELDS)
+
+
+def free_allowance(user: UserModel, effective: Settings,
+                   base: Settings) -> Optional[dict]:
+    """What to tell this account about free posts, or None if the subject does
+    not apply to them.
+
+    Public because the interface has to answer the same question the resolver
+    answers, and answer it identically: a counter that says "3 left" next to a
+    button the server would refuse — or a wall in front of somebody the server
+    would have served — is worse than no counter at all. So both read this.
+
+    None, not zero, in three cases that are not "you have run out": the desktop
+    owner, an account paying with its own key, and a deployment with no
+    application key, where nothing free was ever on offer.
+    """
+    if user.is_local or has_own_text_key(effective):
+        return None
+    _provider, our_model, our_key = resolve_ai_choice(None, base, "text")
+    if not (our_key and our_model):
+        return None
+    return {"remaining": free_generation.remaining(user),
+            "limit": free_generation.FREE_POST_LIMIT}
 
 
 def _own(user: UserModel, effective: Settings, *,
@@ -104,7 +127,7 @@ async def claim_generation_credentials(
     """
     # 1. Their own key, if they have one. This is the ordinary path and it is
     #    unchanged: their provider, their models, their bill, no counter.
-    if _has_own_text_key(effective):
+    if has_own_text_key(effective):
         return _own(user, effective,
                     text_model_override=text_model_override,
                     image_model_override=image_model_override)
