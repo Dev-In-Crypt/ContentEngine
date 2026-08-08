@@ -17,6 +17,7 @@ key is namespaced by account — the old one was global, so two accounts in one
 browser shared a verdict about whether setup had been done.
 """
 import json
+import time
 
 import pytest
 from playwright.sync_api import expect
@@ -446,6 +447,33 @@ def test_leaving_setup_puts_you_in_the_app(page, signup):
     page.locator("#onb-later").click()
     expect(page.locator(SCREEN)).to_be_hidden()
     expect(page.locator("#view-create")).to_be_visible()
+    assert _state(page) == "done"
+
+
+def test_setup_is_dismissed_even_when_the_boot_is_slow(page, signup):
+    """Found in CI, where a suite that is green on a laptop failed in a file that
+    never mentions onboarding: "#onboarding-screen intercepts pointer events".
+
+    `dismiss_onboarding` waited five seconds for the screen and returned quietly
+    on a timeout — reasonable, since whether setup appears is its own tests'
+    business. But the screen opens only after four awaited loads, so on a loaded
+    runner it arrived a moment AFTER the fixture had given up, landing on top of
+    whatever test came next.
+
+    So the boot is slowed past that window on purpose. The assertion is made
+    after the network settles: `to_be_hidden` on its own would pass while the
+    screen was still on its way, which is the very bug.
+    """
+    def crawl(route):
+        time.sleep(6)          # longer than the old blind five-second window
+        route.continue_()
+
+    page.route("**/api/accounts*", crawl)
+    signup()
+    dismiss_onboarding(page)
+
+    page.wait_for_load_state("networkidle")
+    expect(page.locator(SCREEN)).to_be_hidden()
     assert _state(page) == "done"
 
 

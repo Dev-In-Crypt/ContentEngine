@@ -135,6 +135,14 @@ def dismiss_onboarding(page) -> None:
 
     box = page.locator(_ONBOARDING)
     try:
+        # Let the boot finish before concluding that setup is not coming.
+        # `maybeStartOnboarding` runs after four awaited loads, so on a busy CI
+        # runner the screen can arrive later than a bare five-second poll allows.
+        # The old version then returned quietly, and the screen opened a moment
+        # afterwards over a test about something else — which is how a suite that
+        # is green on a laptop fails in CI with "#onboarding-screen intercepts
+        # pointer events" in a file that never mentions onboarding.
+        page.wait_for_load_state("networkidle")
         box.wait_for(state="visible", timeout=5000)
     except PlaywrightTimeout:
         return
