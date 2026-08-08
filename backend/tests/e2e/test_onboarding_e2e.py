@@ -131,8 +131,7 @@ def test_reading_a_site_fills_the_fields_as_a_proposal(page, signup):
 def test_a_site_we_could_not_guess_says_so_without_calling_it_a_failure(page, signup):
     """The ordinary case for a brand-new account: the niche is guessed by an LLM
     and a tenant with no model gets "" back. The name and the colours DID
-    arrive, so this is a half-success rather than an error — and the description
-    seeds the niche instead of being thrown away."""
+    arrive, so this is a half-success rather than an error."""
     signup()
     _to_brand(page)
     _extract(page, _read(niche="", audience=""))
@@ -141,7 +140,40 @@ def test_a_site_we_could_not_guess_says_so_without_calling_it_a_failure(page, si
 
     expect(page.locator("#onb-brand-status")).to_contain_text("couldn't guess")
     expect(page.locator("#onb-brand")).to_have_value("Crumb & Co")
-    expect(page.locator("#onb-niche")).not_to_have_value("")
+
+
+def test_what_we_read_is_shown_but_not_poured_into_the_niche(page, signup):
+    """Found on prod, fixed here. The description used to seed the niche field,
+    and on a real site that is a sentence truncated at 120 characters — in
+    whatever language the server was served, which from a German host was
+    German. The field says "a couple of words" right next to it.
+
+    So the description is shown as what it is: the thing we read. The niche
+    stays empty, and its placeholder already says the shape a niche has."""
+    signup()
+    _to_brand(page)
+    _extract(page, _read(niche="", audience=""))
+    page.locator("#onb-site").fill("https://crumb.example")
+    page.locator("#onb-read-site").click()
+
+    # to_be_visible as well as the text: to_contain_text reads textContent and
+    # passes on a hidden element, so the text alone would not notice the line
+    # never being shown.
+    expect(page.locator("#onb-read")).to_be_visible()
+    expect(page.locator("#onb-read")).to_contain_text("A neighbourhood sourdough bakery")
+    expect(page.locator("#onb-niche")).to_have_value("")
+
+
+def test_a_guessed_niche_still_fills_the_field(page, signup):
+    """The other half: when the guess DID work, it belongs in the field — this
+    is not "never prefill", it is "prefill only what is actually a niche"."""
+    signup()
+    _to_brand(page)
+    _extract(page, _read())
+    page.locator("#onb-site").fill("https://crumb.example")
+    page.locator("#onb-read-site").click()
+
+    expect(page.locator("#onb-niche")).to_have_value("Sourdough baking")
 
 
 def test_a_site_we_cannot_read_keeps_you_on_the_website_screen(page, signup):

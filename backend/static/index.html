@@ -433,6 +433,13 @@
         <button id="onb-no-site" onclick="onbNoSite()" class="text-sm" style="color:var(--muted)">I don't have a website</button>
       </div>
 
+      <!-- What the site said about itself, shown as what it is. It used to be
+           poured into the niche field, which on a real site means a sentence cut
+           at 120 characters — in whatever language the server happened to serve.
+           Next to a field asking for "a couple of words", that reads as a
+           mistake the product made. -->
+      <p id="onb-read" class="hidden text-sm italic" style="color:var(--muted)"></p>
+
       <!-- Everything below is the same form whether it was filled by the site
            or by hand: one code path, two entrances. -->
       <div id="onb-fields" class="hidden space-y-3">
@@ -6888,14 +6895,21 @@ async function onbExtract() {
     set('onb-brand', body.name);
     set('onb-audience', body.target_audience);
     // A tenant with no text model gets an empty niche back — the guess is the one
-    // part of extraction that needs a model. That is the ordinary case for a
-    // brand-new account, so it is a half-success, not a failure: the description
-    // seeds the field and the person edits a sentence instead of an empty box.
-    if (body.niche) {
-      set('onb-niche', body.niche);
+    // part of extraction that needs a model, and that is the ordinary case for a
+    // brand-new account. So it is a half-success rather than a failure: say what
+    // is missing, and leave the field empty. Its placeholder already shows the
+    // shape a niche has, which a truncated sentence does not.
+    if (body.niche) set('onb-niche', body.niche);
+    else onbBrandSay("We read your site but couldn't guess your niche — put it in a few words.", false);
+
+    // The description is not thrown away: it is what we read, shown as that, so
+    // the words are there to borrow from without pretending to be an answer.
+    const read = document.getElementById('onb-read');
+    if (body.description) {
+      read.textContent = '“' + body.description + '”';
+      read.classList.remove('hidden');
     } else {
-      set('onb-niche', (body.description || body.name || '').slice(0, 120));
-      onbBrandSay("We read your site but couldn't guess your niche — put it in a few words.", false);
+      read.classList.add('hidden');
     }
 
     const colors = document.getElementById('onb-colors');
