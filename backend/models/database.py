@@ -393,7 +393,10 @@ class LLMUsage(Base):
     completion_tokens = Column(Integer)
     total_tokens = Column(Integer)
     cost = Column(Float, default=0.0)      # USD, from OpenRouter usage.cost
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    #: Indexed: both readers filter by date first — the per-user dashboard and
+    #: the daily ceiling on the application's own spend (UX phase 6.1), which
+    #: asks before every free generation.
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class PostInsight(Base):

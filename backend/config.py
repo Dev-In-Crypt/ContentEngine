@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     # demo 503 rather than fail mid-run. Empty demo_text_model → default_text_model.
     demo_text_model: str = ""
 
+    # Ceiling on what the application spends on its OWN key in a day, in USD —
+    # the demo, onboarding's sample post, and the free generations of UX phase 6.
+    # A per-account allowance bounds one person; this bounds everyone together.
+    # Finite by default on purpose: unset would mean "no ceiling", and 0 would
+    # mean "no free posts, ever" — neither is a decision anybody made.
+    # The check happens before spending, not during, so a burst of concurrent
+    # requests can overshoot by roughly (requests in flight × cost of one).
+    app_daily_spend_usd: float = 10.0
+
     # Stock Photos
     unsplash_access_key: str = ""
     pexels_api_key: str = ""

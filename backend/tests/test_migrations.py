@@ -71,6 +71,12 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     assert {"variant_group_id", "tone"} <= post_cols
     # UX phase 5: posts written on OUR key rather than the account's own.
     assert "free_generations_used" in cols
+    # UX phase 6.1: the daily ceiling asks "what has user_id IS NULL cost since
+    # midnight" before every free generation, and llm_usage grows a row per model
+    # call for every tenant forever.
+    indexes = {r[1] for r in sqlite3.connect(db).execute(
+        "PRAGMA index_list(llm_usage)")}
+    assert "ix_llm_usage_created_at" in indexes
 
 
 def test_migrations_autostamp_preexisting_db(tmp_path):

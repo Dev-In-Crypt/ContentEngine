@@ -5,7 +5,6 @@ import io
 import os
 import subprocess
 import tempfile
-import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import get_current_user, get_db, get_settings, require_admin
 from config import Settings
 from models.database import LLMUsage, User as UserModel
-from services.openrouter import drain_usage
+from services.app_spend import flush_usage
 
 router = APIRouter(prefix="/api", tags=["admin"])
 
@@ -31,22 +30,11 @@ _UPLOADS_DIR = _BACKEND_DIR / "uploads"
 # Cost tracking
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _flush_usage(db: AsyncSession) -> None:
-    records = drain_usage()
-    if not records:
-        return   # nothing buffered — a GET /usage poll shouldn't write to the DB
-    for rec in records:
-        db.add(LLMUsage(
-            id=str(uuid.uuid4()),
-            user_id=rec.get("user_id"),
-            model=rec.get("model"),
-            prompt_tokens=rec.get("prompt_tokens"),
-            completion_tokens=rec.get("completion_tokens"),
-            total_tokens=rec.get("total_tokens"),
-            cost=rec.get("cost") or 0.0,
-            created_at=rec.get("at") or datetime.now(timezone.utc),
-        ))
-    await db.commit()
+#: Turning the in-memory usage buffer into rows now has a second reader — the
+#: daily ceiling on the application's own spend (UX phase 6.1) — so it lives in
+#: services/app_spend.py. Two copies would drift, and the ceiling seeing less
+#: than was actually spent is the direction that costs money.
+_flush_usage = flush_usage
 
 
 @router.get("/usage")

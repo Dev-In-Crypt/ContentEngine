@@ -191,26 +191,6 @@ def test_unknown_api_path_returns_404(client):
     assert "text/html" not in res.headers.get("content-type", "")
 
 
-# ── C3: GET /api/usage must not write when nothing is buffered ──────────────
-
-def test_usage_flush_noop_when_buffer_empty():
-    import asyncio as _asyncio
-    from unittest.mock import AsyncMock, patch
-    from api.routes.admin import _flush_usage
-
-    db = AsyncMock()
-    with patch("api.routes.admin.drain_usage", return_value=[]):
-        _asyncio.get_event_loop().run_until_complete(_flush_usage(db)) if False else _asyncio.run(_flush_usage(db))
-    db.commit.assert_not_awaited()
-
-
-def test_usage_flush_commits_when_records_present():
-    import asyncio as _asyncio
-    from unittest.mock import AsyncMock, patch
-    from api.routes.admin import _flush_usage
-
-    db = AsyncMock()
-    rec = {"model": "m", "prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2, "cost": 0.01}
-    with patch("api.routes.admin.drain_usage", return_value=[rec]):
-        _asyncio.run(_flush_usage(db))
-    db.commit.assert_awaited_once()
+# The two flush tests that used to live here moved to tests/test_app_spend.py
+# with the function itself (UX phase 6.1): they always called it directly rather
+# than through the API, and it now has a second caller — the daily ceiling.
