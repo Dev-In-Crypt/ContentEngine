@@ -46,10 +46,27 @@ from models.database import (
 from services.auth import hash_password
 from services.caption_generator import GeneratedCaption
 from services.content_engine import ContentEngine
+from services.free_generation import FREE_POST_LIMIT
+from services.user_settings import _CRED_FIELDS
 
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads" / "posts"
 
 TEXT_MODEL = "test/text-model"
+
+
+def _platform(db_url: str, **overrides) -> Settings:
+    """Every credential blank unless a test says otherwise.
+
+    Settings() reads the developer's real backend/.env. Leaving it to do that
+    would give the PLATFORM an OpenRouter key on one machine and not on another,
+    which since UX phase 6.3 decides whether an account without its own key
+    adapts for free or is refused — a test that passes at home and fails in CI.
+    """
+    fields = {field: "" for field in _CRED_FIELDS}
+    fields.update(database_url=db_url, api_token="", app_mode="cloud",
+                  default_text_provider="openrouter", default_text_model=TEXT_MODEL)
+    fields.update(overrides)
+    return Settings(**fields)
 
 
 def _jpeg(color="red") -> bytes:
@@ -102,9 +119,7 @@ def client(db_url, sm):
     # app_mode="cloud" is load-bearing: the local desktop owner is exempt from
     # every ownership gate, so without it the isolation test would pass by
     # asserting nothing.
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        database_url=db_url, api_token="", app_mode="cloud",
-        default_text_model=TEXT_MODEL)
+    app.dependency_overrides[get_settings] = lambda: _platform(db_url)
     app.state.sessionmaker = sm
 
     tc = TestClient(app)
@@ -184,8 +199,19 @@ def _group(sm, group_id):
 
 @pytest.fixture
 def owner(client, sm):
-    """A registered user with one Instagram post ready to adapt."""
+    """A registered user with their own key and one Instagram post to adapt.
+
+    The key matters since UX phase 6.3: an account without one adapts on the
+    free allowance instead, which is a different path with its own counter. This
+    file is about adaptation, so its owner pays their own way; the free path has
+    its own tests at the bottom.
+    """
     headers = _register(client, "owner@ex.com")
+    client.put("/api/settings/credentials",
+               json={"openrouter_api_key": "their-own-key"}, headers=headers)
+    client.put("/api/settings/ai",
+               json={"text_provider": "openrouter", "text_model": TEXT_MODEL},
+               headers=headers)
     uid = _user_id(sm, "owner@ex.com")
     return {"headers": headers, "user_id": uid,
             "post_id": _seed_post(sm, uid)}
@@ -236,9 +262,10 @@ def test_a_business_draft_cannot_be_adapted(client, sm, owner):
 
 def test_no_text_model_is_a_400(client, sm, owner):
     """Before any spend, and with the same wording /generate uses."""
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        database_url="sqlite+aiosqlite:///:memory:", api_token="",
-        app_mode="cloud", default_text_model="")
+    app.dependency_overrides[get_settings] = lambda: _platform(
+        "sqlite+aiosqlite:///:memory:", default_text_model="")
+    client.put("/api/settings/ai", json={"text_model": ""},
+               headers=owner["headers"])
     no_model = _seed_post(sm, owner["user_id"], text_model=None)
 
     r = client.post(f"/api/posts/{no_model}/adapt/x", headers=owner["headers"])
@@ -504,3 +531,136 @@ def test_a_generation_failure_leaves_no_row_behind(client, sm, owner):
                     headers=owner["headers"])
     assert r.status_code == 502
     assert len(_group(sm, owner["post_id"])) == 1
+
+
+# ── on our key (UX phase 6.3) ───────────────────────────────────────────────
+#
+# A sibling is a full caption generation, so an account with no key of its own
+# spends one of its free posts on it. Anything else would mean the second
+# network tab is the one place in the product where "you need a key" comes back
+# — right after the phase that moved that question off the doorstep.
+
+
+@pytest.fixture
+def penniless(client, sm, monkeypatch):
+    """A registered account that has pasted nothing, with a post to adapt.
+
+    The platform key is set on this fixture's settings and nowhere else: it is
+    what makes the free path available at all, and leaving it in the shared
+    fixture would put every test in this file on it.
+
+    `build_content_engine` is patched as well, because the free path deliberately
+    does NOT use the injected engine — it builds one from the application's own
+    credentials, which on an unpatched run means a real call to OpenRouter. The
+    same fake comes back, so every assertion below still reads the one engine.
+    """
+    import api.routes.posts as posts_routes
+
+    monkeypatch.setattr(posts_routes, "build_content_engine",
+                        lambda *a, **kw: client.fake_engine)
+    app.dependency_overrides[get_settings] = lambda: _platform(
+        "sqlite+aiosqlite:///:memory:", openrouter_api_key="app-key",
+        default_text_model="our/model")
+    headers = _register(client, "broke@ex.com")
+    uid = _user_id(sm, "broke@ex.com")
+    return {"headers": headers, "user_id": uid, "post_id": _seed_post(sm, uid)}
+
+
+def _used(sm, user_id: str) -> int:
+    async def _go():
+        async with sm() as db:
+            return (await db.get(User, user_id)).free_generations_used
+    return asyncio.run(_go())
+
+
+def test_an_account_with_no_key_adapts_on_the_allowance(client, sm, penniless):
+    r = client.post(f"/api/posts/{penniless['post_id']}/adapt/x",
+                    headers=penniless["headers"])
+
+    assert r.status_code == 200, r.text
+    assert _used(sm, penniless["user_id"]) == 1
+
+
+def test_our_key_adapts_with_our_model_not_the_source_post_s(client, sm, penniless):
+    """The source may have been written on a key they have since removed, or on
+    a model they chose while paying for it themselves. Neither makes it a model
+    we agreed to buy."""
+    on_their_old_model = _seed_post(sm, penniless["user_id"],
+                                    text_model="anthropic/expensive")
+
+    client.post(f"/api/posts/{on_their_old_model}/adapt/x",
+                headers=penniless["headers"])
+
+    kwargs = client.fake_engine.caption_gen.generate.call_args.kwargs
+    assert kwargs["text_model"] == "our/model"
+    assert kwargs["web_grounded"] is False
+
+
+def test_reopening_a_tab_that_already_has_a_sibling_costs_nothing(client, sm, penniless):
+    """The guard this sub-phase turns on. Result tabs are clicked back and forth
+    while comparing two networks, and each of those clicks reaches this route —
+    so the claim has to live on the far side of the idempotent lookup, or five
+    free posts would last five clicks."""
+    first = client.post(f"/api/posts/{penniless['post_id']}/adapt/x",
+                        headers=penniless["headers"])
+    assert first.status_code == 200
+
+    for _ in range(3):
+        again = client.post(f"/api/posts/{penniless['post_id']}/adapt/x",
+                            headers=penniless["headers"])
+        assert again.json()["id"] == first.json()["id"]
+
+    assert _used(sm, penniless["user_id"]) == 1
+    assert client.fake_engine.caption_gen.generate.call_count == 1
+
+
+def test_an_exhausted_allowance_refuses_the_adaptation(client, sm, penniless):
+    async def _spend_it_all():
+        async with sm() as db:
+            user = await db.get(User, penniless["user_id"])
+            user.free_generations_used = FREE_POST_LIMIT
+            await db.commit()
+    asyncio.run(_spend_it_all())
+
+    r = client.post(f"/api/posts/{penniless['post_id']}/adapt/x",
+                    headers=penniless["headers"])
+
+    assert r.status_code == 409
+    assert "key" in r.json()["detail"].lower()
+    assert client.fake_engine.caption_gen.generate.call_count == 0
+
+
+def test_a_failed_adaptation_gives_the_allowance_back(client, sm, penniless):
+    client.fake_engine.caption_gen.generate.side_effect = RuntimeError("boom")
+
+    r = client.post(f"/api/posts/{penniless['post_id']}/adapt/x",
+                    headers=penniless["headers"])
+
+    assert r.status_code == 502
+    assert _used(sm, penniless["user_id"]) == 0
+
+
+def test_losing_a_race_is_not_charged_to_the_loser(client, sm, penniless):
+    """Two clicks a millisecond apart both generate; only one row survives. The
+    loser's caption is thrown away, so the free post it claimed bought nothing
+    anybody kept — charging for it would bill the same person twice for one
+    sibling."""
+    rival_id = str(uuid.uuid4())
+
+    async def _generate_and_race(**kwargs):
+        async with sm() as db:
+            db.add(PostModel(
+                id=rival_id, user_id=penniless["user_id"], topic="Sourdough starter",
+                format="single", status="preview", platform="x",
+                variant_group_id=penniless["post_id"], caption="Got there first.",
+            ))
+            await db.commit()
+        return _caption()
+
+    client.fake_engine.caption_gen.generate.side_effect = _generate_and_race
+
+    r = client.post(f"/api/posts/{penniless['post_id']}/adapt/x",
+                    headers=penniless["headers"])
+
+    assert r.json()["id"] == rival_id
+    assert _used(sm, penniless["user_id"]) == 0

@@ -1361,6 +1361,7 @@ async def adapt_post(
     request: Request,
     engine: Annotated[ContentEngine, Depends(get_content_engine)],
     settings: Annotated[Settings, Depends(get_settings)],
+    effective: Annotated[Settings, Depends(get_effective_settings)],
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
 ) -> PostPreview:
@@ -1372,8 +1373,11 @@ async def adapt_post(
     per-network text would have meant rewriting every place that writes publish
     state.
 
-    Costs one caption generation on the user's own key, so the SPA only calls it
-    from an explicit "Adapt" button — never on hover, never prefetched.
+    Costs one caption generation — on the user's own key, or on one of the free
+    allowance if they have none (UX phase 6.3). Either way it is real money, so
+    the SPA only calls it from an explicit "Adapt" button: never on hover, never
+    prefetched. The idempotent lookup below is what keeps a second click on the
+    same tab free.
     """
     source = await owned_post(db, post_id, user, options=_preview_opts())
 
@@ -1398,19 +1402,35 @@ async def adapt_post(
     if existing is not None:
         return _to_preview(existing, await _group_variants(db, existing))
 
-    text_model = source.text_model or resolve_ai_choice(user, settings, "text")[1]
+    # Deliberately after the lookup above: re-opening a tab that already has a
+    # sibling must not claim an allowance, and the cheapest way to guarantee that
+    # is for the claim to live on the far side of the early return.
+    creds = await claim_generation_credentials(
+        db, user, effective=effective, base=settings)
+    if creds.on_our_key:
+        engine = build_content_engine(creds.settings, user, actor=None)
+        # Not `source.text_model`: the source may have been written on a key they
+        # have since removed, or on a model they chose while paying for it. On
+        # our key the model is ours.
+        text_model = creds.text_model
+    else:
+        text_model = source.text_model or creds.text_model
     if not text_model:
         raise HTTPException(
             status_code=400,
             detail="No text model selected. Choose a provider and model in Account → AI models.",
         )
-    _require_text_provider(engine, resolve_ai_choice(user, settings, "text")[0])
+    _require_text_provider(engine, creds.text_provider)
 
     acct = await brand_for_post(db, source, user)
     profile = resolve_user_profile(acct)
     target_slides, target_format = _slides_for_platform(
         list(source.slides), platform, source.format)
 
+    if creds.on_our_key:
+        # Our key, our bill — the same reasoning as the generate route: leaving
+        # the caller's id here would put our spend on their usage dashboard.
+        current_user_id.set(None)
     try:
         caption = await engine.caption_gen.generate(
             topic=source.topic,
@@ -1428,9 +1448,13 @@ async def adapt_post(
             # clear of the X-Premium gate that only the LONG mode needs.
             x_mode=XPostMode.SHORT,
             x_style=XStyle.STANDARD,
+            # A surcharge per call, and only on our key is it our surcharge.
+            web_grounded=not creds.on_our_key,
         )
     except Exception as e:
         log.exception("Adapt failed for post=%s platform=%s", post_id, platform.value)
+        if creds.on_our_key:
+            await _refund_free_generation(db, user)
         raise HTTPException(status_code=502, detail=f"Adaptation failed: {e}") from e
 
     # Two clicks a millisecond apart both miss the lookup above and both pay for
@@ -1438,6 +1462,12 @@ async def adapt_post(
     # never is — and the second caller still gets a sibling back.
     raced = await _sibling_for(db, group_id, platform.value, source.user_id)
     if raced is not None:
+        if creds.on_our_key:
+            # This caller's generation is being thrown away, so the allowance it
+            # claimed bought nothing that anybody keeps. The duplicated work was
+            # already paid for at the provider; charging a free post for it too
+            # would bill the loser of a race twice.
+            await _refund_free_generation(db, user)
         return _to_preview(raced, await _group_variants(db, raced))
 
     sibling_id = str(uuid.uuid4())
