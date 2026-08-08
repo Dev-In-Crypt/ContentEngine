@@ -121,6 +121,11 @@ def client(db_url):
     # regenerate routes would raise AttributeError. Assigning them is allowed.
     fake_engine.exporter = AsyncMock()
     fake_engine.image_router = AsyncMock()
+    # A tenant who HAS configured a key: the routes now refuse before the model
+    # call when no client could be built for the named provider (UX phase 6.0),
+    # and these tests are about everything that happens after that point.
+    fake_engine.caption_gen = AsyncMock()
+    fake_engine.caption_gen.text_provider = object()
 
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_content_engine] = lambda: fake_engine

@@ -35,20 +35,38 @@ _CRED_FIELDS: dict[str, str] = {
 
 
 async def build_settings_for_user(db: AsyncSession, user: Optional[UserModel]) -> Settings:
-    """Platform Settings overlaid with the user's own decrypted API keys. Local
-    user (or unknown) → platform .env as-is."""
+    """Platform Settings with the cloud user's own decrypted API keys, and with
+    every credential they have NOT stored blanked out. Local user (or unknown) →
+    platform .env as-is.
+
+    Blanking is the point, and it is why this is not a plain overlay. The
+    platform value used to survive wherever the user had none, and nothing
+    downstream could tell the difference: `resolve_ai_choice` reads the merged
+    object and sees one string. That made the app's own key reachable by any
+    account in three moves — register, name a provider and model (neither needs
+    a key), generate — and `record_usage` filed our spend under their name. The
+    browser's `guardGenerateKeys` asks about the account's OWN credentials and
+    so refused correctly, but a wall that only exists in the SPA is not a wall.
+
+    Downstream needs no changes: `_ai_provider_or_none` already turns an empty
+    key into None, and every route already turns None into "choose a provider
+    and model in Account". An empty credential means "you have not configured
+    this", which is exactly what it now is.
+
+    The desktop owner keeps the whole .env — there the platform and the user are
+    the same person, and the offline app is configured entirely that way.
+    """
     base = get_settings()
     if user is None or user.is_local:
         return base
     creds = await db.get(UserCredentialsModel, user.id)
-    if creds is None:
-        return base
     overrides: dict[str, str] = {}
     for field, column in _CRED_FIELDS.items():
-        decrypted = decrypt(getattr(creds, column) or "")
-        if decrypted:   # None (tamper) or "" (unset) → keep platform default
-            overrides[field] = decrypted
-    return base.model_copy(update=overrides) if overrides else base
+        # None (tamper) or "" (unset) both mean "not this user's key", and so
+        # does having no credentials row at all.
+        decrypted = decrypt(getattr(creds, column) or "") if creds else ""
+        overrides[field] = decrypted or ""
+    return base.model_copy(update=overrides)
 
 
 async def settings_for_post_owner(db: AsyncSession, post) -> Settings:

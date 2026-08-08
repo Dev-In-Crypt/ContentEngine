@@ -266,6 +266,29 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
+def _require_text_provider(engine: ContentEngine, provider: Optional[str]) -> None:
+    """Refuse before the model call when no client could be built for it.
+
+    Naming a provider and a model costs nothing and stores nothing secret, so an
+    account can sit in that state legitimately — picked GPT-4o, has not pasted
+    the key yet. The model checks above pass (a model IS named) and the crash
+    lands inside the generator as `'NoneType' object has no attribute
+    'generate_text'`, which reaches the user as a failed generation rather than
+    as the one sentence that fixes it.
+
+    This became the ordinary way to arrive here when the platform key stopped
+    filling the gap silently (UX phase 6.0) — before that, a configured .env
+    quietly supplied a working client and nobody saw this path.
+    """
+    if engine.caption_gen.text_provider is not None:
+        return
+    named = f" for {provider}" if provider else ""
+    raise HTTPException(
+        status_code=400,
+        detail=f"No API key{named}. Add it in Account → AI models.",
+    )
+
+
 @router.post("/generate")
 @limiter.limit("15/minute;150/hour")
 async def generate_post(
@@ -322,6 +345,7 @@ async def generate_post(
             status_code=400,
             detail="No text model selected. Choose a provider and model in Account → AI models.",
         )
+    _require_text_provider(engine, _tp)
     # Long-form X posts only exist for Premium accounts; X itself would reject the
     # tweet, so refuse before spending a generation on it.
     if (body.platform == Platform.X and body.x_mode == XPostMode.LONG
@@ -1155,6 +1179,7 @@ async def regenerate_field(
         "seo_keywords": post.seo_keywords or [],
     }.get(body.field)
 
+    _require_text_provider(engine, resolve_ai_choice(user, settings, "text")[0])
     try:
         variants = await engine.caption_gen.regenerate_field(
             field=body.field,
@@ -1338,6 +1363,7 @@ async def adapt_post(
             status_code=400,
             detail="No text model selected. Choose a provider and model in Account → AI models.",
         )
+    _require_text_provider(engine, resolve_ai_choice(user, settings, "text")[0])
 
     acct = await brand_for_post(db, source, user)
     profile = resolve_user_profile(acct)
