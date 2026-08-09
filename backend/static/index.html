@@ -1020,6 +1020,15 @@
       <button id="undo-btn" onclick="undoEdit()" class="hidden bg-gray-800 hover:bg-gray-700 transition rounded-xl px-4 py-2.5 text-sm" title="Undo last saved edit" aria-label="Undo last saved edit">Undo</button>
     </div>
 
+    <!-- Offered once, the first time somebody rewrites what the AI wrote. -->
+    <div id="voice-hint" class="hidden bg-purple-950/40 border border-purple-800/60 rounded-xl p-4 flex flex-wrap items-center gap-3">
+      <p class="text-xs text-purple-100/80 flex-1 min-w-[12rem]">
+        You just rewrote our words. Tell us how your brand sounds and every new post starts closer to that.
+      </p>
+      <button id="voice-hint-open" onclick="openBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Set the voice</button>
+      <button id="voice-hint-dismiss" onclick="dismissVoiceHint()" class="text-xs text-purple-200/60 hover:text-white underline">Not now</button>
+    </div>
+
     <!-- Claims to verify before posting under a brand -->
     <div id="claims-panel" class="hidden bg-yellow-950/40 border border-yellow-800/60 rounded-xl p-4 space-y-2">
       <h3 id="claims-title" class="text-sm font-semibold text-yellow-200 flex items-center gap-2">⚠️ Check before posting</h3>
@@ -2707,6 +2716,11 @@ async function startApp() {
   refreshCost();
   setInterval(refreshCost, 60000);
   redeemTeamInvite();
+  // What this person has already been shown. Deliberately not awaited: nothing
+  // on the first screen depends on it, and the one thing that does — an offer
+  // beside the caption box — is several clicks away. Awaiting it would put a
+  // round trip in front of every login to decide a banner nobody can see yet.
+  loadMilestones();
   // Business lands on Create, which for them is Leads, and skips the creator
   // composer loaders entirely. It used to land on 'biz-sources' -- a section id
   // that stopped existing in 3.8, when Sources became a Settings tab. That left
@@ -4697,6 +4711,11 @@ async function saveCaption() {
     S.undoStack = [];
     document.getElementById('undo-btn').classList.add('hidden');
     toast('✅ Caption saved!', 'success');
+    // This save is the one action that can earn a milestone (8.1 records
+    // edited_ai_text here), so it is the one place worth re-reading them: the
+    // offer that hangs on it makes sense at the moment of the edit, not on the
+    // next reload. Not awaited — the save is finished either way.
+    if (!S.milestones['edited_ai_text']) loadMilestones();
     return true;
   } catch(e) {
     toast('❌ ' + e.message, 'error');
@@ -6308,6 +6327,50 @@ function renderFreeLeft() {
     : 'Free posts used up — add your own AI key to keep going';
   el.classList.remove('hidden');
 }
+// ===== MILESTONES (UX phase 8) =====
+//
+// What the product has already shown this person. Read once at start-up and
+// re-read after the one action that can create one mid-session, rather than
+// polled: these are events, not a counter, and they only ever accumulate.
+S.milestones = {};
+
+async function loadMilestones() {
+  try {
+    const res = await apiFetch(`${API}/api/settings/milestones`);
+    S.milestones = res.ok ? ((await res.json()).milestones || {}) : {};
+  } catch { S.milestones = {}; }
+  renderVoiceHint();
+}
+
+/** Offer the setting that steers how the AI writes, once its words have been
+ *  rewritten and until the offer is waved away.
+ *
+ *  Voice, not Business's brand rules. Rules are forbidden phrases and required
+ *  disclaimers, checked at approval against a workspace a creator has not got —
+ *  and they change nothing about how a post gets written. Voice does. */
+function renderVoiceHint() {
+  const el = document.getElementById('voice-hint');
+  if (!el) return;
+  const show = !!S.milestones['edited_ai_text'] && !S.milestones['rules_hint_dismissed'];
+  el.classList.toggle('hidden', !show);
+}
+
+function openBrandVoice() {
+  openSettings('profiles');
+  const el = document.getElementById('brand-voice-section');
+  if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+async function dismissVoiceHint() {
+  // Optimistic: the hint goes now, and the record is what keeps it gone on the
+  // next machine. A failed write costs one more sighting, not a stuck banner.
+  S.milestones['rules_hint_dismissed'] = new Date().toISOString();
+  renderVoiceHint();
+  try {
+    await apiFetch(`${API}/api/settings/milestones/rules_hint_dismissed`, {method: 'POST'});
+  } catch {}
+}
+
 function showCostPopover() {
   const pop = document.getElementById('cost-popover');
   if (!pop.classList.contains('hidden')) { pop.classList.add('hidden'); return; }

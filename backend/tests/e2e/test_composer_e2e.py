@@ -555,3 +555,124 @@ def test_declining_the_picker_leaves_the_slide_untouched(page, signed_in, keyed)
     expect(page.locator("#library-picker-modal")).to_be_hidden()
     assert calls == []
     expect(page.locator("#edit-slide-modal")).to_be_visible()   # the slide modal is untouched
+
+
+# ── the voice hint (UX phase 8.2) ───────────────────────────────────────────
+#
+# The first time somebody rewrites what the AI wrote, they have said something
+# about how their brand should sound — in the only vocabulary that counts, their
+# own words. That is the moment to offer the setting that steers it, and not a
+# moment earlier: brand voice on day one is a form asking a question nobody has
+# formed an opinion about yet.
+#
+# The offer is Brand voice, not Business's Brand rules. Rules are forbidden
+# phrases and disclaimers checked at approval, scoped to a workspace a creator
+# does not have, and they do not change a single word the model writes. Voice
+# does, and every account already has one.
+
+_EDITED = {"edited_ai_text": "2026-08-09T00:00:00+00:00"}
+
+
+def _serve_milestones(page, *reached):
+    """Serve the milestone store, newest state first on repeat calls."""
+    states = list(reached) or [{}]
+    calls = {"n": 0}
+
+    def _handler(route):
+        i = min(calls["n"], len(states) - 1)
+        calls["n"] += 1
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"milestones": states[i]}))
+
+    page.route("**/api/settings/milestones", _handler)
+
+
+def test_a_fresh_account_is_not_asked_about_its_voice(page, signed_in, keyed):
+    """Nothing to be asked about yet. A hint here would be the product talking
+    about style to somebody who has not written a word of their own."""
+    _serve_milestones(page)
+    signed_in()
+
+    _reach_step4(page)
+
+    expect(page.locator("#voice-hint")).to_be_hidden()
+
+
+def test_the_hint_appears_once_the_ai_has_been_rewritten(page, signed_in, keyed):
+    _serve_milestones(page, _EDITED)
+    signed_in()
+
+    _reach_step4(page)
+
+    expect(page.locator("#voice-hint")).to_be_visible()
+    expect(page.locator("#voice-hint")).to_contain_text("voice")
+
+
+def test_the_hint_arrives_with_the_edit_that_earns_it(page, signed_in, keyed):
+    """Not on the next reload. The milestone is recorded by the save, so the
+    save is what has to go and look — otherwise the one moment the offer makes
+    sense is the one moment it is not on screen."""
+    _serve_milestones(page, {}, _EDITED)
+    signed_in()
+    page.route("**/api/posts/*/caption", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps({})))
+
+    _reach_step4(page)
+    expect(page.locator("#voice-hint")).to_be_hidden()
+    page.locator("#caption-edit").fill("Your starter is asleep, not dead. Feed it.")
+    page.locator("#save-caption-btn").click()
+
+    expect(page.locator("#voice-hint")).to_be_visible()
+
+
+def test_the_hint_leads_to_the_setting_that_steers_it(page, signed_in, keyed):
+    _serve_milestones(page, _EDITED)
+    signed_in()
+
+    _reach_step4(page)
+    page.locator("#voice-hint-open").click()
+
+    expect(page.locator("#brand-voice-section")).to_be_visible()
+
+
+def test_waving_the_hint_away_records_it_and_it_stays_away(page, signed_in, keyed):
+    """A hint that returns after being dismissed is not a hint, it is a nag —
+    and the record has to outlive this browser, so it goes to the server rather
+    than to localStorage."""
+    _serve_milestones(page, _EDITED)
+    recorded = []
+
+    def _record(route, request):
+        recorded.append(request.url.rsplit("/", 1)[-1])
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"milestones": {}}))
+
+    page.route("**/api/settings/milestones/*", _record)
+    signed_in()
+
+    _reach_step4(page)
+    page.locator("#voice-hint-dismiss").click()
+
+    expect(page.locator("#voice-hint")).to_be_hidden()
+    assert recorded == ["rules_hint_dismissed"]
+
+
+def test_a_dismissed_hint_does_not_come_back(page, signed_in, keyed):
+    _serve_milestones(page, dict(_EDITED, rules_hint_dismissed="2026-08-09T01:00:00Z"))
+    signed_in()
+
+    _reach_step4(page)
+
+    expect(page.locator("#voice-hint")).to_be_hidden()
+
+
+def test_the_offer_is_voice_and_not_the_business_rules_tab(page, signed_in, keyed):
+    """Brand rules are workspace-scoped and sit behind require_business, so
+    un-hiding that tab for a creator would open a screen whose every request
+    403s. This test is the tripwire for anyone who tries."""
+    _serve_milestones(page, _EDITED)
+    signed_in()
+
+    _reach_step4(page)
+
+    expect(page.locator("#brand-rules-section")).to_be_hidden()
