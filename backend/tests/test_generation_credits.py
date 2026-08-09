@@ -24,8 +24,9 @@ from config import Settings
 from models.database import Base, User
 from services import app_spend, free_generation
 from services.user_settings import _CRED_FIELDS
+from models.schemas import ImageSource
 from services.generation_credits import (
-    claim_generation_credentials, free_allowance,
+    claim_generation_credentials, free_allowance, image_source_for,
 )
 
 def _settings(**overrides) -> Settings:
@@ -355,3 +356,71 @@ def test_an_account_that_has_chosen_nothing_is_told_to_choose(sm):
 
     assert refusal.value.status_code == 400
     assert "model" in refusal.value.detail.lower()
+
+
+# ── a picture when there is no stock key ────────────────────────────────────
+#
+# The composer's default image source is "stock". On the free path the engine is
+# built from the PLATFORM's settings, and a platform with no Unsplash or Pexels
+# key has a StockClient with neither client in it — so search_and_download finds
+# no source, content_engine retries with stock, and the generation fails.
+#
+# Which means the day an application key is configured, every free generation
+# ends in "Generation failed" and a refund. Phase 6 turns itself on and breaks in
+# the same motion. The rule below is the smallest honest answer: on OUR
+# credentials, a stock request we cannot serve becomes a picture we can make.
+
+
+def test_a_stock_request_we_cannot_serve_becomes_a_generated_picture(sm):
+    uid = _user(sm)
+    creds = _claim(sm, uid)
+
+    assert image_source_for(ImageSource.STOCK, creds, BASE) == ImageSource.AI_GEN
+
+
+def test_a_configured_stock_key_is_still_preferred(sm):
+    """Not "always generate": stock is cheaper, and when the platform has paid
+    for it the free path should use it."""
+    uid = _user(sm)
+    with_stock = _settings(openrouter_api_key="app-key", pexels_api_key="stock-key",
+                           default_text_provider="openrouter",
+                           default_text_model="our/cheap-text-model",
+                           default_image_provider="openrouter",
+                           default_image_model="our/cheap-image-model")
+    creds = _claim(sm, uid, base=with_stock)
+
+    assert image_source_for(ImageSource.STOCK, creds, with_stock) == ImageSource.STOCK
+
+
+def test_their_own_stock_choice_is_never_overridden(sm):
+    """The only place in the product where we substitute what somebody asked
+    for, so it is confined to the case where their choice cannot be served AND
+    the bill is ours. On their own key a stock failure is theirs to see and fix."""
+    uid = _user(sm, text_provider="openrouter", text_model="their/model")
+    creds = _claim(sm, uid, effective=OWN)
+
+    assert image_source_for(ImageSource.STOCK, creds, BASE) == ImageSource.STOCK
+
+
+def test_only_stock_is_ever_substituted(sm):
+    """Uploads are somebody's own photograph and AI is already a choice. Quietly
+    swapping either would publish something they did not pick."""
+    uid = _user(sm)
+    creds = _claim(sm, uid)
+
+    for asked in (ImageSource.UPLOAD, ImageSource.AI_GEN, ImageSource.CANVA):
+        assert image_source_for(asked, creds, BASE) == asked
+
+
+def test_nothing_is_substituted_when_we_cannot_generate_either(sm):
+    """No stock key and no image model is a deployment that can produce no
+    pictures at all. Switching then would trade one failure for another and lose
+    the honest error message on the way."""
+    uid = _user(sm)
+    no_images = _settings(openrouter_api_key="app-key",
+                          default_text_provider="openrouter",
+                          default_text_model="our/cheap-text-model",
+                          default_image_provider="", default_image_model="")
+    creds = _claim(sm, uid, base=no_images)
+
+    assert image_source_for(ImageSource.STOCK, creds, no_images) == ImageSource.STOCK

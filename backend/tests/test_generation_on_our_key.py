@@ -293,3 +293,42 @@ def test_an_account_with_a_key_is_told_nothing_about_an_allowance(env):
             json={"openrouter_api_key": "their-own-key"}, headers=headers)
 
     assert env.get("/api/usage", headers=headers).json()["free"] is None
+
+
+# ── a picture the platform can actually make ────────────────────────────────
+
+def test_a_free_generation_without_a_stock_key_still_makes_a_picture(env):
+    """The composer's default source is stock, and the platform here has no
+    Unsplash or Pexels key — which is the ordinary state of a deployment that
+    has configured only an application AI key. Before this, every free
+    generation ended in "Generation failed" and a refund."""
+    headers = _register(env)
+    _generate(env, headers)
+
+    assert env.ours.calls[0]["default_image_source"] == ImageSource.AI_GEN
+
+
+def test_a_configured_stock_key_is_left_alone(env):
+    """Stock is cheaper than generating, so a platform that has paid for it
+    keeps using it. Without this the guard above would read "always generate",
+    which spends more of our money than it has to."""
+    app.dependency_overrides[get_settings] = lambda: _platform(pexels_api_key="stock-key")
+    headers = _register(env, email="stocked@example.com")
+    _generate(env, headers)
+
+    assert env.ours.calls[0]["default_image_source"] == ImageSource.STOCK
+
+
+def test_an_account_on_its_own_key_keeps_the_source_it_chose(env):
+    """Their money, their choice, and a stock failure they can see and fix. The
+    substitution is ours to make only when the bill is ours."""
+    headers = _register(env, email="paying@example.com")
+    env.put("/api/settings/credentials",
+            json={"openrouter_api_key": "their-own-key"}, headers=headers)
+    env.put("/api/settings/ai",
+            json={"text_provider": "openrouter", "text_model": "their/model"},
+            headers=headers)
+
+    _generate(env, headers)
+
+    assert env.theirs.calls[0]["default_image_source"] == ImageSource.STOCK

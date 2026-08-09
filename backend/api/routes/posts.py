@@ -47,7 +47,9 @@ from models.schemas import (
 )
 from services import free_generation, media_store, staging
 from services.app_spend import flush_usage
-from services.generation_credits import claim_generation_credentials, no_key_detail
+from services.generation_credits import (
+    claim_generation_credentials, image_source_for, no_key_detail,
+)
 from services.openrouter import current_user_id
 from services.publishing.factory import PUBLISHABLE_PLATFORMS
 from services.claims import find_claims
@@ -364,6 +366,15 @@ async def generate_post(
             detail="No text model selected. Choose a provider and model in Account → AI models.",
         )
     _require_text_provider(engine, creds.text_provider)
+    # What we can actually serve on these credentials. Only stock is ever
+    # substituted, only on our key, and only when we can generate instead — see
+    # image_source_for. The per-slide configs get the same treatment: the
+    # composer sends them for re-generation, and one stock slide among ten would
+    # fail the whole post just as surely as a stock default.
+    image_source = image_source_for(body.default_image_source, creds, settings)
+    if slide_configs:
+        for cfg in slide_configs:
+            cfg.image_source = image_source_for(cfg.image_source, creds, settings)
     # Long-form X posts only exist for Premium accounts; X itself would reject the
     # tweet, so refuse before spending a generation on it.
     if (body.platform == Platform.X and body.x_mode == XPostMode.LONG
@@ -418,7 +429,7 @@ async def generate_post(
                     format=body.format,
                     text_model=text_model,
                     image_model=image_model,
-                    default_image_source=body.default_image_source,
+                    default_image_source=image_source,
                     text_only=body.text_only,
                     upload_ids=body.upload_ids,
                     slide_configs=slide_configs,

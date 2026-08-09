@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import Settings
 from models.database import User as UserModel
+from models.schemas import ImageSource
 from services import app_spend, free_generation
 from services.user_settings import resolve_ai_choice
 
@@ -101,6 +102,43 @@ def free_allowance(user: UserModel, effective: Settings,
         return None
     return {"remaining": free_generation.remaining(user),
             "limit": free_generation.FREE_POST_LIMIT}
+
+
+#: Stock photography is served by whichever of these the deployment has paid for.
+_STOCK_KEY_FIELDS = ("unsplash_access_key", "pexels_api_key")
+
+
+def image_source_for(requested: ImageSource, creds: GenerationCreds,
+                     base: Settings) -> ImageSource:
+    """Which image source a generation on THESE credentials can actually serve.
+
+    The one place in the product where we substitute something the user asked
+    for, so it is fenced in tightly: only stock, only when the bill is ours, and
+    only when we can make a picture instead.
+
+    The reason it exists is a failure that arrives with a working configuration
+    rather than a broken one. The composer's default source is stock; the free
+    path (UX phase 6.2) builds its engine from the PLATFORM's settings; and a
+    platform with no Unsplash or Pexels key has a StockClient holding neither.
+    `search_and_download` then finds no source, `content_engine` retries with
+    stock, and the generation dies. So the day an application key is configured,
+    every free generation would end in "Generation failed" and a refund — phase
+    6 switching itself on and breaking in the same motion.
+
+    Not "always generate": stock is the cheaper of the two, so a platform that
+    HAS paid for it keeps using it. Not on their own key either: there a stock
+    failure is theirs to see, and their choice is not ours to quietly rewrite.
+    And not when we have no image model, because swapping one failure for
+    another only costs the user the honest error message.
+    """
+    if not creds.on_our_key or requested != ImageSource.STOCK:
+        return requested
+    if any(getattr(base, field, "") for field in _STOCK_KEY_FIELDS):
+        return requested
+    _provider, image_model, image_key = resolve_ai_choice(None, base, "image")
+    if not (image_model and image_key):
+        return requested
+    return ImageSource.AI_GEN
 
 
 def _own(user: UserModel, effective: Settings, *,
