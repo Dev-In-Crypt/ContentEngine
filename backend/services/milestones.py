@@ -43,9 +43,18 @@ RULES_HINT_DISMISSED = "rules_hint_dismissed"
 #: They were offered sources — "would you like topics to find themselves?"
 SOURCES_OFFERED = "sources_offered"
 
-#: They tried to publish into a network the active profile has no keys for, and
-#: were told a second profile is the shape of that answer.
-SECOND_PROFILE_OFFERED = "second_profile_offered"
+#: They have been told, once, that publishing connections belong to the account
+#: and are shared by every brand profile.
+#:
+#: This was SECOND_PROFILE_OFFERED, on the assumption that a network could be
+#: connected per profile and a second profile was therefore the answer to
+#: "publishing to an account this profile has no keys for". `UserCredentials` is
+#: keyed on the user and `ManagedAccount` holds no connection at all, so that
+#: answer would have been an offer the product cannot honour. Renamed rather
+#: than kept: a milestone whose name describes something else is a lie waiting
+#: to be read as a promise. Never written under the old name, so nothing to
+#: migrate.
+CONNECTIONS_ARE_SHARED = "connections_are_shared"
 
 #: The journal appeared, after the tenth published post.
 JOURNAL_UNLOCKED = "journal_unlocked"
@@ -57,7 +66,7 @@ ALL: tuple[str, ...] = (
     EDITED_AI_TEXT,
     RULES_HINT_DISMISSED,
     SOURCES_OFFERED,
-    SECOND_PROFILE_OFFERED,
+    CONNECTIONS_ARE_SHARED,
     JOURNAL_UNLOCKED,
     TEAM_UNLOCKED,
 )

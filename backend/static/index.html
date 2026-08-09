@@ -4789,6 +4789,50 @@ async function openExportedFolder(path) {
 }
 
 // ===== PUBLISH =====
+
+/** The same read as loadConnections, cached, so the composer can ask without
+ *  the Settings screen having been opened. */
+async function ensureConnections(force) {
+  if (!S.user || S.user.is_local) return {};
+  if (S.connections && !force) return S.connections;
+  try {
+    const res = await apiFetch(`${API}/api/settings/connections`);
+    S.connections = res.ok ? ((await res.json()).connections || {}) : {};
+  } catch { S.connections = {}; }
+  return S.connections;
+}
+
+/** Ask before publishing, and say where it is going (UX phase 8.4).
+ *
+ *  The product used to name the NETWORK — which the person picked themselves —
+ *  and never the account, which appears nowhere on this screen. For anybody
+ *  running more than one brand that is the whole question, and the answer is
+ *  not what the profile switcher implies: connections live on the account, not
+ *  on the profile, so every brand publishes through the same Instagram and the
+ *  same X. Said once, because said every time it is a lecture.
+ *
+ *  An unchecked connection has no handle, and no handle means no sentence. A
+ *  guessed destination on a confirm dialog is worse than a missing one. */
+async function confirmPublish(platform, question) {
+  const conns = await ensureConnections();
+  const handle = ((conns[platform] || {}).handle || '').replace(/^@/, '');
+  const lines = [question];
+  if (handle) lines.push(`Going to @${handle}.`);
+  if ((S.accounts || []).length > 1 && !S.milestones['connections_are_shared']) {
+    lines.push('Connections belong to your account: every brand profile publishes '
+             + 'through the same ones.');
+    noteConnectionsAreShared();
+  }
+  return confirm(lines.join('\n'));
+}
+
+async function noteConnectionsAreShared() {
+  S.milestones['connections_are_shared'] = new Date().toISOString();
+  try {
+    await apiFetch(`${API}/api/settings/milestones/connections_are_shared`, {method: 'POST'});
+  } catch {}
+}
+
 async function publishPost() {
   if (!S.postId) return;
   if (S.publishing) return;          // block a double-click from publishing twice
@@ -4796,7 +4840,7 @@ async function publishPost() {
   const platform = (S.currentPost && S.currentPost.platform) || 'instagram';
   const label = names[platform] || platform;
   if (!await guardPublishKeys(platform)) return;   // cloud: needs this network's keys
-  if (!confirm(`Publish this post to ${label} now?`)) return;
+  if (!await confirmPublish(platform, `Publish this post to ${label} now?`)) return;
   S.publishing = true;
   const btn = document.getElementById('publish-btn');
   const prev = btn ? btn.textContent : '';
@@ -5360,7 +5404,7 @@ async function makeReel() {
 
 async function publishReel() {
   if (!S.postId) return;
-  if (!confirm('Publish this Reel to Instagram now?')) return;
+  if (!await confirmPublish('instagram', 'Publish this Reel to Instagram now?')) return;
   toast('📤 Publishing Reel…', 'info');
   try {
     const res = await apiFetch(`${API}/api/posts/${S.postId}/publish-reel`, { method: 'POST' });
@@ -5380,7 +5424,7 @@ function publishReelOrToX() {
 
 async function publishVideoToX() {
   if (!S.postId) return;
-  if (!confirm('Publish this video to X now?')) return;
+  if (!await confirmPublish('x', 'Publish this video to X now?')) return;
   toast('📤 Queuing…', 'info');
   try {
     const res = await apiFetch(`${API}/api/posts/${S.postId}/publish-video`, { method: 'POST' });
@@ -6521,7 +6565,13 @@ async function guardPublishKeys(network) {
   if (missing.length) {
     const label = network === 'x' ? 'X' : 'Instagram';
     needKey(`Connect ${label}`,
-      `Publishing to ${label} needs your ${label} keys. Add them under ${label} keys, then try again.`,
+      `Publishing to ${label} needs your ${label} keys. Add them under ${label} keys, then try again.`
+      // Somebody running two brands is about to wonder whether they have to
+      // connect this network once per profile. They do not, and this is the
+      // moment they are asking.
+      + ((S.accounts || []).length > 1
+         ? ' Connections belong to your account, so connecting once covers every brand profile.'
+         : ''),
       'keys');
     return false;
   }

@@ -676,3 +676,166 @@ def test_the_offer_is_voice_and_not_the_business_rules_tab(page, signed_in, keye
     _reach_step4(page)
 
     expect(page.locator("#brand-rules-section")).to_be_hidden()
+
+
+# ── where the post is actually going (UX phase 8.4) ─────────────────────────
+#
+# The UX table asks for a second profile to be offered when somebody "tries to
+# publish to an account the current profile is not linked to". There is no such
+# thing here: `UserCredentials` is keyed on the user and `ManagedAccount` holds
+# no connection, so every brand profile publishes through the one Instagram and
+# the one X the account has connected. Offering a second profile as the fix
+# would promise a second destination that does not exist.
+#
+# What is true, and what the product has never said, is where the post is going.
+# An agency running two brands has one connected account and no way to learn
+# that from the interface until something lands in the wrong feed.
+
+
+def _publish_keys(page, *names):
+    """Say which publishing credentials are stored, the way the composer asks."""
+    page.route("**/api/settings/credentials", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({n: {"set": True} for n in names})))
+
+
+_IG_KEYS = ("instagram_access_token", "instagram_user_id", "imgbb_api_key")
+
+
+def _connected(page, handle="acme_bakery", platform="instagram"):
+    _publish_keys(page, *_IG_KEYS)
+    page.route("**/api/settings/connections", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(
+            {"connections": {platform: {"ok": True, "handle": handle,
+                                        "error": "", "expires_at": None}}})))
+
+
+def _profiles(page, *names):
+    page.route("**/api/accounts", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps({
+            "accounts": [{"id": f"a{i}", "name": n, "is_primary": i == 0,
+                          "has_logo": False}
+                         for i, n in enumerate(names)],
+            "active_account_id": "a0"})))
+
+
+def _confirm_text(page):
+    """Capture what the publish confirmation actually says, and cancel it.
+
+    Waits on the dialog rather than on the button: the confirmation now reads
+    the connections first, so for one round trip the button is still enabled and
+    "assert it is enabled" is a state that was already true — the same trap as
+    the mid-flight assertions in 7.2.
+    """
+    with page.expect_event("dialog") as caught:
+        page.locator("#publish-btn").click()
+    dialog = caught.value
+    dialog.dismiss()
+    return [dialog.message]
+
+
+def test_the_confirmation_names_the_account_it_will_publish_to(page, signed_in, keyed):
+    """The single most useful sentence in this phase. Until now the product
+    asked "publish to Instagram?" — naming the network, which the person chose,
+    and not the account, which they cannot see anywhere on this screen."""
+    _serve_milestones(page)
+    _connected(page, "acme_bakery")
+    _profiles(page, "Acme")
+    signed_in()
+
+    _reach_step4(page)
+    said = _confirm_text(page)
+
+    assert said and "acme_bakery" in said[0], said
+
+
+def test_an_unknown_handle_is_not_guessed_at(page, signed_in, keyed):
+    """A connection that has never been checked has no handle. Naming the
+    network is honest; inventing a destination is not."""
+    _serve_milestones(page)
+    _publish_keys(page, *_IG_KEYS)
+    page.route("**/api/settings/connections", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"connections": {}})))
+    _profiles(page, "Acme")
+    signed_in()
+
+    _reach_step4(page)
+    said = _confirm_text(page)
+
+    assert said and "Instagram" in said[0], said
+    assert "@" not in said[0], said
+
+
+def test_one_profile_is_not_told_about_sharing(page, signed_in, keyed):
+    """Nothing to share with. A sentence about how profiles interact, shown to
+    somebody who has one, is the clutter this phase exists to remove."""
+    _serve_milestones(page)
+    _connected(page)
+    _profiles(page, "Acme")
+    signed_in()
+
+    _reach_step4(page)
+    said = _confirm_text(page)
+
+    assert said and "profile" not in said[0].lower(), said
+
+
+def test_two_profiles_are_told_the_connection_is_shared(page, signed_in, keyed):
+    _serve_milestones(page)
+    _connected(page)
+    _profiles(page, "Acme", "Beta")
+    signed_in()
+
+    _reach_step4(page)
+    said = _confirm_text(page)
+
+    assert said and "profile" in said[0].lower(), said
+
+
+def test_the_sharing_sentence_is_said_once_and_recorded(page, signed_in, keyed):
+    """Said on every publish it would be a lecture. The record goes to the
+    server so it survives the next machine, like every other milestone."""
+    _serve_milestones(page)
+    _connected(page)
+    _profiles(page, "Acme", "Beta")
+    recorded = []
+
+    def _record(route, request):
+        recorded.append(request.url.rsplit("/", 1)[-1])
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"milestones": {}}))
+
+    page.route("**/api/settings/milestones/*", _record)
+    signed_in()
+
+    _reach_step4(page)
+    _confirm_text(page)
+
+    assert recorded == ["connections_are_shared"]
+
+
+def test_somebody_already_told_is_not_told_again(page, signed_in, keyed):
+    _serve_milestones(page, {"connections_are_shared": "2026-08-09T00:00:00+00:00"})
+    _connected(page)
+    _profiles(page, "Acme", "Beta")
+    signed_in()
+
+    _reach_step4(page)
+    said = _confirm_text(page)
+
+    assert said and "profile" not in said[0].lower(), said
+
+
+def test_a_missing_connection_says_it_covers_every_profile(page, signed_in, keyed):
+    """The moment of the miss. Somebody running two brands is about to wonder
+    whether they need to connect X twice; the answer is no, and this is where
+    they are asking the question."""
+    _profiles(page, "Acme", "Beta")
+    signed_in()
+    _reach_step4(page)
+
+    page.locator("#publish-btn").click()
+
+    expect(page.locator("#need-key-modal")).to_be_visible()
+    expect(page.locator("#need-key-modal")).to_contain_text("profile")
