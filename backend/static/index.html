@@ -141,6 +141,7 @@
           </div>
           <button onclick="closeAvatarMenu(); openSettings('profiles')" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Settings</button>
           <button onclick="closeAvatarMenu(); startOnboarding({restart: true})" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Setup guide</button>
+          <button id="show-all-features" onclick="showAllFeatures()" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs" title="Reveal every feature, including the ones that normally appear later">Show all features</button>
           <button onclick="closeAvatarMenu(); toggleTheme()" id="theme-toggle" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Light / dark</button>
           <button id="logout-btn" onclick="logout()" class="hidden ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Log out</button>
         </div>
@@ -1263,7 +1264,7 @@
       <button data-settings-tab="keys" onclick="openSettings('keys')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Keys &amp; spend</button>
       <button data-settings-tab="sources" onclick="openSettings('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
       <button data-settings-tab="rules" onclick="openSettings('rules')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Brand rules</button>
-      <button data-settings-tab="team" onclick="openSettings('team')" class="agency-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Team</button>
+      <button data-settings-tab="team" onclick="openSettings('team')" style="display:none" class="agency-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Team</button>
     </div>
 
     <!-- Credentials. One container on two tabs: they are never on screen
@@ -1521,6 +1522,19 @@
        showing a creator approval controls that do nothing, or hiding from
        Business the very thing the screen exists for. -->
   <div id="view-queue" class="hidden space-y-4">
+    <!-- Offered once, to a creator with five posts behind them. -->
+    <div id="sources-offer" class="hidden bg-purple-950/40 border border-purple-800/60 rounded-xl p-4 space-y-2">
+      <p class="text-sm font-semibold text-purple-100">Would you like topics to find themselves?</p>
+      <p class="text-xs text-purple-100/70">
+        Business mode watches links you choose — release notes, a blog, a competitor's
+        changelog — and turns what happens on them into drafts waiting for your approval.
+        It is a different way to work, and you can switch back whenever you like.
+      </p>
+      <div class="flex flex-wrap gap-2 pt-1">
+        <button id="sources-offer-take" onclick="takeSourcesOffer()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Show me Business mode</button>
+        <button id="sources-offer-dismiss" onclick="document.getElementById('sources-offer').classList.add('hidden')" class="text-xs text-purple-200/60 hover:text-white underline">Not for me</button>
+      </div>
+    </div>
     <div class="ce-card p-5">
       <h2 id="queue-title" class="text-lg font-semibold" style="color:var(--accent)">Queue</h2>
       <p id="queue-sub" class="text-xs text-gray-400 mt-1">Everything you've made that hasn't gone out yet — drafts, previews and anything scheduled.</p>
@@ -2362,6 +2376,10 @@ async function loadQueue() {
     : "Everything you've made that hasn't gone out yet — drafts, previews and anything scheduled.";
   own.classList.toggle('hidden', business);
   biz.classList.toggle('hidden', !business);
+  // Above the Business branch on purpose: the "not to Business" decision then
+  // lives in the offer, where it is one testable guard, instead of being an
+  // accident of this return sitting first.
+  maybeOfferSources();      // not awaited: the queue itself must not wait on an offer
   if (business) return loadDrafts();
 
   // The Queue is bounded by how much work is waiting, not by how much history
@@ -2764,6 +2782,10 @@ async function loadAccounts() {
     if (S.user) S.user.active_account_id = d.active_account_id || null;
   } catch { S.accounts = []; }
   renderAcctSwitcher();
+  // The Team gate reads this list, and this is the only place it changes — so
+  // this is where it gets re-asked. Leaving it to the milestone load alone was
+  // a race: that fires first, when S.accounts is still empty.
+  renderTeamTab();
 }
 
 function toggleAvatarMenu() {
@@ -4826,11 +4848,8 @@ async function confirmPublish(platform, question) {
   return confirm(lines.join('\n'));
 }
 
-async function noteConnectionsAreShared() {
-  S.milestones['connections_are_shared'] = new Date().toISOString();
-  try {
-    await apiFetch(`${API}/api/settings/milestones/connections_are_shared`, {method: 'POST'});
-  } catch {}
+function noteConnectionsAreShared() {
+  noteMilestone('connections_are_shared');
 }
 
 async function publishPost() {
@@ -6400,6 +6419,86 @@ async function loadMilestones() {
 function renderMilestoneGates() {
   renderVoiceHint();
   renderJournalTab();
+  renderTeamTab();
+}
+
+/** Team is a screen about a second person, and it appears when there is a
+ *  second anything: a second brand profile to hand over, or an invitation
+ *  already sent. The milestone is what makes it stay — deleting the second
+ *  profile must not take away a screen somebody has been using. */
+function renderTeamTab() {
+  const el = document.querySelector('#settings-tabs [data-settings-tab="team"]');
+  if (!el) return;
+  const many = (S.accounts || []).length > 1;
+  // Agency too, not just the count. The milestone means "the Team screen
+  // appeared", and it does not appear for a creator however many brands they
+  // keep — recording it there would write a history that never happened, and it
+  // would hand them the screen the day they ever became an agency.
+  const agency = !!(S.user && S.user.account_type === 'agency');
+  if (agency && many && !S.milestones['team_unlocked']) noteMilestone('team_unlocked');
+  el.style.display = (many || S.milestones['team_unlocked']) ? '' : 'none';
+}
+
+/** Record one milestone, optimistically. The screen changes now; the write is
+ *  what carries the change to the next machine. */
+async function noteMilestone(name) {
+  S.milestones[name] = new Date().toISOString();
+  try {
+    await apiFetch(`${API}/api/settings/milestones/${encodeURIComponent(name)}`,
+                   {method: 'POST'});
+  } catch {}
+}
+
+/** The price of hiding anything at all, paid up front.
+ *
+ *  Somebody who saw a feature on a colleague's screen and cannot find it goes
+ *  to support rather than to the product. This reveals the gated FEATURES only
+ *  — the server decides which those are, and deliberately does not record that
+ *  this person rewrote a caption or was told something once. */
+async function showAllFeatures() {
+  closeAvatarMenu();
+  try {
+    const res = await apiFetch(`${API}/api/settings/milestones-all`, {method: 'POST'});
+    if (res.ok) S.milestones = (await res.json()).milestones || S.milestones;
+  } catch {}
+  renderMilestoneGates();
+  toast('Everything is showing now', 'success');
+}
+
+/** "Would you like topics to find themselves?" — once, to a creator who has
+ *  made enough posts for keeping the queue full to have become work.
+ *
+ *  Sources are workspace-scoped and behind require_business, so this cannot be
+ *  a tab quietly appearing: the capability lives in the other product. The
+ *  offer says that plainly and leaves the switch to them.
+ *
+ *  Counted by asking for six posts rather than by storing a number — phase 8.0
+ *  keeps counts out of the milestones for good reason, and a second count would
+ *  eventually disagree with the posts table. Nobody who has already been asked
+ *  pays for the request at all. */
+async function maybeOfferSources() {
+  const el = document.getElementById('sources-offer');
+  if (!el) return;
+  el.classList.add('hidden');
+  if (!S.user || S.user.is_local) return;
+  if (S.user.account_type === 'business') return;    // sources are their first screen
+  if (S.milestones['sources_offered']) return;
+  const rows = await fetchPosts({ limit: SOURCES_OFFER_AFTER + 1 });
+  if (rows.length < SOURCES_OFFER_AFTER) return;
+  el.classList.remove('hidden');
+  noteMilestone('sources_offered');
+}
+
+const SOURCES_OFFER_AFTER = 5;
+
+async function takeSourcesOffer() {
+  if (!confirm('Business mode changes how the product works: posts start from '
+             + 'links you watch, and each draft waits for a person to approve it. '
+             + 'You can switch back at any time.\n\nSwitch now?')) return;
+  const sel = document.getElementById('product-switcher');
+  if (!sel) return;
+  sel.value = 'business';
+  await onProductSwitch();
 }
 
 /** The Journal is the approval record, and it appears once there is one.
@@ -6438,11 +6537,8 @@ function openBrandVoice() {
 async function dismissVoiceHint() {
   // Optimistic: the hint goes now, and the record is what keeps it gone on the
   // next machine. A failed write costs one more sighting, not a stuck banner.
-  S.milestones['rules_hint_dismissed'] = new Date().toISOString();
+  noteMilestone('rules_hint_dismissed');
   renderVoiceHint();
-  try {
-    await apiFetch(`${API}/api/settings/milestones/rules_hint_dismissed`, {method: 'POST'});
-  } catch {}
 }
 
 function showCostPopover() {

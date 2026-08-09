@@ -15,6 +15,12 @@ grants no access, and that the invite form behaves.
 The API is stubbed. What the routes do with a row is settled in
 tests/test_team_api.py against a real database; repeating it through a browser
 would test the same guard twice and the rendering not at all.
+
+Since UX phase 8.5 the tab is gated a second time, on having a second brand or
+having already invited somebody — a screen about a second person means nothing
+to an agency working alone. Every test here therefore states that precondition;
+`_unlocked` is that sentence. The gate itself is covered in
+test_feature_gates_e2e.py, not repeated below.
 """
 import json
 
@@ -33,6 +39,13 @@ def _invitation(**over):
     return fields
 
 
+def _unlocked(page):
+    """An agency that has already earned the Team screen (UX phase 8.5)."""
+    page.route("**/api/settings/milestones", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(
+            {"milestones": {"team_unlocked": "2026-08-09T00:00:00+00:00"}})))
+
+
 def _serve(page, rows):
     page.route("**/api/team/invitations", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps(rows)))
@@ -40,7 +53,10 @@ def _serve(page, rows):
 
 # ── who sees it ─────────────────────────────────────────────────────────────
 
-def test_an_agency_gets_the_team_tab(page, signed_in):
+def test_an_agency_that_has_earned_it_gets_the_team_tab(page, signed_in):
+    """Agency AND unlocked, both. Which of the two is doing the work is settled
+    in test_feature_gates_e2e; what matters here is that the pair is enough."""
+    _unlocked(page)
     signed_in(account_type="agency")
     _serve(page, [])
     open_settings(page, "profiles")
@@ -62,6 +78,7 @@ def test_the_agency_shell_is_still_the_creator_shell(page, signed_in):
     """The risk stated as a test, from the other side. Emitting a third
     account-type value must not cost an agency the application: they keep the
     Create wizard and the Calendar, and gain only the Team tab."""
+    _unlocked(page)
     signed_in(account_type="agency")
     expect(page.locator('[data-section="create"]')).to_be_visible()
     expect(page.locator('[data-section="calendar"]')).to_be_visible()
@@ -74,6 +91,7 @@ def test_the_screen_says_an_invitation_grants_nothing(page, signed_in):
     """Not decoration. The feature ships before the access it implies, so the
     one thing the screen must not do is imply the access. Delete this sentence
     and the first person who accepts files a bug we would deserve."""
+    _unlocked(page)
     signed_in(account_type="agency")
     _serve(page, [])
     open_settings(page, "team")
@@ -82,6 +100,7 @@ def test_the_screen_says_an_invitation_grants_nothing(page, signed_in):
 
 
 def test_an_empty_team_says_so(page, signed_in):
+    _unlocked(page)
     signed_in(account_type="agency")
     _serve(page, [])
     open_settings(page, "team")
@@ -89,6 +108,7 @@ def test_an_empty_team_says_so(page, signed_in):
 
 
 def test_an_invitation_is_listed_with_its_status(page, signed_in):
+    _unlocked(page)
     signed_in(account_type="agency")
     _serve(page, [_invitation(), _invitation(id="i2", email="joined@example.com",
                                              status="accepted")])
@@ -102,6 +122,7 @@ def test_an_invitation_is_listed_with_its_status(page, signed_in):
 def test_an_address_without_an_at_never_reaches_the_server(page, signed_in):
     """The server checks this too. Sending it anyway costs a round-trip to be
     told what the field already knew, and the answer belongs beside the field."""
+    _unlocked(page)
     signed_in(account_type="agency")
     _serve(page, [])
     posts = []
@@ -117,6 +138,7 @@ def test_an_address_without_an_at_never_reaches_the_server(page, signed_in):
 
 
 def test_a_sent_invitation_clears_the_field_and_reloads_the_list(page, signed_in):
+    _unlocked(page)
     signed_in(account_type="agency")
     state = {"rows": []}
 
@@ -143,6 +165,7 @@ def test_a_sent_invitation_clears_the_field_and_reloads_the_list(page, signed_in
 
 
 def test_a_refused_invitation_shows_the_servers_reason(page, signed_in):
+    _unlocked(page)
     signed_in(account_type="agency")
     _serve(page, [])
     page.route("**/api/team/invitations",

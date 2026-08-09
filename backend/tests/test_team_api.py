@@ -210,3 +210,58 @@ def test_a_token_for_another_purpose_is_refused(client, sent):
     wrong = create_purpose_token(inv["id"], "password_reset", timedelta(days=7))
     assert client.post("/api/team/invitations/accept", headers=hc,
                        json={"token": wrong}).status_code == 400
+
+
+# ── the Team screen keeps itself (UX phase 8.5) ─────────────────────────────
+
+def test_inviting_somebody_unlocks_the_team_screen(client, sent):
+    """The tab is gated on having more than one profile, but an agency that has
+    already invited people must not lose the screen — and the invitations they
+    sent from it — by dropping back to a single brand."""
+    from sqlalchemy import select
+
+    from models.database import User
+    from services import milestones
+
+    h = _register(client, "owner@ex.com")
+    client.post("/api/team/invitations", headers=h, json={"email": "new@ex.com"})
+
+    async def _reached():
+        async with app.state.sessionmaker() as db:
+            user = (await db.execute(select(User).where(
+                User.email == "owner@ex.com"))).scalar_one()
+            return milestones.all_for(user)
+
+    assert milestones.TEAM_UNLOCKED in asyncio.run(_reached())
+
+
+def test_a_refused_invitation_unlocks_nothing(client, sent):
+    """A duplicate is a 409 and no new row. Unlocking on it would hand somebody
+    a screen on the strength of an invitation that was not created."""
+    from sqlalchemy import select
+
+    from models.database import User
+    from services import milestones
+
+    h = _register(client, "fresh@ex.com")
+
+    async def _forget():
+        async with app.state.sessionmaker() as db:
+            user = (await db.execute(select(User).where(
+                User.email == "fresh@ex.com"))).scalar_one()
+            user.milestones = {}
+            await db.commit()
+
+    client.post("/api/team/invitations", headers=h, json={"email": "dup@ex.com"})
+    asyncio.run(_forget())
+    r = client.post("/api/team/invitations", headers=h, json={"email": "dup@ex.com"})
+
+    assert r.status_code == 409
+
+    async def _reached():
+        async with app.state.sessionmaker() as db:
+            user = (await db.execute(select(User).where(
+                User.email == "fresh@ex.com"))).scalar_one()
+            return milestones.all_for(user)
+
+    assert milestones.TEAM_UNLOCKED not in asyncio.run(_reached())

@@ -27,6 +27,7 @@ from api.deps import get_current_user, get_db, require_agency
 from models.database import TeamInvitation
 from models.database import User as UserModel
 from models.schemas import TeamInvitationOut, TeamInviteAccept, TeamInviteRequest
+from services import milestones
 from services.auth import create_purpose_token, decode_purpose_token
 from services.email import send_team_invite_email
 from api.ratelimit import limiter
@@ -88,6 +89,15 @@ async def invite(
         raise HTTPException(status_code=409,
                             detail="That address already has a pending invitation.")
     await db.refresh(row)
+    # An agency that has invited somebody keeps the Team screen even if it drops
+    # back to a single profile (UX phase 8.5). Recorded after the commit and
+    # inside a try: the invitation is the fact, and it has already been sent to
+    # the database — a milestone failure must not turn a live invitation into a
+    # 500 the caller reads as "it did not happen".
+    try:
+        await milestones.record(db, user, milestones.TEAM_UNLOCKED)
+    except Exception:
+        log.exception("Could not record the team milestone for user=%s", user.id)
 
     token = create_purpose_token(row.id, _PURPOSE, INVITE_TTL)
     await send_team_invite_email(email, token, user.email or "")

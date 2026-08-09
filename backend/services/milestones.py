@@ -71,6 +71,14 @@ ALL: tuple[str, ...] = (
     TEAM_UNLOCKED,
 )
 
+#: The subset "Show all features" may set. Everything here is a FEATURE being
+#: unlocked; everything outside it is a record of something that happened —
+#: somebody rewrote a caption, somebody was told a thing once. Revealing a
+#: feature must not assert that those happened: a false "you edited the AI text
+#: on the 9th" is wrong data, it goes out in the GDPR export, and it would
+#: silence hints the person never saw.
+REVEALABLE: tuple[str, ...] = (JOURNAL_UNLOCKED, TEAM_UNLOCKED)
+
 
 def all_for(user: UserModel) -> dict:
     """Everything this account has reached, as {name: when}.
@@ -116,7 +124,7 @@ async def record_all(db: AsyncSession, user: UserModel) -> None:
     """
     current = all_for(user)
     now = datetime.now(timezone.utc).isoformat()
-    for name in ALL:
+    for name in REVEALABLE:
         current.setdefault(name, now)
     user.milestones = current
     flag_modified(user, "milestones")

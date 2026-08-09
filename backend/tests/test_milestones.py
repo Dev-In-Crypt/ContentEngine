@@ -152,7 +152,24 @@ def test_everything_can_be_revealed_at_once(sm):
         return await milestones.record_all(db, await db.get(User, uid))
     _run(sm, _go)
 
-    assert set(_all(sm, uid)) == set(milestones.ALL)
+    assert set(_all(sm, uid)) == set(milestones.REVEALABLE)
+
+
+def test_revealing_features_does_not_invent_a_history(sm):
+    """"Show all features" unlocks features. It must not also record that this
+    person rewrote a caption or was told something once — those are claims about
+    what happened, they leave in the GDPR export, and asserting them would
+    silence hints nobody has seen yet."""
+    uid = _user(sm)
+
+    async def _go(db):
+        return await milestones.record_all(db, await db.get(User, uid))
+    _run(sm, _go)
+
+    reached = _all(sm, uid)
+    for name in (milestones.EDITED_AI_TEXT, milestones.RULES_HINT_DISMISSED,
+                 milestones.SOURCES_OFFERED, milestones.CONNECTIONS_ARE_SHARED):
+        assert name not in reached, name
 
 
 def test_show_everything_does_not_rewrite_what_was_already_reached(sm):
@@ -255,7 +272,7 @@ def test_show_all_features_reveals_everything(client):
     headers = _headers(client)
     r = client.post("/api/settings/milestones-all", headers=headers)
 
-    assert set(r.json()["milestones"]) == set(milestones.ALL)
+    assert set(r.json()["milestones"]) == set(milestones.REVEALABLE)
 
 
 def test_milestones_need_an_account(client):
