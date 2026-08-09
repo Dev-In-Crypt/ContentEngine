@@ -162,6 +162,53 @@
     </div>
   </header>
 
+  <!-- The working field. First thing on the page for everybody: the landing's
+       argument is "here is what it does", and until UX phase 7.2 the only thing
+       it could show a visitor was a sign-up form. -->
+  <section id="hero-field" class="max-w-3xl mx-auto px-6 pt-10 text-center">
+    <h1 class="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
+      See it write a post. Right now.
+    </h1>
+    <p class="mt-3 text-gray-400">No account, no API key. One topic or one link.</p>
+
+    <div class="mt-6 flex gap-2 justify-center text-sm">
+      <button data-hero-mode="topic" onclick="setHeroMode('topic')"
+              class="hero-mode-btn px-4 py-1.5 rounded-lg font-semibold border-2 border-purple-500 bg-purple-900 text-white">A topic</button>
+      <button data-hero-mode="link" onclick="setHeroMode('link')"
+              class="hero-mode-btn px-4 py-1.5 rounded-lg font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">A link</button>
+    </div>
+
+    <div class="mt-4 flex flex-col sm:flex-row gap-2">
+      <input id="hero-input" type="text" class="ce-input flex-1 px-4 py-3"
+             placeholder="Sourdough starters for beginners"
+             onkeydown="if (event.key === 'Enter') runHeroPost()" />
+      <button id="hero-run" onclick="runHeroPost()" class="ce-btn px-6 py-3 text-sm">Write it</button>
+    </div>
+
+    <!-- Three of them, because the hardest part of an empty field is the first
+         idea. -->
+    <div id="hero-examples" class="mt-3 flex flex-wrap justify-center gap-2 text-xs">
+      <button onclick="runHeroExample(this)" class="ce-card px-3 py-1.5">Sourdough starters for beginners</button>
+      <button onclick="runHeroExample(this)" class="ce-card px-3 py-1.5">Why B2B SaaS demos fail</button>
+      <button onclick="runHeroExample(this)" class="ce-card px-3 py-1.5">Three money habits for your twenties</button>
+    </div>
+
+    <p id="hero-status" class="hidden mt-4 text-sm" style="color:var(--muted)"></p>
+
+    <div id="hero-result" class="hidden mt-6 text-left ce-card p-5 sm:flex sm:gap-5">
+      <img id="hero-image" alt="Generated post" class="hidden w-full sm:w-56 rounded-xl object-cover" />
+      <div class="mt-4 sm:mt-0 flex-1">
+        <div id="hero-hook" class="font-semibold"></div>
+        <div id="hero-caption" class="mt-2 text-sm whitespace-pre-line text-gray-300"></div>
+        <div id="hero-hashtags" class="mt-2 text-sm" style="color:var(--accent)"></div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button id="hero-download" onclick="downloadHeroImage()" class="ce-btn-ghost px-4 py-2 text-sm">Download the picture</button>
+          <button onclick="resetHero()" class="ce-btn-ghost px-4 py-2 text-sm">Try another</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Two doors, one engine: Creators vs Business -->
   <div class="max-w-3xl mx-auto px-6 pt-4">
     <div class="flex gap-2 justify-center text-sm">
@@ -1782,6 +1829,142 @@ function setLandingTab(tab) {
 function backToHome() {
   hideAuthScreen();
   showLanding();
+}
+
+// ===== THE LANDING FIELD (no auth) — a topic or a link → a finished post =====
+// Everything a visitor sees before they have given us anything. The result is
+// held in the browser and nowhere else: the server writes no row for it, which
+// is what lets Download work without a second request and without an account.
+S.heroMode = 'topic';
+S.heroPost = null;
+S.heroRunning = false;
+
+const HERO_PLACEHOLDER = {
+  topic: 'Sourdough starters for beginners',
+  link: 'https://your-site.com',
+};
+
+function setHeroMode(mode) {
+  S.heroMode = mode === 'link' ? 'link' : 'topic';
+  const input = document.getElementById('hero-input');
+  input.placeholder = HERO_PLACEHOLDER[S.heroMode];
+  input.value = '';
+  document.querySelectorAll('[data-hero-mode]').forEach(b => {
+    const on = b.dataset.heroMode === S.heroMode;
+    b.classList.toggle('border-purple-500', on);
+    b.classList.toggle('bg-purple-900', on);
+    b.classList.toggle('text-white', on);
+    b.classList.toggle('border-gray-700', !on);
+    b.classList.toggle('bg-gray-800', !on);
+    b.classList.toggle('text-gray-300', !on);
+  });
+}
+
+function heroStatus(message) {
+  const el = document.getElementById('hero-status');
+  el.textContent = message || '';
+  el.classList.toggle('hidden', !message);
+}
+
+function resetHero() {
+  S.heroPost = null;
+  document.getElementById('hero-result').classList.add('hidden');
+  heroStatus('');
+  document.getElementById('hero-input').focus();
+}
+
+function runHeroExample(btn) {
+  setHeroMode('topic');
+  document.getElementById('hero-input').value = btn.textContent.trim();
+  runHeroPost();
+}
+
+/** Generate one post for somebody with no account.
+ *
+ *  The two checks before the request are not validation theatre: the server
+ *  would refuse both with a 422, and spending a visitor's first round trip on
+ *  a refusal it could have read locally is a poor first impression. */
+async function runHeroPost() {
+  if (S.heroRunning) return;          // every run costs a model call and a picture
+  const value = (document.getElementById('hero-input').value || '').trim();
+  if (S.heroMode === 'topic' && value.length < 3) {
+    return heroStatus('Give it a little more to go on — a few words.');
+  }
+  if (S.heroMode === 'link' && !/^https?:\/\//i.test(value)) {
+    return heroStatus('Paste a full link, starting with http:// or https://');
+  }
+
+  S.heroRunning = true;
+  const btn = document.getElementById('hero-run');
+  btn.disabled = true;
+  document.getElementById('hero-result').classList.add('hidden');
+  heroStatus('Starting…');
+  try {
+    const res = await fetch(`${API}/api/demo/post`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(S.heroMode === 'link' ? { url: value } : { topic: value }),
+    });
+    if (res.status === 429) return heroStatus("That's a few in a row — give it an hour, or sign up to keep going.");
+    if (res.status === 503) return heroStatus('The free demo is resting until tomorrow. Sign up to keep going.');
+    if (!res.ok) return heroStatus('Something went wrong. Please try again.');
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value: chunk } = await reader.read();
+      if (done) break;
+      buf += dec.decode(chunk, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+        if (ev.type === 'progress') heroStatus(ev.message);
+        else if (ev.type === 'error') heroStatus(ev.message);
+        else if (ev.type === 'complete') renderHeroPost(ev.post);
+      }
+    }
+  } catch {
+    heroStatus('Something went wrong. Please try again.');
+  } finally {
+    S.heroRunning = false;
+    btn.disabled = false;
+  }
+}
+
+function renderHeroPost(post) {
+  S.heroPost = post || null;
+  if (!post) return;
+  heroStatus('');
+  document.getElementById('hero-hook').textContent = post.hook || '';
+  document.getElementById('hero-caption').textContent = post.caption || '';
+  document.getElementById('hero-hashtags').textContent = (post.hashtags || []).join(' ');
+  const img = document.getElementById('hero-image');
+  // A data URL, not a link: there is no file on the server to link to, which is
+  // the point. safeUrl() would reject it, so the shape is checked here instead.
+  if (typeof post.image_data_url === 'string' && post.image_data_url.startsWith('data:image/')) {
+    img.src = post.image_data_url;
+    img.classList.remove('hidden');
+  } else {
+    img.removeAttribute('src');
+    img.classList.add('hidden');
+  }
+  document.getElementById('hero-download').classList.toggle('hidden', !img.src);
+  document.getElementById('hero-result').classList.remove('hidden');
+}
+
+/** Save the picture. No request and no account: it is already in the browser. */
+function downloadHeroImage() {
+  const src = S.heroPost && S.heroPost.image_data_url;
+  if (!src) return;
+  const a = document.createElement('a');
+  a.href = src;
+  a.download = 'content-engine-post.jpg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 // ===== BUSINESS DEMO (no auth) — paste a public link → draft starters =====
