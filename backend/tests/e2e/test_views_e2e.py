@@ -192,9 +192,19 @@ def test_a_creator_asking_for_a_business_tab_gets_their_posts(page, signed_in):
     expect(page.locator("#results-journal")).to_be_hidden()
 
 
+def _journal_unlocked(page):
+    """A workspace that has approved something, which is what the Journal tab
+    now waits for (UX phase 8.3). Before that milestone the tab is not on
+    screen, so every test that clicks it has to say so out loud."""
+    page.route("**/api/settings/milestones", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"milestones": {"journal_unlocked": "2026-08-09T00:00:00+00:00"}})))
+
+
 def test_results_fetches_only_the_tab_that_is_open(page, signed_in):
     """Three panels, one screen — but a screen that loads all three on entry
     spends three round-trips to show one."""
+    _journal_unlocked(page)
     signed_in(account_type="business")
     _serve_posts(page)
     calls = []
@@ -205,6 +215,10 @@ def test_results_fetches_only_the_tab_that_is_open(page, signed_in):
 
 
 def test_a_business_account_gets_all_three_result_tabs(page, signed_in):
+    """Once it has approved something. The Journal is gated on having one from
+    8.3, and its sibling test — the same account with nothing approved seeing
+    two tabs — lives with the rest of that gate in test_business_e2e."""
+    _journal_unlocked(page)
     signed_in(account_type="business")
     _serve_posts(page)
     open_section(page, "results")
@@ -263,6 +277,7 @@ def test_results_leaves_out_what_is_not_published(page, signed_in):
 def test_the_journal_renders_an_entry(page, signed_in):
     """A journal row is the approved copy itself, not a title — it exists to
     show what a human signed off on, and whether they changed it first."""
+    _journal_unlocked(page)
     signed_in(account_type="business")
     page.route("**/api/business/journal*", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps([{
@@ -278,6 +293,9 @@ def test_the_journal_renders_an_entry(page, signed_in):
 
 
 def test_an_empty_journal_says_so(page, signed_in):
+    """Empty for a date range, not empty for want of approvals — the tab only
+    exists once something has been signed off."""
+    _journal_unlocked(page)
     signed_in(account_type="business")
     page.route("**/api/business/journal*", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))

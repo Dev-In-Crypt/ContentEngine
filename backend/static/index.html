@@ -1539,7 +1539,13 @@
     <div id="results-tabs" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
       <button data-results-tab="posts" onclick="openResults('posts')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Posts</button>
       <button data-results-tab="sources" onclick="openResults('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
-      <button data-results-tab="journal" onclick="openResults('journal')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
+      <!-- Starts hidden inline rather than by class: `business-only` is
+           switched by a body-attribute rule that outranks any single class, so
+           a Tailwind `hidden` here would lose for the very accounts it has to
+           gate. Inline display can only hide; clearing it hands the decision
+           back to the cascade, which is exactly the division of labour wanted —
+           the milestone locks, the account type decides. -->
+      <button data-results-tab="journal" onclick="openResults('journal')" style="display:none" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
     </div>
 
     <div id="results-posts" data-results-tab="posts">
@@ -6339,7 +6345,31 @@ async function loadMilestones() {
     const res = await apiFetch(`${API}/api/settings/milestones`);
     S.milestones = res.ok ? ((await res.json()).milestones || {}) : {};
   } catch { S.milestones = {}; }
+  renderMilestoneGates();
+}
+
+/** Everything whose appearance hangs on a milestone, in one place.
+ *
+ *  A failed read leaves the gates shut. That is the safe direction: a tab that
+ *  turns up next reload costs a shrug, and the alternative — defaulting open on
+ *  a network blip — would make the whole phase look like it fires at random. */
+function renderMilestoneGates() {
   renderVoiceHint();
+  renderJournalTab();
+}
+
+/** The Journal is the approval record, and it appears once there is one.
+ *
+ *  The UX table says "after the tenth published post", but the journal is
+ *  written at sign-off, not at publication — a workspace can approve nine posts
+ *  and publish none. Counting publications would therefore hide a non-empty
+ *  audit trail, together with the export button that turns it into the report a
+ *  client gets. Following the feature's own content asks for nothing and hides
+ *  nothing. */
+function renderJournalTab() {
+  const el = document.querySelector('#results-tabs [data-results-tab="journal"]');
+  if (!el) return;
+  el.style.display = S.milestones['journal_unlocked'] ? '' : 'none';
 }
 
 /** Offer the setting that steers how the AI writes, once its words have been

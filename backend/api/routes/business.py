@@ -38,6 +38,7 @@ from models.schemas import (
     SourceAnalyticsOut, SourceAnalyticsResponse,
     SourceCreate, SourceOut,
 )
+from services import milestones
 from services.claim_check import apply_brand_rules, verify_claims
 from services.content_engine import ContentEngine
 from services.source_poller import poll_source
@@ -674,6 +675,15 @@ async def approve_post(
         approved_by=user.id, approved_at=datetime.now(timezone.utc),
     ))
     await db.commit()
+    # The row above is the journal's first content, and UX phase 8 hangs the
+    # Journal tab on that rather than on a publication count: the journal is
+    # written here, at sign-off, and a workspace can approve nine posts without
+    # publishing one. Recorded after the commit and inside a try — the sign-off
+    # is the fact worth keeping, and it is the one with legal weight.
+    try:
+        await milestones.record(db, user, milestones.JOURNAL_UNLOCKED)
+    except Exception:
+        log.exception("Could not record the journal milestone for user=%s", user.id)
     return {"status": "approved"}
 
 

@@ -394,3 +394,70 @@ def test_a_limit_out_of_range_is_reported_not_swallowed(page, signed_in):
     page.locator("#limit-day").fill("999")
     page.get_by_role("button", name="Save limits").click()
     expect(page.locator("#limits-status")).to_contain_text("must be 1–100")
+
+
+# ── the Journal appears when there is a journal (UX phase 8.3) ───────────────
+#
+# The Journal is the audit trail: one row per approval, with the AI draft beside
+# the human's edits, and an Export button that is the report an agency hands its
+# client. It is written at sign-off, not at publication — so the tab follows its
+# own content rather than a publication count, and a workspace that has approved
+# something never has that content hidden from it.
+
+def _serve_milestones(page, reached=None):
+    page.route("**/api/settings/milestones", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"milestones": reached or {}})))
+
+
+_UNLOCKED = {"journal_unlocked": "2026-08-09T00:00:00+00:00"}
+
+
+def test_a_workspace_with_nothing_approved_has_no_journal_tab(page, signed_in):
+    _serve_milestones(page)
+    signed_in(account_type="business")
+    open_section(page, "results")
+
+    expect(page.locator('#results-tabs [data-results-tab="journal"]')).to_be_hidden()
+
+
+def test_the_journal_tab_arrives_with_the_first_approval(page, signed_in):
+    _serve_milestones(page, _UNLOCKED)
+    signed_in(account_type="business")
+    open_section(page, "results")
+
+    expect(page.locator('#results-tabs [data-results-tab="journal"]')).to_be_visible()
+
+
+def test_the_journal_tab_opens_the_journal(page, signed_in):
+    _serve_milestones(page, _UNLOCKED)
+    _serve(page, "**/api/business/journal*", [])
+    signed_in(account_type="business")
+    open_section(page, "results")
+
+    page.locator('#results-tabs [data-results-tab="journal"]').click()
+
+    expect(page.locator("#results-journal")).to_be_visible()
+
+
+def test_results_still_opens_while_the_journal_is_locked(page, signed_in):
+    """Gating a tab must not gate the screen it lives on. The Posts tab is the
+    landing one, and a locked sibling has to leave it alone."""
+    _serve_milestones(page)
+    signed_in(account_type="business")
+    open_section(page, "results")
+
+    expect(page.locator("#results-posts")).to_be_visible()
+    expect(page.locator("#results-journal")).to_be_hidden()
+
+
+def test_a_creator_has_no_journal_even_if_the_milestone_is_there(page, signed_in):
+    """The journal is a workspace's approval record; a creator has no workspace
+    and no approval step. The milestone gate is an extra lock on the
+    business-only one, never a way around it."""
+    _serve_milestones(page, _UNLOCKED)
+    signed_in()
+    open_section(page, "results")
+
+    expect(page.locator('#results-tabs [data-results-tab="journal"]')).to_be_hidden()
+
