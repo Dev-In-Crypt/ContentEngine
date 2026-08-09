@@ -1812,11 +1812,40 @@ async function initAuth() {
   }
 }
 
+/** Read ?topic= / ?url= off the address bar and start on it.
+ *
+ *  For outreach: one link per recipient, so the first thing somebody sees is a
+ *  post about their own subject rather than an empty field. Same argument as
+ *  the field itself, one step earlier.
+ *
+ *  Only reached when the landing is being shown, which is what keeps a signed-in
+ *  visitor from being thrown out of their own app by a link in an email.
+ *
+ *  The query is wiped from the address bar the way /verify and /team/accept wipe
+ *  theirs: what sits in a URL gets shared, screenshotted and reloaded, and a
+ *  reload here would spend a second free try on the same topic.
+ */
+function startHeroFromLink() {
+  const params = new URLSearchParams(window.location.search);
+  const topic = (params.get('topic') || '').trim();
+  const url = (params.get('url') || '').trim();
+  if (!topic && !url) return;
+  try { history.replaceState(null, '', '/'); } catch {}
+
+  // The mode as well as the value: a field labelled "a topic" holding a URL
+  // sends it under the wrong name on the next run — the one the visitor starts
+  // themselves.
+  setHeroMode(url ? 'link' : 'topic');
+  document.getElementById('hero-input').value = url || topic;
+  runHeroPost();
+}
+
 function showLanding() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('forgot-screen').classList.add('hidden');
   document.getElementById('reset-screen').classList.add('hidden');
   document.getElementById('landing-screen').classList.remove('hidden');
+  startHeroFromLink();
 }
 function hideLanding() {
   document.getElementById('landing-screen').classList.add('hidden');

@@ -451,3 +451,82 @@ def _carried_preview() -> dict:
                              has_raw_image=False)],
         created_at=datetime(2026, 8, 9, tzinfo=timezone.utc),
     ).model_dump(mode="json")
+
+
+# ── deep links (UX phase 7.5) ───────────────────────────────────────────────
+#
+# A link that arrives already knowing what to write. Outreach sends one per
+# recipient, so the first thing somebody sees is a post about their own subject
+# rather than an empty field — which is the same argument as the field itself,
+# one step earlier.
+
+
+def test_a_topic_in_the_link_fills_the_field_and_runs(page, live_server):
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    page.goto(f"{live_server}/?topic=Sourdough+starters")
+
+    expect(page.locator("#hero-result")).to_be_visible()
+    assert calls == [{"topic": "Sourdough starters"}]
+    expect(page.locator("#hero-input")).to_have_value("Sourdough starters")
+
+
+def test_a_url_in_the_link_switches_the_tab_too(page, live_server):
+    """Otherwise the field says "a topic" while holding a URL, and the next run
+    — the one the visitor starts themselves — sends it under the wrong name."""
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    page.goto(f"{live_server}/?url=https%3A%2F%2Fcrumb.example")
+
+    expect(page.locator("#hero-result")).to_be_visible()
+    assert calls == [{"url": "https://crumb.example"}]
+    assert page.evaluate("S.heroMode") == "link"
+
+
+def test_the_query_is_cleaned_off_the_address_bar(page, live_server):
+    """Same reason /verify and /team/accept clean theirs: what is in the address
+    bar gets shared, screenshotted and reloaded. A reload here would spend a
+    second free try on the same topic."""
+    _serve(page, {"type": "complete", "post": _post()})
+    page.goto(f"{live_server}/?topic=Sourdough+starters")
+
+    expect(page.locator("#hero-result")).to_be_visible()
+    assert "topic=" not in page.url
+
+
+def test_a_deep_link_counts_as_one_of_the_free_tries(page, live_server):
+    """It is a real generation on our key. Not counting it would make the gate
+    a link away from meaning nothing."""
+    _serve(page, {"type": "complete", "post": _post()})
+    page.goto(f"{live_server}/?topic=Sourdough+starters")
+    expect(page.locator("#hero-result")).to_be_visible()
+
+    assert page.evaluate("localStorage.getItem('landing_tries')") == "1"
+
+
+def test_a_deep_link_past_the_gate_asks_for_an_account(page, live_server):
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+
+    page.goto(f"{live_server}/?topic=One+more+please")
+
+    expect(page.locator("#hero-gate")).to_be_visible()
+    assert len(calls) == FREE_TRIES
+
+
+def test_a_signed_in_visitor_spends_nothing_on_a_deep_link(page, live_server, signup):
+    """The deep link is for strangers. Somebody who already has an account gets
+    their app, and — the part worth asserting — no anonymous generation is fired
+    on our key behind their back.
+
+    Asserting only "the landing stays hidden" would pass for the wrong reason:
+    running the hero field does not show the landing, so that check is true
+    whether or not the link was acted on.
+    """
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    signup()
+
+    page.goto(f"{live_server}/?topic=Sourdough+starters")
+    page.wait_for_load_state("networkidle")
+
+    assert calls == []
+    expect(page.locator("#landing-screen")).to_be_hidden()
