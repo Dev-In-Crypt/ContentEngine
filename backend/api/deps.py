@@ -24,7 +24,7 @@ from services.user_settings import (  # noqa: F401
 from services.auth import decode_access_token_claims
 from services.openrouter import OpenRouterClient
 from services.caption_generator import CaptionGenerator
-from services.image_router import ImageRouter
+from services.image_router import ImageFetchError, ImageRouter
 from services import staging
 from services.brand_engine import PillowBrandEngine, BrandConfig
 from services.exporter import TemplateExporter
@@ -312,7 +312,7 @@ def get_demo_text_provider(settings: Annotated[Settings, Depends(get_settings)])
 
 def assemble_content_engine(text_provider, image_provider, stock: StockClient,
                             brand_engine: PillowBrandEngine,
-                            user: UserModel) -> ContentEngine:
+                            user: Optional[UserModel]) -> ContentEngine:
     """Put an engine together from parts that are already resolved.
 
     Separate from the dependency below because the free-generation path (UX
@@ -326,7 +326,14 @@ def assemble_content_engine(text_provider, image_provider, stock: StockClient,
     caption_gen = CaptionGenerator(text_provider)
     # Bound to THIS user: an upload id from another tenant must not resolve.
     # Their own photos stay theirs no matter whose key writes the caption.
+    #
+    # `user=None` is the landing (UX phase 7.1), where there is no account and
+    # therefore no staging area. Refusing by name beats passing None through to
+    # `staging.read`, which would build a path out of the string "None" and go
+    # looking for somebody else's directory.
     def read_upload(upload_id: str) -> bytes:
+        if user is None:
+            raise ImageFetchError("Uploads need an account.")
         return staging.read(str(user.id), upload_id)
 
     image_router = ImageRouter(image_provider=image_provider, stock_client=stock,
@@ -335,7 +342,7 @@ def assemble_content_engine(text_provider, image_provider, stock: StockClient,
     return ContentEngine(caption_gen, image_router, brand_engine, exporter)
 
 
-def build_content_engine(settings: Settings, user: UserModel, *,
+def build_content_engine(settings: Settings, user: Optional[UserModel], *,
                          actor: Optional[UserModel],
                          brand_engine: Optional[PillowBrandEngine] = None) -> ContentEngine:
     """An engine that generates on `settings`, choosing models as `actor` would.

@@ -371,10 +371,12 @@ async def generate_post(
     # image_source_for. The per-slide configs get the same treatment: the
     # composer sends them for re-generation, and one stock slide among ten would
     # fail the whole post just as surely as a stock default.
-    image_source = image_source_for(body.default_image_source, creds, settings)
+    image_source = image_source_for(body.default_image_source, settings,
+                                    on_our_key=creds.on_our_key)
     if slide_configs:
         for cfg in slide_configs:
-            cfg.image_source = image_source_for(cfg.image_source, creds, settings)
+            cfg.image_source = image_source_for(cfg.image_source, settings,
+                                                on_our_key=creds.on_our_key)
     # Long-form X posts only exist for Premium accounts; X itself would reject the
     # tweet, so refuse before spending a generation on it.
     if (body.platform == Platform.X and body.x_mode == XPostMode.LONG

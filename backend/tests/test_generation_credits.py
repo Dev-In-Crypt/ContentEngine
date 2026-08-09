@@ -375,7 +375,7 @@ def test_a_stock_request_we_cannot_serve_becomes_a_generated_picture(sm):
     uid = _user(sm)
     creds = _claim(sm, uid)
 
-    assert image_source_for(ImageSource.STOCK, creds, BASE) == ImageSource.AI_GEN
+    assert image_source_for(ImageSource.STOCK, BASE, on_our_key=creds.on_our_key) == ImageSource.AI_GEN
 
 
 def test_a_configured_stock_key_is_still_preferred(sm):
@@ -389,7 +389,7 @@ def test_a_configured_stock_key_is_still_preferred(sm):
                            default_image_model="our/cheap-image-model")
     creds = _claim(sm, uid, base=with_stock)
 
-    assert image_source_for(ImageSource.STOCK, creds, with_stock) == ImageSource.STOCK
+    assert image_source_for(ImageSource.STOCK, with_stock, on_our_key=creds.on_our_key) == ImageSource.STOCK
 
 
 def test_their_own_stock_choice_is_never_overridden(sm):
@@ -399,7 +399,7 @@ def test_their_own_stock_choice_is_never_overridden(sm):
     uid = _user(sm, text_provider="openrouter", text_model="their/model")
     creds = _claim(sm, uid, effective=OWN)
 
-    assert image_source_for(ImageSource.STOCK, creds, BASE) == ImageSource.STOCK
+    assert image_source_for(ImageSource.STOCK, BASE, on_our_key=creds.on_our_key) == ImageSource.STOCK
 
 
 def test_only_stock_is_ever_substituted(sm):
@@ -409,7 +409,7 @@ def test_only_stock_is_ever_substituted(sm):
     creds = _claim(sm, uid)
 
     for asked in (ImageSource.UPLOAD, ImageSource.AI_GEN, ImageSource.CANVA):
-        assert image_source_for(asked, creds, BASE) == asked
+        assert image_source_for(asked, BASE, on_our_key=creds.on_our_key) == asked
 
 
 def test_nothing_is_substituted_when_we_cannot_generate_either(sm):
@@ -423,4 +423,4 @@ def test_nothing_is_substituted_when_we_cannot_generate_either(sm):
                           default_image_provider="", default_image_model="")
     creds = _claim(sm, uid, base=no_images)
 
-    assert image_source_for(ImageSource.STOCK, creds, no_images) == ImageSource.STOCK
+    assert image_source_for(ImageSource.STOCK, no_images, on_our_key=creds.on_our_key) == ImageSource.STOCK

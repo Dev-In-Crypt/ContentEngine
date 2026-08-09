@@ -108,8 +108,8 @@ def free_allowance(user: UserModel, effective: Settings,
 _STOCK_KEY_FIELDS = ("unsplash_access_key", "pexels_api_key")
 
 
-def image_source_for(requested: ImageSource, creds: GenerationCreds,
-                     base: Settings) -> ImageSource:
+def image_source_for(requested: ImageSource, base: Settings, *,
+                     on_our_key: bool) -> ImageSource:
     """Which image source a generation on THESE credentials can actually serve.
 
     The one place in the product where we substitute something the user asked
@@ -130,8 +130,13 @@ def image_source_for(requested: ImageSource, creds: GenerationCreds,
     failure is theirs to see, and their choice is not ours to quietly rewrite.
     And not when we have no image model, because swapping one failure for
     another only costs the user the honest error message.
+
+    Takes `on_our_key` rather than the whole credentials object because the
+    landing (UX phase 7.1) has no account and therefore no credentials, and is
+    on our key by definition. Two callers, one rule — the alternative was a
+    second copy that drifts.
     """
-    if not creds.on_our_key or requested != ImageSource.STOCK:
+    if not on_our_key or requested != ImageSource.STOCK:
         return requested
     if any(getattr(base, field, "") for field in _STOCK_KEY_FIELDS):
         return requested
