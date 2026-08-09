@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 import json
 import logging
@@ -14,6 +15,7 @@ from collections.abc import AsyncGenerator, Sequence
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
+from PIL import Image
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -38,7 +40,7 @@ from models.database import (
     PostInsight as PostInsightModel, User as UserModel,
 )
 from models.schemas import (
-    CaptionUpdate, GenerateRequest, ImageSource, OverlayUpdateRequest, Platform,
+    CarriedDraft, CaptionUpdate, GenerateRequest, ImageSource, OverlayUpdateRequest, Platform,
     PostInsightSchema, PostPreview, PostStatus, PostSummary, PostVariant,
     RegenFieldRequest,
     RegenFieldResponse, ReelRequest, ReplaceSlideRequest, ScheduleRequest, SlidePreview,
@@ -298,6 +300,89 @@ def _require_text_provider(engine: ContentEngine, provider: Optional[str]) -> No
     if engine.caption_gen.text_provider is not None:
         return
     raise HTTPException(status_code=400, detail=no_key_detail(provider))
+
+
+def _decode_carried_image(data_url: Optional[str]) -> Optional[bytes]:
+    """Turn a browser's data URL into JPEG bytes we are willing to keep.
+
+    Re-encoded through Pillow rather than written as it arrived: these are bytes
+    from a client, and passing them straight to disk would make "an image" a
+    claim rather than a fact. The logo endpoint has done this since phase 1 for
+    the same reason.
+
+    Returns None when there is nothing to keep. A landing run whose picture
+    failed still has the words somebody read, and those are the part worth
+    carrying.
+    """
+    if not data_url:
+        return None
+    if not data_url.startswith("data:image/"):
+        raise HTTPException(status_code=422, detail="That doesn't look like a picture.")
+    try:
+        raw = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+    except (IndexError, ValueError):
+        raise HTTPException(status_code=422, detail="That picture could not be read.") from None
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            img = img.convert("RGB")
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=90)
+            return out.getvalue()
+    except Exception:
+        raise HTTPException(status_code=422,
+                            detail="That picture could not be read.") from None
+
+
+@router.post("/from-draft", response_model=PostPreview)
+@limiter.limit("10/minute;60/hour")
+async def post_from_draft(
+    request: Request,
+    body: CarriedDraft,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> PostPreview:
+    """Keep the post somebody watched being written on the landing.
+
+    No model is called and no allowance is spent. The generation already
+    happened — on our key, before they had an account — so charging a free post
+    to carry it across would bill the same person twice for one post, and
+    re-generating would hand them a different post than the one they signed up
+    for. This route only writes down what they already saw.
+    """
+    acct = await resolve_active_account(db, user)
+    image_bytes = _decode_carried_image(body.image_data_url)
+
+    post_id = str(uuid.uuid4())
+    post = PostModel(
+        id=post_id,
+        user_id=user.id,
+        managed_account_id=acct.id,
+        variant_group_id=post_id,          # a group of one, like any new post
+        topic=body.topic,
+        format=PostFormat.SINGLE.value,
+        status="preview",                  # it has never been anywhere
+        platform=Platform.INSTAGRAM.value,
+        caption=body.caption,
+        hook=body.hook,
+        cta=body.cta,
+        hashtags=body.hashtags,
+        template_style="branded_card",
+    )
+    db.add(post)
+    await db.flush()
+
+    if image_bytes is not None:
+        post_dir = UPLOADS_DIR / post_id
+        post_dir.mkdir(parents=True, exist_ok=True)
+        path = post_dir / "slide_1.jpg"
+        path.write_bytes(image_bytes)
+        db.add(SlideModel(post_id=post_id, slide_number=1,
+                          image_source=ImageSource.AI_GEN.value,
+                          image_path=str(path)))
+    await db.commit()
+
+    fresh = await owned_post(db, post_id, user, options=_preview_opts())
+    return _to_preview(fresh, await _group_variants(db, fresh))
 
 
 @router.post("/generate")

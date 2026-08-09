@@ -1989,6 +1989,7 @@ function renderHeroPost(post) {
   // to be asked about, and charging a try for our own failure spends a
   // stranger's patience on it.
   heroCountTry();
+  parkHeroDraft(post);
   heroStatus('');
   document.getElementById('hero-hook').textContent = post.hook || '';
   document.getElementById('hero-caption').textContent = post.caption || '';
@@ -2005,6 +2006,52 @@ function renderHeroPost(post) {
   }
   document.getElementById('hero-download').classList.toggle('hidden', !img.src);
   document.getElementById('hero-result').classList.remove('hidden');
+}
+
+//: Where the last landing post waits for an account. The server keeps nothing,
+//: so this is the only copy — and it has to survive the reload that signing up
+//: performs, which rules out anything held in memory.
+const HERO_DRAFT_KEY = 'landing_draft';
+
+function parkHeroDraft(post) {
+  try { localStorage.setItem(HERO_DRAFT_KEY, JSON.stringify(post)); } catch {}
+}
+
+/** Hand the parked post to the account that just appeared.
+ *
+ *  Removed from storage BEFORE the call, not after: a failure here must not
+ *  leave a draft that gets carried again on the next boot, which would quietly
+ *  make a second copy of the same post. If the handover fails, the topic still
+ *  reaches the composer — losing the picture is a bad day, losing the idea as
+ *  well is a worse one, and the topic is one line of text we already have. */
+async function carryHeroDraft() {
+  let draft = null;
+  try {
+    draft = JSON.parse(localStorage.getItem(HERO_DRAFT_KEY) || 'null');
+    localStorage.removeItem(HERO_DRAFT_KEY);
+  } catch { return; }
+  if (!draft || !draft.caption) return;
+
+  try {
+    const res = await apiFetch(`${API}/api/posts/from-draft`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: draft.topic, caption: draft.caption, hook: draft.hook || null,
+        cta: draft.cta || null, hashtags: draft.hashtags || [],
+        image_data_url: draft.image_data_url || null,
+      }),
+    });
+    if (!res.ok) throw new Error('carry failed');
+    const post = await res.json();
+    setSection('create');
+    bindPost(post);
+    showStep(4);
+    toast('Your post came with you.', 'success');
+  } catch {
+    const topic = document.getElementById('topic');
+    if (topic && draft.topic) topic.value = draft.topic;
+    toast("We couldn't bring the picture over — the idea is in the composer.", 'warn');
+  }
 }
 
 /** Save the picture. No request and no account: it is already in the browser. */
@@ -2649,6 +2696,9 @@ async function startApp() {
     await loadProfile();
     await loadXSettings();   // the composer gates "Long post" on this
     await loadPresets();     // saved composer settings, shown in step 2
+    // Before onboarding: somebody who arrived with a post in hand should see it,
+    // not a setup screen asking what they do.
+    await carryHeroDraft();
     maybeStartOnboarding();
   }
 }

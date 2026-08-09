@@ -342,3 +342,112 @@ def test_a_failed_run_is_not_counted_against_them(page, live_server):
 
     expect(page.locator("#hero-gate")).to_be_hidden()
     assert len(calls) == FREE_TRIES
+
+
+# ── the draft rides along (UX phase 7.4) ────────────────────────────────────
+#
+# The landing stores nothing on the server, so the post lives in the browser
+# until there is an account to give it to. What is asserted here is the handover:
+# parked on the way to sign-up, spent once afterwards, and never twice.
+
+DRAFT_KEY = "landing_draft"
+
+
+def test_the_last_post_is_parked_for_the_sign_up(page, live_server):
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+    expect(page.locator("#hero-result")).to_be_visible()
+
+    parked = page.evaluate(f"JSON.parse(localStorage.getItem('{DRAFT_KEY}') || 'null')")
+    assert parked and parked["caption"] == "A starter is flour, water and patience."
+
+
+def test_signing_up_carries_it_into_the_app(page, live_server, signup):
+    carried = []
+    page.route("**/api/posts/from-draft", lambda route, request: (
+        carried.append(json.loads(request.post_data or "{}")),
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(_carried_preview()))))
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+    expect(page.locator("#hero-result")).to_be_visible()
+
+    signup()
+
+    expect(page.locator("#step-4")).to_be_visible()
+    assert len(carried) == 1
+    assert carried[0]["caption"] == "A starter is flour, water and patience."
+
+
+def test_it_is_spent_once_and_not_again(page, live_server, signup):
+    """Parked in localStorage and removed before the call, so a reload after the
+    handover does not create a second copy of the same post."""
+    carried = []
+    page.route("**/api/posts/from-draft", lambda route, request: (
+        carried.append(1),
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(_carried_preview()))))
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+    expect(page.locator("#hero-result")).to_be_visible()
+
+    signup()
+    expect(page.locator("#step-4")).to_be_visible()
+    page.reload()
+    page.wait_for_load_state("networkidle")
+
+    assert len(carried) == 1
+    assert page.evaluate(f"localStorage.getItem('{DRAFT_KEY}')") is None
+
+
+def test_an_ordinary_sign_up_carries_nothing(page, signup):
+    """Nothing parked, nothing sent. Without this the handover could fire on
+    every registration and the tests above would still pass."""
+    carried = []
+    page.route("**/api/posts/from-draft", lambda route, request: (
+        carried.append(1),
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(_carried_preview()))))
+
+    signup()
+    page.wait_for_load_state("networkidle")
+
+    assert carried == []
+
+
+def test_a_refused_handover_still_leaves_the_topic_in_the_composer(page, live_server, signup):
+    """Losing the picture is a bad day; losing the idea as well is a worse one,
+    and the topic is one line of text we already have."""
+    page.route("**/api/posts/from-draft", lambda r: r.fulfill(
+        status=422, content_type="application/json",
+        body=json.dumps({"detail": "That picture could not be read."})))
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+    expect(page.locator("#hero-result")).to_be_visible()
+
+    signup()
+
+    expect(page.locator("#topic")).to_have_value("Sourdough starters")
+
+
+def _carried_preview() -> dict:
+    """What /from-draft answers with: an ordinary PostPreview."""
+    from datetime import datetime, timezone
+
+    from models.schemas import PostPreview, SlidePreview
+    return PostPreview(
+        id="carried-1", topic="Sourdough starters", format="single", status="preview",
+        caption="A starter is flour, water and patience.",
+        hashtags=["#sourdough"], seo_keywords=[], cta="Save this.",
+        hook="Your starter is not dead.", platform="instagram",
+        text_model_used="our/model", image_model_used="our/image-model",
+        slides=[SlidePreview(slide_number=1,
+                             image_url="/api/posts/carried-1/slides/1/image",
+                             image_source="ai_gen", width=1080, height=1350,
+                             has_raw_image=False)],
+        created_at=datetime(2026, 8, 9, tzinfo=timezone.utc),
+    ).model_dump(mode="json")

@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class PostFormat(str, Enum):
@@ -825,6 +825,26 @@ class MediaAssetDetail(MediaAssetSummary):
 class GenerateImageRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=2000)
     title: Optional[str] = Field(None, max_length=200)
+
+
+class CarriedDraft(BaseModel):
+    """A post the landing wrote, handed back by the browser after signing up.
+
+    Every field is client-supplied — the landing persists nothing, so there is
+    no id to look up and nothing on the server to compare against. The caps are
+    therefore the whole contract: a data URL is a POST body, and without a
+    ceiling "carry my draft" is an upload endpoint with no limit on it.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    topic: str = Field(..., min_length=3, max_length=300)
+    caption: str = Field(..., min_length=1, max_length=6000)
+    hook: Optional[str] = Field(None, max_length=500)
+    cta: Optional[str] = Field(None, max_length=500)
+    hashtags: list[str] = Field(default_factory=list, max_length=30)
+    #: About 6 MB of base64, which is a generous 4.5 MB picture. The landing's
+    #: own slides are a couple of hundred kilobytes.
+    image_data_url: Optional[str] = Field(None, max_length=8_000_000)
 
 
 class UseAssetRequest(BaseModel):
