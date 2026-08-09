@@ -47,7 +47,7 @@ from models.schemas import (
     PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
     PostFormat, VideoPublishJobStatus, XPostMode, XStyle,
 )
-from services import free_generation, media_store, staging
+from services import free_generation, media_store, milestones, staging
 from services.app_spend import flush_usage
 from services.generation_credits import (
     claim_generation_credentials, image_source_for, no_key_detail,
@@ -213,6 +213,11 @@ async def _persist(
         format=generated.format.value,
         status="preview",
         caption=generated.caption,
+        # What the AI proposed, kept beside what the post says now. The Business
+        # branch has done this since phase 4 for its audit journal; UX phase 8
+        # needs it for everybody, because "did this person rewrite our text" has
+        # no answer without something to compare against.
+        ai_caption=generated.caption,
         thread_parts=generated.thread_parts or None,
         hashtags=generated.hashtags,
         seo_keywords=generated.seo_keywords,
@@ -363,6 +368,9 @@ async def post_from_draft(
         status="preview",                  # it has never been anywhere
         platform=Platform.INSTAGRAM.value,
         caption=body.caption,
+        # Written by the AI on the landing, so it is the AI's proposal even
+        # though it arrived via the browser.
+        ai_caption=body.caption,
         hook=body.hook,
         cta=body.cta,
         hashtags=body.hashtags,
@@ -698,8 +706,39 @@ async def update_caption(
     if update.seo_keywords is not None:
         post.seo_keywords = update.seo_keywords
     await db.commit()
+    # The first time somebody rewrites what the AI wrote is when brand rules
+    # start to mean something: they have an opinion about the voice and have
+    # just expressed it. Recorded after the commit — the edit is the fact, and a
+    # milestone that failed to save must not take the edit down with it.
+    await _note_a_rewrite(db, user, post)
     post = await owned_post(db, post_id, user, options=_preview_opts())
     return _to_preview(post)
+
+
+def _same_words(a: Optional[str], b: Optional[str]) -> bool:
+    """Whitespace-insensitive comparison of two captions.
+
+    The composer autosaves, so a PUT arriving is not the same event as somebody
+    changing the words — and a trailing newline out of a textarea is not an
+    opinion about voice. Collapsing whitespace is the difference between a hint
+    that means something and one that fires on nobody's behalf.
+    """
+    return " ".join((a or "").split()) == " ".join((b or "").split())
+
+
+async def _note_a_rewrite(db: AsyncSession, user: UserModel, post: PostModel) -> None:
+    """Record the first real rewrite, and never let it break the save.
+
+    No snapshot means every post written before UX phase 8.1 — comparing against
+    nothing would read as "rewrote everything" the first time an old post was
+    touched at all.
+    """
+    if not post.ai_caption or _same_words(post.ai_caption, post.caption):
+        return
+    try:
+        await milestones.record(db, user, milestones.EDITED_AI_TEXT)
+    except Exception:
+        log.exception("Could not record the first-edit milestone for user=%s", user.id)
 
 
 @router.post("/{post_id}/export")
@@ -1598,6 +1637,7 @@ async def adapt_post(
         status="preview",          # it has never been anywhere
         platform=platform.value,
         caption=caption.caption,
+        ai_caption=caption.caption,      # see _persist: the same reason
         thread_parts=caption.thread_parts or None,
         hashtags=caption.hashtags,
         seo_keywords=caption.seo_keywords,

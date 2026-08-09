@@ -664,3 +664,14 @@ def test_losing_a_race_is_not_charged_to_the_loser(client, sm, penniless):
 
     assert r.json()["id"] == rival_id
     assert _used(sm, penniless["user_id"]) == 0
+
+
+def test_the_sibling_remembers_what_the_ai_wrote(client, sm, owner):
+    """A sibling is AI-written like any other post, so it carries the same
+    snapshot — otherwise the second network is the one place where rewriting
+    our text goes unnoticed (UX phase 8.1)."""
+    client.post(f"/api/posts/{owner['post_id']}/adapt/x", headers=owner["headers"])
+
+    sibling = [p for p in _group(sm, owner["post_id"]) if p.platform == "x"][0]
+    assert sibling.ai_caption == sibling.caption
+    assert sibling.ai_caption

@@ -266,3 +266,19 @@ def test_one_account_cannot_carry_into_another(client, sm):
     post_id = _carry(client, second).json()["id"]
 
     assert client.get(f"/api/posts/{post_id}", headers=first).status_code == 404
+
+
+def test_the_carried_post_remembers_the_ai_wrote_it(client, sm):
+    """It was written by the AI on the landing — arriving through the browser
+    does not make it the person's own words. Without the snapshot, their first
+    rewrite of it would go unnoticed (UX phase 8.1)."""
+    headers = _register(client)
+    post_id = _carry(client, headers).json()["id"]
+
+    async def _go():
+        async with sm() as db:
+            post = await db.get(Post, post_id)
+            return post.ai_caption, post.caption
+    ai, caption = asyncio.run(_go())
+
+    assert ai == caption == "A starter is flour, water and patience."
