@@ -118,6 +118,25 @@ def test_export_carries_the_account_and_its_posts(sm, two):
     assert data["posts"][0]["slides"][0]["slide_number"] == 1
 
 
+def test_export_carries_what_the_product_showed_them(sm, two):
+    """`_row` reflects the user's columns, so `milestones` rides along with no
+    code change — and that is exactly why it needs saying out loud. A record of
+    which features somebody was shown, and when, is personal data; the day the
+    export starts naming columns instead of reflecting them, this fails."""
+    from services import milestones as ms
+    from models.database import User
+
+    user = two["mine"]["user"]
+
+    async def _reach():
+        async with sm() as db:
+            await ms.record(db, await db.get(User, user.id), ms.EDITED_AI_TEXT)
+    asyncio.run(_reach())
+
+    data = _collect(sm, user)
+    assert ms.EDITED_AI_TEXT in (data["account"].get("milestones") or {})
+
+
 def test_export_never_contains_another_tenants_row(sm, two):
     data = _collect(sm, two["mine"]["user"])
     blob = json.dumps(data)

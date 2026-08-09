@@ -20,7 +20,7 @@ from models.schemas import (
     PresetsResponse, PresetsUpdate, ProfileResponse, ProfileUpdate, PublishTestRequest,
     PublishTestResponse, SlideStyleResponse, SlideStyleUpdate, XSettingsResponse, XSettingsUpdate,
 )
-from services import logo_store, music_store
+from services import logo_store, milestones, music_store
 from services.ai.catalog import IMAGE, PROVIDERS, TEXT, is_valid_provider
 from services.brand_engine import BrandConfig
 from services.connection_health import days_left, estimate_expiry
@@ -582,3 +582,53 @@ async def refresh_instagram_token(
     await db.commit()
     return PublishTestResponse(
         ok=True, message=f"Token renewed — valid until {expires_at:%Y-%m-%d}.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# What the product has already shown this person (UX phase 8)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/milestones")
+async def get_milestones(
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> dict:
+    """Everything this account has reached, as {name: when}.
+
+    Read once at boot and consulted by every screen that appears at a moment
+    rather than on day one. Not merged into /api/settings/ai or /api/usage: those
+    two are polled on timers, and a flag that decides whether a tab EXISTS should
+    not arrive on the same schedule as a cost figure.
+    """
+    return {"milestones": milestones.all_for(user)}
+
+
+@router.post("/milestones/{name}")
+async def reach_milestone(
+    name: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> dict:
+    """Record a milestone the browser is the only witness to — a hint shown, a
+    hint waved away. Unknown names are refused rather than stored: a typo that
+    silently writes a flag nothing reads is a feature that never appears again
+    and a test that never fails."""
+    try:
+        await milestones.record(db, user, name)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Unknown milestone: {name}") from None
+    return {"milestones": milestones.all_for(user)}
+
+
+@router.post("/milestones-all")
+async def reach_every_milestone(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> dict:
+    """The escape hatch behind "Show all features".
+
+    Somebody who saw a feature on a colleague's screen has to be able to reach
+    it in the product rather than in a support conversation — that is the price
+    of hiding anything at all, and this is it paid up front.
+    """
+    await milestones.record_all(db, user)
+    return {"milestones": milestones.all_for(user)}

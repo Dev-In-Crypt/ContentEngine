@@ -75,6 +75,12 @@ class User(Base):
     #: phase 6 bills against. Only services/free_generation.py may move it.
     free_generations_used = Column(Integer, nullable=False, default=0,
                                    server_default="0")
+    #: What the product has already shown this person: {milestone: when}.
+    #: Only what cannot be reconstructed from the data — a hint displayed, a
+    #: hint dismissed, an edit nobody else kept a record of. Counts stay counts
+    #: (UX phase 8). NULL is every row that predates the column and reads as
+    #: "nothing shown yet"; only services/milestones.py writes here.
+    milestones = Column(JSON)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     credentials = relationship("UserCredentials", back_populates="user",

@@ -71,6 +71,9 @@ def test_migrations_build_full_schema_on_fresh_db(tmp_path):
     assert {"variant_group_id", "tone"} <= post_cols
     # UX phase 5: posts written on OUR key rather than the account's own.
     assert "free_generations_used" in cols
+    # UX phase 8: what the product has already shown this person. Nullable —
+    # NULL is every row that predates it and reads as "nothing shown yet".
+    assert "milestones" in cols
     # UX phase 6.1: the daily ceiling asks "what has user_id IS NULL cost since
     # midnight" before every free generation, and llm_usage grows a row per model
     # call for every tenant forever.
