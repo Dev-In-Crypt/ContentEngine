@@ -195,7 +195,23 @@
 
     <p id="hero-status" class="hidden mt-4 text-sm" style="color:var(--muted)"></p>
 
-    <div id="hero-result" class="hidden mt-6 text-left ce-card p-5 sm:flex sm:gap-5">
+    <!-- The wall, once the free tries are gone. Deliberately below the result:
+         nothing is taken away when it appears, and Download keeps working. -->
+    <div id="hero-gate" class="hidden mt-6 ce-card p-5 text-center">
+      <div class="font-semibold">That's your two free posts.</div>
+      <p class="mt-2 text-sm text-gray-400">
+        An account is free and comes with 5 more — still no API key needed.
+      </p>
+      <button id="hero-gate-signup" onclick="showAuthScreen('register')"
+              class="ce-btn px-6 py-2.5 text-sm mt-4">Create a free account →</button>
+    </div>
+
+    <!-- `hidden` stays alone on this element. Paired with a responsive display
+         utility it loses: Tailwind emits sm:* after the base utilities, equal
+         specificity, so at >=640px `sm:flex` overrode `display:none` and the
+         empty card sat on the landing from first paint. The row lives inside. -->
+    <div id="hero-result" class="hidden mt-6 text-left ce-card p-5">
+      <div class="sm:flex sm:gap-5">
       <img id="hero-image" alt="Generated post" class="hidden w-full sm:w-56 rounded-xl object-cover" />
       <div class="mt-4 sm:mt-0 flex-1">
         <div id="hero-hook" class="font-semibold"></div>
@@ -205,6 +221,7 @@
           <button id="hero-download" onclick="downloadHeroImage()" class="ce-btn-ghost px-4 py-2 text-sm">Download the picture</button>
           <button onclick="resetHero()" class="ce-btn-ghost px-4 py-2 text-sm">Try another</button>
         </div>
+      </div>
       </div>
     </div>
   </section>
@@ -1839,6 +1856,30 @@ S.heroMode = 'topic';
 S.heroPost = null;
 S.heroRunning = false;
 
+//: How many posts a visitor gets before being asked to make an account. Two:
+//: the first shows the product, the second shows the first was not a fluke.
+//:
+//: The count lives in localStorage, which makes it a polite request rather than
+//: a defence — clearing it takes two clicks. That is fine, and saying so is
+//: better than pretending otherwise: what actually bounds our spending is the
+//: per-IP limit and the daily ceiling, both on the server. This exists to pick
+//: the MOMENT to ask, which is after somebody has seen it work twice.
+const HERO_FREE_TRIES = 2;
+const HERO_TRIES_KEY = 'landing_tries';
+
+function heroTriesUsed() {
+  try { return parseInt(localStorage.getItem(HERO_TRIES_KEY) || '0', 10) || 0; }
+  catch { return 0; }
+}
+
+function heroCountTry() {
+  try { localStorage.setItem(HERO_TRIES_KEY, String(heroTriesUsed() + 1)); } catch {}
+}
+
+function showHeroGate() {
+  document.getElementById('hero-gate').classList.remove('hidden');
+}
+
 const HERO_PLACEHOLDER = {
   topic: 'Sourdough starters for beginners',
   link: 'https://your-site.com',
@@ -1886,6 +1927,13 @@ function runHeroExample(btn) {
  *  a refusal it could have read locally is a poor first impression. */
 async function runHeroPost() {
   if (S.heroRunning) return;          // every run costs a model call and a picture
+  if (heroTriesUsed() >= HERO_FREE_TRIES) {
+    // Nothing is spent and nothing is taken away: the last post stays on
+    // screen, Download keeps working, and the gate says what is on the other
+    // side rather than only saying no.
+    showHeroGate();
+    return;
+  }
   const value = (document.getElementById('hero-input').value || '').trim();
   if (S.heroMode === 'topic' && value.length < 3) {
     return heroStatus('Give it a little more to go on — a few words.');
@@ -1937,6 +1985,10 @@ async function runHeroPost() {
 function renderHeroPost(post) {
   S.heroPost = post || null;
   if (!post) return;
+  // Counted here rather than at the start of the run: an error produced nothing
+  // to be asked about, and charging a try for our own failure spends a
+  // stranger's patience on it.
+  heroCountTry();
   heroStatus('');
   document.getElementById('hero-hook').textContent = post.hook || '';
   document.getElementById('hero-caption').textContent = post.caption || '';

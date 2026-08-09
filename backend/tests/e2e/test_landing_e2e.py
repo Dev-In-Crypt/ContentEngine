@@ -75,6 +75,22 @@ def test_the_field_is_on_the_first_screen_for_everybody(page, live_server):
     expect(page.locator("#ltab-business")).to_be_visible()
 
 
+def test_an_empty_result_card_is_not_sitting_there_waiting(page, live_server):
+    """Found by a mutation that should have failed and did not.
+
+    `hidden` on the same element as a responsive display utility loses: Tailwind
+    emits sm:* after the base utilities at equal specificity, so `hidden sm:flex`
+    is `display:flex` on any screen at or above 640px — and the empty result card
+    was on the landing from first paint, above the fold, on every desktop.
+
+    Nothing asserted the card starts hidden, so nothing noticed.
+    """
+    _land(page, live_server)
+
+    expect(page.locator("#hero-result")).to_be_hidden()
+    expect(page.locator("#hero-gate")).to_be_hidden()
+
+
 def test_nothing_here_asks_who_you_are(page, live_server):
     """The whole argument of the phase, asserted where it can regress: no login
     wall, no sign-up gate, no account of any kind before the first result."""
@@ -203,3 +219,126 @@ def test_a_second_run_started_mid_flight_does_not_ask_twice(page, live_server):
 
     expect(page.locator("#hero-result")).to_be_visible()
     assert len(calls) == 1
+
+
+# ── the soft gate (UX phase 7.3) ────────────────────────────────────────────
+#
+# Two runs, then an account. The counter lives in localStorage and is a polite
+# request rather than a defence — clearing it takes two clicks, which is why the
+# real limits are per-IP and the daily ceiling, both server-side. What this
+# buys is the moment: somebody who has seen it work twice is being asked at the
+# only point where the answer is obviously worth it.
+
+FREE_TRIES = 2
+
+
+def _run_twice(page):
+    for _ in range(FREE_TRIES):
+        _run(page)
+        expect(page.locator("#hero-result")).to_be_visible()
+        page.locator("#hero-input").fill("")
+
+
+def test_the_first_two_runs_are_free(page, live_server):
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+
+    assert len(calls) == FREE_TRIES
+
+
+def test_the_third_try_asks_for_an_account(page, live_server):
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+
+    _run(page)
+
+    expect(page.locator("#hero-gate")).to_be_visible()
+    expect(page.locator("#hero-gate")).to_contain_text("free posts")
+    assert len(calls) == FREE_TRIES          # the refusal costs us nothing
+
+
+def test_the_gate_says_what_is_waiting_on_the_other_side(page, live_server):
+    """A wall that only says "no" reads as the end. The five free posts an
+    account comes with (UX phase 6) are the reason the answer is worth giving."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+    _run(page)
+
+    expect(page.locator("#hero-gate")).to_contain_text("5")
+
+
+def test_the_gate_leads_to_sign_up(page, live_server):
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+    _run(page)
+
+    page.locator("#hero-gate-signup").click()
+    expect(page.locator("#auth-screen")).to_be_visible()
+
+
+def test_downloading_never_asks_who_you_are(page, live_server):
+    """Even at the gate. What they made is theirs — holding it hostage is a
+    different product than the one this landing is arguing for."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+    _run(page)
+
+    expect(page.locator("#hero-gate")).to_be_visible()
+    expect(page.locator("#hero-download")).to_be_visible()
+    expect(page.locator("#hero-download")).to_be_enabled()
+
+
+def test_the_last_post_stays_on_screen_behind_the_gate(page, live_server):
+    """Nothing is taken away when the wall arrives: the second post is still
+    there to read, copy and save."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+    _run(page)
+
+    # Wait for the gate FIRST. Both assertions below are already true the
+    # instant the click is sent, and Playwright's expect passes on its first
+    # poll — so without something to wait for they race the very change they
+    # are meant to observe and report success before it happens.
+    expect(page.locator("#hero-gate")).to_be_visible()
+
+    # And visibility as well as the text: to_contain_text reads textContent and
+    # passes on a hidden element, so the words alone would not notice the gate
+    # sweeping the post off the screen on its way in.
+    expect(page.locator("#hero-result")).to_be_visible()
+    expect(page.locator("#hero-result")).to_contain_text("flour, water and patience")
+
+
+def test_a_returning_visitor_is_still_out_of_tries(page, live_server):
+    """localStorage, not a page variable — otherwise the wall is a reload away
+    from being no wall at all."""
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run_twice(page)
+
+    page.reload()
+    _run(page)
+
+    expect(page.locator("#hero-gate")).to_be_visible()
+    assert len(calls) == FREE_TRIES
+
+
+def test_a_failed_run_is_not_counted_against_them(page, live_server):
+    """It produced nothing. Charging a try for our own error would spend a
+    stranger's patience on our failure."""
+    calls = _serve(page, {"type": "error", "message": "Something went wrong."})
+    _land(page, live_server)
+    _run(page)
+    expect(page.locator("#hero-status")).to_contain_text("went wrong")
+
+    page.unroute("**/api/demo/post")
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    _run_twice(page)
+
+    expect(page.locator("#hero-gate")).to_be_hidden()
+    assert len(calls) == FREE_TRIES
