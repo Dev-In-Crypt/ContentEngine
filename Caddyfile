@@ -6,4 +6,34 @@
 	request_body {
 		max_size 30MB
 	}
+
+	# Response headers the app was serving none of. Each one closes something
+	# specific, and the list stops where it would start breaking the page.
+	header {
+		# A session token lives in localStorage, so a first visit over plain
+		# http is the window worth closing. Caddy already redirects; this makes
+		# the browser refuse to try. One year, no preload — preload is a
+		# one-way door and this host is still a temporary sslip.io name.
+		Strict-Transport-Security "max-age=31536000"
+		# Generated slides, uploaded logos and reels are served as bytes from
+		# this same origin. Without nosniff a file that squeaks past the
+		# allow-list can be re-interpreted as HTML and run here.
+		X-Content-Type-Options "nosniff"
+		# Nothing in this product is meant to be embedded, and Publish and
+		# Delete are one click each — exactly what a transparent overlay is for.
+		X-Frame-Options "DENY"
+		# Post URLs carry ids; referrers leak them to every outbound link,
+		# including the ones a caption points at.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The app asks for none of these. Saying so stops an embedded third
+		# party from asking on its behalf.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Server: uvicorn tells a scanner what to try first.
+		-Server
+	}
+	# NO Content-Security-Policy here yet, and that is deliberate rather than
+	# forgotten: index.html is one file of inline scripts and inline handlers,
+	# so any policy worth having ('unsafe-inline' is not) means moving that code
+	# out or hashing every block. Shipping a permissive CSP would look like
+	# protection while providing none.
 }

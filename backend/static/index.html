@@ -2011,7 +2011,17 @@ async function runHeroPost() {
       body: JSON.stringify(S.heroMode === 'link' ? { url: value } : { topic: value }),
     });
     if (res.status === 429) return heroStatus("That's a few in a row — give it an hour, or sign up to keep going.");
-    if (res.status === 503) return heroStatus('The free demo is resting until tomorrow. Sign up to keep going.');
+    // Relay the server's reason. There are two 503s behind this and they mean
+    // opposite things — "today's budget is spent" and "nobody configured a key
+    // here" — and printing the first for both told every visitor on an
+    // unconfigured deployment to come back tomorrow, where tomorrow says the
+    // same thing. The 429 above is left worded here on purpose: slowapi's own
+    // text is a bare limit string, and the limit really does lift with time.
+    if (res.status === 503) {
+      let detail = '';
+      try { detail = ((await res.json()) || {}).detail || ''; } catch(e) {}
+      return heroStatus(detail || 'The free demo is not available right now.');
+    }
     if (!res.ok) return heroStatus('Something went wrong. Please try again.');
 
     const reader = res.body.getReader();

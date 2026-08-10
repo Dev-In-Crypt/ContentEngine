@@ -40,6 +40,12 @@ def _post(**over) -> dict:
     return body
 
 
+def _demo_503(page, detail):
+    page.route("**/api/demo/post", lambda r: r.fulfill(
+        status=503, content_type="application/json",
+        body=json.dumps({"detail": detail})))
+
+
 def _serve(page, *frames, status=200):
     """Answer the landing's generate call with a canned stream."""
     calls = []
@@ -194,9 +200,15 @@ def test_an_error_frame_is_shown_and_the_button_comes_back(page, live_server):
 
 
 def test_a_paused_demo_says_so_rather_than_failing_silently(page, live_server):
-    """503 is the daily ceiling — our problem, not theirs, and the sentence
-    should read that way."""
-    _serve(page, status=503)
+    """503 for a spent budget is our problem, not theirs, and the sentence
+    should read that way.
+
+    It used to stub a 503 with no body and still assert this wording, which
+    passed only because the hero invented the sentence for every 503 — including
+    the one that means "no key was ever configured here". The reason now comes
+    from the server, so the test has to serve one.
+    """
+    _demo_503(page, "The free demo is resting until tomorrow. Sign up to keep going.")
     _land(page, live_server)
     _run(page)
 
@@ -530,3 +542,47 @@ def test_a_signed_in_visitor_spends_nothing_on_a_deep_link(page, live_server, si
 
     assert calls == []
     expect(page.locator("#landing-screen")).to_be_hidden()
+
+
+# ── the refusal has to be the server's, not the client's guess ──────────────
+#
+# `POST /api/demo/post` has two 503s and they mean opposite things: "nobody has
+# configured a key here" and "today's budget is spent". The hero printed the
+# second one for both, so a deployment with no key told every visitor to come
+# back tomorrow — forever. Found in production, where it was the first sentence
+# the product said to anybody.
+
+def test_a_spent_budget_says_come_back_tomorrow(page, live_server):
+    _demo_503(page, "The free demo is resting until tomorrow. Sign up to keep going.")
+    page.goto(live_server)
+
+    page.locator("#hero-input").fill("Sourdough starters")
+    page.locator("#hero-run").click()
+
+    expect(page.locator("#hero-status")).to_contain_text("tomorrow")
+
+
+def test_an_unconfigured_deployment_does_not_promise_tomorrow(page, live_server):
+    """Tomorrow it says exactly the same thing. A wait that never ends is worse
+    than an honest "not right now" — the visitor plans a return that is pointless."""
+    _demo_503(page, "Demo is temporarily unavailable.")
+    page.goto(live_server)
+
+    page.locator("#hero-input").fill("Sourdough starters")
+    page.locator("#hero-run").click()
+
+    expect(page.locator("#hero-status")).to_be_visible()
+    expect(page.locator("#hero-status")).not_to_contain_text("tomorrow")
+
+
+def test_a_refusal_with_no_reason_still_says_something(page, live_server):
+    """A 503 from in front of the app — a proxy, a restart — carries no JSON at
+    all. Silence would leave the button looking broken."""
+    page.route("**/api/demo/post", lambda r: r.fulfill(status=503, body="upstream"))
+    page.goto(live_server)
+
+    page.locator("#hero-input").fill("Sourdough starters")
+    page.locator("#hero-run").click()
+
+    expect(page.locator("#hero-status")).to_be_visible()
+    expect(page.locator("#hero-status")).not_to_have_text("")
