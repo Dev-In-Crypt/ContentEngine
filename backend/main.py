@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy import create_engine, inspect, select, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from starlette.datastructures import MutableHeaders
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -238,6 +239,105 @@ def _docs_urls(app_mode: str) -> dict:
     return {}
 
 
+#: The Content-Security-Policy, as directives rather than as a string, so the
+#: header and the tests read the same source.
+#:
+#: Every fetch directive is this origin because the app genuinely has no other:
+#: Tailwind and the four Barlow weights are vendored under /static/vendor, the
+#: favicon is a data: URI, and `const API = window.location.origin`. That makes
+#: the usual allow-list argument disappear entirely.
+#:
+#: `script-src` is deliberately still permissive. index.html carries ~196 inline
+#: event handlers, and removing `'unsafe-inline'` before they are gone would
+#: silently disable every button in the product. It tightens in a later phase,
+#: once a static test proves there are none left; what ships here is the other
+#: half of CSP, and that half is complete.
+#:
+#: `style-src 'unsafe-inline'` is permanent, not pending. Tailwind Play computes
+#: its stylesheet at runtime from the classes present in the DOM and injects it
+#: through a <style> element, so that text cannot be hashed. Removing it means
+#: precompiling Tailwind, i.e. adopting the build step this project has
+#: deliberately declined. Never add a nonce or a hash here: doing so makes the
+#: spec ignore 'unsafe-inline' for this directive, which blocks Tailwind's own
+#: injection and every style= attribute at once.
+CSP_DIRECTIVES: dict[str, str] = {
+    "default-src": "'self'",
+    "base-uri": "'none'",
+    "object-src": "'none'",
+    "frame-src": "'none'",
+    "frame-ancestors": "'none'",
+    "form-action": "'none'",
+    "worker-src": "'none'",
+    "manifest-src": "'none'",
+    "img-src": "'self' data: blob:",
+    "media-src": "'self' blob:",
+    "font-src": "'self'",
+    # data: is here for one call — a fetch() of a FileReader data URL during
+    # logo upload. It goes away with that call, and this relaxation with it.
+    "connect-src": "'self' data:",
+    "style-src": "'self' 'unsafe-inline'",
+    "script-src": "'self' 'unsafe-inline'",
+}
+
+#: Files served with `Cache-Control: no-cache` — revalidate, not "do not store".
+#: StaticFiles sends an ETag and no freshness, so a browser falls back to
+#: heuristic caching and can keep serving a stale bundle for days after a deploy
+#: while the HTML that needs it is fresh.
+REVALIDATE_PATHS = frozenset({"/static/app.js", "/static/theme.js"})
+
+_DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+
+
+def security_policy() -> str:
+    return "; ".join(f"{name} {value}" for name, value in CSP_DIRECTIVES.items())
+
+
+def docs_exempt_paths(app_mode: str) -> frozenset[str]:
+    """Where the policy must NOT go: Swagger, when Swagger exists.
+
+    It is served only off cloud (_docs_urls above) and it loads its bundle from
+    a CDN with an inline bootstrap — a strict policy over it breaks the API docs
+    on every developer machine and in the desktop build, somewhere CI never
+    looks. In cloud those three paths are unregistered and fall through to the
+    SPA, so exempting them there would hand out the app shell with no policy.
+    """
+    return frozenset() if app_mode == "cloud" else _DOCS_PATHS
+
+
+class SecurityHeadersMiddleware:
+    """Attach the policy to every response.
+
+    Pure ASGI on purpose. `BaseHTTPMiddleware` wraps the response in a task
+    group, and this app streams `text/event-stream` from generation and the
+    landing demo — a place where that wrapper has a long history of interfering
+    with cancellation and response lifetime. Mutating the headers on the
+    `http.response.start` message touches nothing else.
+    """
+
+    def __init__(self, app, *, policy: str, exempt: frozenset[str],
+                 revalidate: frozenset[str]):
+        self.app = app
+        self.policy = policy
+        self.exempt = exempt
+        self.revalidate = revalidate
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                if path not in self.exempt:
+                    headers["content-security-policy"] = self.policy
+                if path in self.revalidate:
+                    headers["cache-control"] = "no-cache"
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
 app = FastAPI(
     title="Instagram Content Engine",
     description="AI-powered Instagram post generation and publishing system",
@@ -249,6 +349,17 @@ app = FastAPI(
 # Rate limiting (per-IP). 429 on exceed via slowapi's handler.
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security headers. Set by the application rather than by the reverse proxy:
+# render.yaml runs the Dockerfile behind Render's own TLS and the desktop build
+# is a bare uvicorn, so a policy in the Caddyfile would cover one deployment of
+# three. It is also the only way the browser tests see real enforcement.
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    policy=security_policy(),
+    exempt=docs_exempt_paths(settings.app_mode),
+    revalidate=REVALIDATE_PATHS,
+)
 
 app.add_middleware(
     CORSMiddleware,

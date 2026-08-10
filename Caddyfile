@@ -31,9 +31,18 @@
 		# Server: uvicorn tells a scanner what to try first.
 		-Server
 	}
-	# NO Content-Security-Policy here yet, and that is deliberate rather than
-	# forgotten: index.html is one file of inline scripts and inline handlers,
-	# so any policy worth having ('unsafe-inline' is not) means moving that code
-	# out or hashing every block. Shipping a permissive CSP would look like
-	# protection while providing none.
+	# The Content-Security-Policy is NOT here, on purpose. The application sets
+	# it (backend/main.py, SecurityHeadersMiddleware) for two reasons:
+	#
+	#   render.yaml runs the Dockerfile behind Render's own TLS and the desktop
+	#   build is a bare uvicorn, so Caddy is in front of one deployment out of
+	#   three. A policy here would leave the other two with none.
+	#
+	#   And a header set here is invisible to the browser test suite, which runs
+	#   against uvicorn directly. Set by the app, the policy is under test.
+	#
+	# Do not add one here as well. Two Content-Security-Policy headers are
+	# INTERSECTED, so a well-meant addition silently tightens the effective
+	# policy in ways nothing tests — the failure mode being a blank screen for
+	# whichever resource the second header forgot.
 }
