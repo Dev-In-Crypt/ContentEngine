@@ -42,8 +42,25 @@ services:
       REQUIRE_VERIFIED_EMAIL: ${REQUIRE_VERIFIED_EMAIL:-false}
       SENTRY_DSN: ${SENTRY_DSN:-}
       DATABASE_URL: postgresql+asyncpg://insta:${DB_PASSWORD}@db:5432/insta
-      DEFAULT_TEXT_MODEL: anthropic/claude-sonnet-4
-      DEFAULT_IMAGE_MODEL: google/gemini-2.5-flash-image-preview
+      # The PLATFORM's own OpenRouter key — not a tenant's. Everyone brings their
+      # own key for their own work; this one pays for the three things the product
+      # gives away before anybody has a key: the onboarding post, the five free
+      # generations, and the landing page that writes a post for a visitor.
+      # Leave it empty and all three answer 503 instead of failing mid-run, which
+      # is what this deployment has been doing since those phases shipped.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # The ceiling on that giveaway, in dollars per day, counted across every
+      # anonymous and free generation. Worst case is roughly $1.5 per registered
+      # account (5 generations x up to 10 AI images), so $10 is about seven such
+      # accounts a day. Not transactional: concurrent requests can overshoot by
+      # one generation each.
+      APP_DAILY_SPEND_USD: ${APP_DAILY_SPEND_USD:-10}
+      # Overridable, because on the platform key these are the models WE pay for.
+      # The defaults below are what this deployment has always run; config.py's
+      # own defaults are newer, and moving to them is a spending decision rather
+      # than an upgrade, so it is made here rather than inherited silently.
+      DEFAULT_TEXT_MODEL: ${DEFAULT_TEXT_MODEL:-anthropic/claude-sonnet-4}
+      DEFAULT_IMAGE_MODEL: ${DEFAULT_IMAGE_MODEL:-google/gemini-2.5-flash-image-preview}
       PORT: "8000"
     volumes:
       - uploads:/app/uploads      # generated slides / raw images / reel mp4s
