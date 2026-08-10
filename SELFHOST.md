@@ -81,12 +81,38 @@ docker compose cp backup:/backups ./db-backups
 gunzip -c ./db-backups/insta_YYYYMMDD_HHMMSS.sql.gz | docker compose exec -T db psql -U insta insta
 ```
 
-The dumps live in a Docker volume on the same VPS, so also pull them **off the box**
-periodically (a machine failure loses the volume too):
+The dumps live in a Docker volume **on the same disk as the database they protect**.
+That covers a bad migration or a dropped table; it does not cover a dead machine.
+Pull them off the box:
 
 ```bash
-docker compose cp backup:/backups ./db-backups   # then scp/rclone ./db-backups elsewhere
+pwsh scripts/pull-prod-backup.ps1              # Windows: copies the newest pair here
+pwsh scripts/pull-prod-backup.ps1 -KeepDays 90 # keep a longer history than the server does
 ```
+
+The script takes the newest **pair** — the database dump and the uploads archive
+written by the same run — because picking the newest of each independently can
+straddle two runs and pair a database with media from a different moment. It
+verifies both after the copy by decompressing them: gzip carries a CRC, so a
+transfer that stopped halfway fails there rather than the night it is needed.
+
+Nothing on the server is deleted. Local copies older than `-KeepDays` (30 by
+default) are pruned, which is the point of a second copy: the server keeps 7 days,
+this one keeps as many as you ask for.
+
+**Verify the restore, not just the file.** A dump nobody has ever restored is a
+belief, not a backup. Into a scratch database, so the live one is never at risk:
+
+```bash
+gunzip -c /var/lib/docker/volumes/instacontentengine_backups/_data/insta_YYYYMMDD_HHMMSS.sql.gz \
+  | docker compose exec -T db psql -U insta -d restoretest -v ON_ERROR_STOP=1 -q
+# ...compare row counts against the live database, then:
+docker compose exec -T db psql -U insta -d postgres -c "DROP DATABASE restoretest;"
+```
+
+(Create it first with `CREATE DATABASE restoretest;`. Never restore a dump into
+`insta` to "test" it — the dumps are taken with `--clean --if-exists`, so they
+drop what they find.)
 
 **Uploads** (generated slides, raw images, reels) live in the `uploads` volume.
 A daily in-app job removes files for deleted posts automatically; back the rest up with:

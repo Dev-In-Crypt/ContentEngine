@@ -41,6 +41,12 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-Content Engine <onboarding@resend.dev>}
       REQUIRE_VERIFIED_EMAIL: ${REQUIRE_VERIFIED_EMAIL:-false}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # Which build an error came from — the question that decides whether to roll
+      # back. Nothing sets it automatically, so deploy with it in front of the
+      # command:  APP_RELEASE=$(git rev-parse --short HEAD) docker compose up -d app
+      # Unset is fine: monitoring then reports the build as unstamped rather than
+      # attaching a stale commit that never shipped.
+      APP_RELEASE: ${APP_RELEASE:-}
       DATABASE_URL: postgresql+asyncpg://insta:${DB_PASSWORD}@db:5432/insta
       # The PLATFORM's own OpenRouter key — not a tenant's. Everyone brings their
       # own key for their own work; this one pays for the three things the product

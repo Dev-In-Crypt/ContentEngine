@@ -1,8 +1,10 @@
 import asyncio
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from alembic import command
 from alembic.config import Config
@@ -16,7 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from config import get_settings
+from config import Settings, get_settings
 from models.database import BrandConfig as BrandConfigModel, User as UserModel
 from models.schemas import NICHE_BOX_PALETTE
 from services.http_utils import setup_logging, setup_tls
@@ -135,15 +137,48 @@ async def _seed_local_user(sessionmaker) -> None:
         await ensure_primary_profile(session, user)
 
 
+def sentry_options(settings: Settings) -> Optional[dict]:
+    """What error monitoring is told, or None when it stays off.
+
+    Split out of the lifespan so it can be asserted: everything here is either
+    invisible until the day something breaks, or a decision about what leaves
+    this machine, and neither survives being checked by reading the line.
+
+    `environment` and `release` are what make an error answerable — which
+    deployment, and which build. A missing release is left absent rather than
+    guessed: sending a stale one points whoever is on call at a diff that never
+    shipped, which is worse than sending nothing.
+
+    `send_default_pii=False` is the SDK default, and is stated anyway. This app
+    holds unpublished captions, brand profiles and encrypted third-party keys;
+    "the vendor's default happens to be safe today" is not the same promise as
+    "we decided this", and only one of the two has a test in front of it.
+    """
+    if not settings.sentry_dsn:
+        return None
+    options: dict = {
+        "dsn": settings.sentry_dsn,
+        "environment": settings.app_mode,
+        "traces_sample_rate": 0.1,
+        "send_default_pii": False,
+    }
+    release = os.getenv("APP_RELEASE", "").strip()
+    if release:
+        options["release"] = release
+    return options
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(settings.log_level)
     # Optional error monitoring.
-    if settings.sentry_dsn:
+    options = sentry_options(settings)
+    if options:
         try:
             import sentry_sdk
-            sentry_sdk.init(dsn=settings.sentry_dsn, traces_sample_rate=0.1)
-            log.info("Sentry initialized")
+            sentry_sdk.init(**options)
+            log.info("Sentry initialized (environment=%s release=%s)",
+                     options.get("environment"), options.get("release", "unstamped"))
         except Exception as exc:  # pragma: no cover
             log.warning("Sentry init failed: %s", exc)
     # Must precede every outbound connection, the database included.
