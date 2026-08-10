@@ -122,10 +122,28 @@ def live_server(tmp_path_factory):
     logfile.close()
 
 
+#: Collects Content-Security-Policy violations in the page itself.
+#:
+#: An init script rather than a console listener, for two reasons: it runs before
+#: any page script and survives navigation, so nothing is missed in the window
+#: where the SPA boots; and it reads the event's own fields instead of matching
+#: Chromium's console wording, which is not a contract.
+_CSP_COLLECTOR = """
+document.addEventListener('securitypolicyviolation', e => {
+  (window.__cspViolations ||= []).push(
+    e.violatedDirective + ' blocked ' + (e.blockedURI || '(inline)'));
+});
+"""
+
+
 @pytest.fixture
 def page(live_server, browser):
     """A fresh context per test: no cookies, no localStorage, no shared session."""
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    # Must be registered on the CONTEXT before the first page exists, or the
+    # violations raised while index.html is parsed are gone before anything is
+    # listening — and those are exactly the ones a policy change causes.
+    context.add_init_script(_CSP_COLLECTOR)
     # Everything up to the yield has to clean up after itself. A fixture that
     # raises before yielding never runs its teardown, so a failing `goto` used to
     # strand the whole context — browser processes and all — and a run that lost
@@ -142,8 +160,46 @@ def page(live_server, browser):
     yield p
     # A thrown exception in the SPA is a failure even when the assertions passed —
     # half the bugs this suite is for surface as a swallowed TypeError.
+    #
+    # A CSP violation is the other half, and it is the quieter one: the browser
+    # refuses to run something and throws nothing at all, so the only symptom is
+    # a control that stopped working. Read before the context closes.
+    violations = _read_violations(p)
     context.close()
     assert not errors, f"uncaught JS errors: {errors}"
+    assert not violations, f"CSP violations: {violations}"
+
+
+@pytest.fixture
+def csp_violations(page):
+    """Read the CSP violations so far — and take responsibility for them.
+
+    Reading DRAINS the list, so a test that deliberately provokes a violation
+    does not then fail its own teardown. Anything raised after the last read is
+    still unclaimed and still fails, which keeps the default strict: a test has
+    to say out loud that it expected one.
+    """
+    def _drain() -> list[str]:
+        try:
+            return page.evaluate(
+                "(() => { const v = window.__cspViolations || []; "
+                "window.__cspViolations = []; return v; })()") or []
+        except Exception:
+            return []
+    return _drain
+
+
+def _read_violations(p) -> list[str]:
+    """Whatever the collector saw, or nothing if the page is already gone.
+
+    A test that closed the page itself, or navigated somewhere unreachable, must
+    not turn into a teardown error about the collector — that would hide the
+    real failure behind a report about the machinery watching for it.
+    """
+    try:
+        return p.evaluate("window.__cspViolations || []") or []
+    except Exception:
+        return []
 
 
 @pytest.fixture
