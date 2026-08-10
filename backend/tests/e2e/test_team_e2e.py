@@ -116,7 +116,7 @@ def test_an_invitation_is_listed_with_its_status(page, signed_in):
     expect(page.locator("#team-list")).to_contain_text("colleague@example.com")
     expect(page.locator("#team-list")).to_contain_text("joined@example.com")
     # Only a pending invitation can be revoked; the others have nothing to undo.
-    expect(page.locator('#team-list [data-act="revoke"]')).to_have_count(1)
+    expect(page.locator('#team-list [data-action="revoke-invite"]')).to_have_count(1)
 
 
 def test_an_address_without_an_at_never_reaches_the_server(page, signed_in):

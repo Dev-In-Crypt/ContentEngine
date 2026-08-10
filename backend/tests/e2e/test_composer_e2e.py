@@ -492,7 +492,7 @@ def test_replace_slide_from_library_updates_the_image_and_closes_both_modals(
     page.route("**/api/posts/e2e-post-1/slides/1/from-library", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps(updated_slide)))
 
-    page.locator('button[onclick^="openEditSlide"]').first.click()
+    page.locator('[data-act="replace-image"]').first.click()
     expect(page.locator("#edit-slide-modal")).to_be_visible()
     page.locator("#edit-slide-modal").get_by_role("button", name="From library").click()
     expect(page.locator("#library-picker-modal")).to_be_visible()
@@ -511,7 +511,7 @@ def test_an_empty_photo_library_says_so_in_the_picker(page, signed_in, keyed):
     page.route("**/api/media?kind=image", lambda r: r.fulfill(
         status=200, content_type="application/json", body="[]"))
 
-    page.locator('button[onclick^="openEditSlide"]').first.click()
+    page.locator('[data-act="replace-image"]').first.click()
     page.locator("#edit-slide-modal").get_by_role("button", name="From library").click()
     expect(page.locator("#library-picker-grid")).to_contain_text("Nothing in your Photos library")
 
@@ -548,7 +548,7 @@ def test_declining_the_picker_leaves_the_slide_untouched(page, signed_in, keyed)
     calls = []
     page.on("request", lambda r: calls.append(r.url) if "from-library" in r.url else None)
 
-    page.locator('button[onclick^="openEditSlide"]').first.click()
+    page.locator('[data-act="replace-image"]').first.click()
     page.locator("#edit-slide-modal").get_by_role("button", name="From library").click()
     page.locator("#library-picker-modal button", has_text="✕").click()
 

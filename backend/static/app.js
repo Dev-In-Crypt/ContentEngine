@@ -652,18 +652,18 @@ async function loadQueue() {
     const many = g.posts.length > 1;
     const inner = many ? g.posts.map(p =>
       `<div data-group-row class="hidden flex items-center gap-3 pl-6 py-1 cursor-pointer text-sm"
-            onclick="event.stopPropagation(); openPost('${esc(p.id)}')">
+            data-action="open-post" data-arg="${esc(p.id)}">
         <span>${queueDot(p.status)}</span>${netBadge(p)}
         <span class="text-gray-400">${esc(queueLine(p))}</span>
       </div>`).join('') : '';
     return `<div class="ce-card p-3">
-      <div class="flex items-center gap-3 cursor-pointer" onclick="openPost('${esc(g.primary.id)}')">
+      <div class="flex items-center gap-3 cursor-pointer" data-action="open-post" data-arg="${esc(g.primary.id)}">
         <span>${queueDot(st)}</span>${netBadges(g.posts)}
         <div class="flex-1 min-w-0">
           <div class="text-gray-200 truncate">${esc(g.primary.topic || 'post')}</div>
           <div class="text-xs text-gray-500">${esc(queueLine(g.primary, st))}</div>
         </div>
-        ${many ? `<button data-expand-group onclick="event.stopPropagation(); this.closest('.ce-card').querySelectorAll('[data-group-row]').forEach(r => r.classList.toggle('hidden'))" class="ce-btn-ghost px-2 py-1 text-xs">${g.posts.length} networks</button>` : ''}
+        ${many ? `<button data-expand-group data-action="expand-group" class="ce-btn-ghost px-2 py-1 text-xs">${g.posts.length} networks</button>` : ''}
       </div>
       ${inner}
     </div>`;
@@ -1536,7 +1536,7 @@ async function loadTeam() {
       <div class="flex-1 min-w-0"><div class="text-gray-200 truncate">${esc(r.email)}</div>
         <div class="text-xs text-gray-500">${esc(r.status)}</div></div>
       ${r.status === 'pending'
-        ? `<button data-act="revoke" onclick="revokeInvite('${esc(r.id)}')" class="ce-btn-ghost px-3 py-1 text-xs">Revoke</button>`
+        ? `<button data-action="revoke-invite" data-arg="${esc(r.id)}" class="ce-btn-ghost px-3 py-1 text-xs">Revoke</button>`
         : ''}
     </div>`).join('');
   } catch (e) { box.innerHTML = `<div class="text-sm text-red-400">${esc(e.message)}</div>`; }
@@ -1643,11 +1643,61 @@ async function apiFetch(url, opts = {}) {
   return res;
 }
 
+// ===== ACTIONS: one delegated click handler =====
+//
+// Markup carries an identifier, never code. `data-action` names an entry below
+// and `data-arg` carries at most one primitive; anything richer than that is a
+// closure instead (see the `data-act` sites, which assign `el.onclick` after
+// rendering — a JS property, which CSP does not govern at all).
+//
+// Why one listener rather than per-element wiring: HTML built by innerHTML has
+// no place to hang a closure without a second pass over the DOM, and a delegated
+// listener works for markup that does not exist yet.
+//
+// Nesting is handled by `closest()` returning the NEAREST ancestor and this
+// dispatching exactly once. That is why the converted sites dropped their
+// `event.stopPropagation()`: by the time a document-level listener runs the
+// event has finished bubbling, so stopping it there does nothing — the inner
+// control wins because it is found first. Do not "improve" this into a loop
+// over every [data-action] ancestor; that would fire the outer one too.
+const ACTIONS = Object.freeze({
+  'open-post':      (el) => openPost(el.dataset.arg),
+  'expand-group':   (el) => el.closest('.ce-card')
+                              .querySelectorAll('[data-group-row]')
+                              .forEach(r => r.classList.toggle('hidden')),
+  'revoke-invite':  (el) => revokeInvite(el.dataset.arg),
+  'result-tab':     (el) => setResultTab(el.dataset.arg),
+  'apply-overlay':  (el) => applyOverlay(Number(el.dataset.arg)),
+  'reset-overlay':  (el) => resetOverlay(Number(el.dataset.arg)),
+  'insert-emoji':   (el) => insertEmoji(el.dataset.arg),
+  'remove-hashtag': (el) => removeHashtag(Number(el.dataset.arg)),
+  'dismiss-toast':  () => document.getElementById('toast').classList.add('hidden'),
+  'pick-voice':     (el) => pickVoice(el.dataset.arg),
+  'ai-test':        (el) => testAI(el.dataset.arg),
+  'onb-pick-color': (el) => onbPickColor(el.dataset.arg),
+});
+
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-action]');
+  if (!el) return;
+  const run = ACTIONS[el.dataset.action];
+  if (run) run(el, ev);
+});
+
+// Keeping focus where it was. A picker button that steals focus on mousedown
+// makes the textarea it inserts into forget the caret, so the symbol lands at
+// position zero — or nowhere.
+document.addEventListener('mousedown', ev => {
+  if (ev.target.closest('[data-keep-focus]')) ev.preventDefault();
+});
+
 // ===== HTML ESCAPING =====
 // Any server-provided string interpolated into innerHTML must go through esc();
 // any href/src built from that data through safeUrl(). Without this, text like
-// <img src=x onerror=...> becomes stored XSS, and with the API token in
-// localStorage that means token theft.
+// an <img> carrying an onerror attribute becomes stored XSS, and with the API
+// token in localStorage that means token theft. (Written without the literal
+// attribute so the inline-handler counter in tests/test_inline_handlers.py
+// counts markup rather than prose.)
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -2071,7 +2121,7 @@ function renderResultTabs() {
       + (v && t.platform === here ? ' tab-active' : '');
     const tail = busy ? ' \u2026' : (v ? (dot[v.status] ? ' ' + dot[v.status] : '') : ' \uff0b Adapt');
     return `<button data-result-tab="${t.platform}" ${busy ? 'disabled' : ''} `
-      + `onclick="setResultTab('${t.platform}')" class="${cls}">${t.label}${tail}</button>`;
+      + `data-action="result-tab" data-arg="${t.platform}" class="${cls}">${t.label}${tail}</button>`;
   }).join('');
 }
 
@@ -2184,7 +2234,7 @@ function renderPreview(post) {
           class="${imgCls} rounded-xl border border-gray-700 shadow-lg" />
         <span class="absolute top-2 left-2 bg-black/60 text-xs text-white px-2 py-0.5 rounded-full">${slide.slide_number}/${post.slides.length}</span>
         <span class="absolute bottom-2 left-2 bg-black/60 text-xs text-gray-300 px-2 py-0.5 rounded-full">${slide.image_source}</span>
-        <button onclick="openEditSlide(${slide.slide_number}, ${JSON.stringify(slide.search_query || '').replace(/"/g, '&quot;')}, '${slide.image_source}')"
+        <button data-act="replace-image"
           class="absolute top-2 right-2 bg-black/70 hover:bg-purple-700 transition text-white text-xs rounded-full px-2 py-1"
           title="Replace this image">
           Replace
@@ -2202,11 +2252,11 @@ function renderPreview(post) {
           class="overlay-input w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
           placeholder="Short sentence." ${editable ? '' : 'disabled'}>${overlayVal}</textarea>
         <div class="flex gap-1 pt-1">
-          <button onclick="applyOverlay(${slide.slide_number})" ${editable ? '' : 'disabled'}
+          <button data-action="apply-overlay" data-arg="${slide.slide_number}" ${editable ? '' : 'disabled'}
             class="flex-1 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed transition rounded px-2 py-1 text-[11px] font-semibold">
             ✓ Apply
           </button>
-          <button onclick="resetOverlay(${slide.slide_number})" ${editable ? '' : 'disabled'}
+          <button data-action="reset-overlay" data-arg="${slide.slide_number}" ${editable ? '' : 'disabled'}
             title="Restore to LLM-generated text"
             class="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition rounded px-2 py-1 text-[11px]">
             Reset
@@ -2215,6 +2265,11 @@ function renderPreview(post) {
         ${editable ? '' : '<p class="text-[10px] text-gray-600">Replace this slide first to enable in-place editing.</p>'}
       </div>
     `;
+    // Closure, not an attribute. This used to serialise a JSON string into an
+    // inline click attribute and hand-escape the quotes; the slide object is
+    // right here, so the escaping problem simply stops existing.
+    wrapper.querySelector('[data-act="replace-image"]').onclick = () =>
+      openEditSlide(slide.slide_number, slide.search_query || '', slide.image_source);
     // Cache the original LLM text so Reset works without an extra request.
     S.slideOriginals[slide.slide_number] = {
       overlay: slide.original_overlay_text || slide.overlay_text || '',
@@ -2469,7 +2524,7 @@ function buildEmojiPicker() {
   for (const [cat, list] of Object.entries(EMOJI_POOL)) {
     html += `<div class="flex flex-wrap gap-1 items-center"><span class="text-[10px] text-gray-500 w-20">${cat}</span>`;
     for (const e of list) {
-      html += `<button type="button" onmousedown="event.preventDefault()" onclick="insertEmoji('${e}')"
+      html += `<button type="button" data-keep-focus data-action="insert-emoji" data-arg="${e}"
         class="text-base hover:bg-gray-700 rounded px-1.5 py-0.5 transition" title="${e}">${e}</button>`;
     }
     html += '</div>';
@@ -2649,7 +2704,7 @@ function renderHashtags() {
     const chip = document.createElement('span');
     chip.className = 'inline-flex items-center gap-1 border text-xs px-2 py-1 rounded-full ' +
       'bg-purple-900 border-purple-700 text-purple-200';
-    chip.innerHTML = `${tag} <button onclick="removeHashtag(${i})" class="hover:text-white ml-1 text-xs opacity-70">×</button>`;
+    chip.innerHTML = `${tag} <button data-action="remove-hashtag" data-arg="${i}" class="hover:text-white ml-1 text-xs opacity-70">×</button>`;
     c.appendChild(chip);
   });
 }
@@ -3038,15 +3093,20 @@ function showExportToast(path) {
         <p class="font-semibold mb-1">Saved to Downloads</p>
         <p class="text-xs text-gray-400 break-all">${path}</p>
         <div class="mt-2 flex gap-2">
-          <button onclick="openExportedFolder('${path.replace(/\\/g, '\\\\').replace(/'/g, '&#39;')}')"
+          <button data-act="open-folder"
             class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1 text-xs font-semibold">
             📂 Open folder
           </button>
-          <button onclick="document.getElementById('toast').classList.add('hidden')"
+          <button data-action="dismiss-toast"
             class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-3 py-1 text-xs">Dismiss</button>
         </div>
       </div>
     </div>`;
+  // Closure, so the path travels as a value. It used to be escaped for
+  // backslashes and then for quotes on its way into an attribute — two
+  // hand-rolled escapes on a Windows path, for a string the handler could
+  // simply have closed over.
+  el.querySelector('[data-act="open-folder"]').onclick = () => openExportedFolder(path);
   el.classList.remove('hidden');
 }
 
@@ -3408,7 +3468,7 @@ async function renderCalendar() {
     // group-level date would have to be invented — and be wrong on one of them.
     groupPosts(byDay[day] || []).forEach(g => {
       const st = groupStatus(g.posts);
-      html += `<div data-cal-entry class="text-[10px] truncate cursor-pointer hover:text-purple-300" onclick="openPost('${g.primary.id}')">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
+      html += `<div data-cal-entry class="text-[10px] truncate cursor-pointer hover:text-purple-300" data-action="open-post" data-arg="${g.primary.id}">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
     });
     cell.innerHTML = html;
     grid.appendChild(cell);
@@ -5231,7 +5291,7 @@ function renderBrandVoice() {
   const sel = S.brandVoice.preset;
   wrap.innerHTML = S.brandVoice.presets.map(p => {
     const active = p.key === sel;
-    return `<button type="button" onclick="pickVoice('${esc(p.key)}')"
+    return `<button type="button" data-action="pick-voice" data-arg="${esc(p.key)}"
       class="text-left rounded-xl border p-3 transition ${active
         ? 'border-purple-500 bg-purple-900/40'
         : 'border-gray-700 bg-gray-800 hover:border-gray-600'}">
@@ -5350,8 +5410,8 @@ function _aiBlock(kind, title, note) {
   return `<div class="space-y-2 border border-gray-800 rounded-xl p-4">
     <div class="text-sm font-semibold text-gray-200">${esc(title)}</div>
     <div class="text-xs text-gray-500">${esc(note)}</div>
-    <select data-ai="${kind}_provider" onchange="onAIProviderChange('${kind}')" class="ce-input w-full px-3 py-2 text-sm">${provOpts}</select>
-    <select data-ai="${kind}_model" onchange="onAIModelChange('${kind}')" class="ce-input w-full px-3 py-2 text-sm" ${provider ? '' : 'disabled'}>${modelOpts}</select>
+    <select data-ai="${kind}_provider" class="ce-input w-full px-3 py-2 text-sm">${provOpts}</select>
+    <select data-ai="${kind}_model" class="ce-input w-full px-3 py-2 text-sm" ${provider ? '' : 'disabled'}>${modelOpts}</select>
     <input data-ai-custom="${kind}" type="text" maxlength="120" placeholder="e.g. vendor/model-name"
       value="${model && !known ? esc(model) : ''}"
       class="ce-input w-full px-3 py-2 text-xs font-mono ${model && !known ? '' : 'hidden'}" />
@@ -5359,7 +5419,7 @@ function _aiBlock(kind, title, note) {
       <input data-ai-key="${esc(meta.key_field)}" type="password" autocomplete="off"
         placeholder="${esc(meta.label)} API key — ${keyInfo.set ? 'set: ' + esc(keyInfo.masked || '••••') : 'not set'}"
         class="ce-input flex-1 px-3 py-2 text-sm" />
-      <button type="button" onclick="testAI('${kind}')" class="ce-btn-ghost px-3 py-2 text-xs whitespace-nowrap">Test</button>
+      <button type="button" data-action="ai-test" data-arg="${kind}" class="ce-btn-ghost px-3 py-2 text-xs whitespace-nowrap">Test</button>
     </div>
     <div class="text-xs text-gray-500">${esc(meta.hint)} <a href="${esc(safeUrl(meta.key_url))}" target="_blank" rel="noopener" class="underline">Get a key ↗</a></div>` : ''}
     <div data-ai-result="${kind}" class="text-xs"></div>
@@ -5372,6 +5432,14 @@ function renderAISettings() {
   form.innerHTML =
     _aiBlock('text', 'Text — captions and hooks', 'Used for every post you generate.') +
     _aiBlock('image', 'Images — AI slide backgrounds', 'Only used when a slide’s source is AI. Stock photos do not need this. Anthropic is not listed: it cannot generate images.');
+  // Wired after the markup exists, closure-style, like every data-act site. A
+  // `change` listener rather than a data-action entry: this form re-renders
+  // itself from inside these very handlers, so keeping the wiring next to the
+  // render is what makes that loop readable.
+  for (const kind of ['text', 'image']) {
+    form.querySelector(`[data-ai="${kind}_provider"]`).onchange = () => onAIProviderChange(kind);
+    form.querySelector(`[data-ai="${kind}_model"]`).onchange = () => onAIModelChange(kind);
+  }
 }
 
 function onAIProviderChange(kind) {
@@ -5814,7 +5882,7 @@ async function onbExtract() {
 
     const colors = document.getElementById('onb-colors');
     colors.innerHTML = (body.colors || []).map((c, i) =>
-      `<button type="button" data-onb-color="${esc(c)}" onclick="onbPickColor('${esc(c)}')"
+      `<button type="button" data-onb-color="${esc(c)}" data-action="onb-pick-color" data-arg="${esc(c)}"
          class="w-8 h-8 rounded-full border-2 ${i === 0 ? 'border-white' : 'border-transparent'}"
          style="background:${esc(c)}" title="${esc(c)}"></button>`).join('');
     document.getElementById('onb-colors-row').classList.toggle('hidden', !(body.colors || []).length);

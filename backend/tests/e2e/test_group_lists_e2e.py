@@ -183,3 +183,35 @@ def test_results_lists_every_network_separately(page, signed_in):
                  published_at=datetime.now(timezone.utc).isoformat()))
     open_results(page)
     expect(page.locator("#analytics-list > .ce-card")).to_have_count(2)
+
+
+def test_expanding_a_group_does_not_also_open_the_post(page, signed_in):
+    """The nesting case, and the one whose mechanism changed with CSP phase 3.
+
+    The expand button sits inside the card, and the card opens the post. That
+    used to be held apart by `event.stopPropagation()` in the button's inline
+    handler. With one delegated listener on the document there is nothing left
+    to stop — by the time it runs the event has finished bubbling — so what
+    keeps them apart now is `closest()` returning the NEAREST [data-action] and
+    the dispatcher firing exactly once.
+
+    Correct by construction, and one loop away from being wrong: walking every
+    [data-action] ancestor instead would expand the group AND open the post.
+    """
+    signed_in()
+    _serve(page,
+           _post(id="p1", platform="instagram"),
+           _post(id="p2", platform="x"))
+    # The evidence has to be the REQUEST, not the screen. openPost fetches the
+    # post before it shows anything, and in this fixture that fetch has no stub
+    # — so asserting "the composer did not open" would pass even if the outer
+    # action fired, which is exactly how the first version of this test let the
+    # walk-every-ancestor mutation through.
+    opened = []
+    page.on("request", lambda r: opened.append(r.url) if "/api/posts/p1" in r.url else None)
+    open_section(page, "queue")
+
+    page.locator('#queue-list [data-expand-group]').click()
+
+    expect(page.locator('#queue-list [data-group-row]').first).to_be_visible()
+    assert opened == [], opened
