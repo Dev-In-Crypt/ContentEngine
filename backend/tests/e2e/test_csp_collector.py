@@ -86,3 +86,27 @@ def test_a_clean_page_reports_nothing(page, live_server, csp_violations):
     _probe(page, live_server, "<p>nothing to see</p>")
 
     assert csp_violations() == []
+
+
+def test_a_data_url_becomes_a_blob_without_the_network(page):
+    """The decode that replaced `fetch(data:)`, and the reason connect-src could
+    close to 'self'. New logic standing in for a call that worked, so it is
+    worth more than the absence of the old line: a 1x1 PNG in, a Blob of the
+    right type and length out."""
+    px = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+          "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    got = page.evaluate(
+        "async (u) => { const b = dataUrlToBlob(u); if (!b) return null;"
+        " const head = new Uint8Array(await b.arrayBuffer()).slice(0, 4);"
+        " return {type: b.type, size: b.size, head: Array.from(head)}; }", px)
+
+    # The bytes, not just the shape: a decode that produced the right length of
+    # zeroes would satisfy type and size and hand the server a blank image.
+    assert got == {"type": "image/png", "size": 70, "head": [137, 80, 78, 71]}
+
+
+def test_something_that_is_not_a_data_url_decodes_to_nothing(page):
+    """The caller's next step is a multipart upload. Posting `undefined` as a
+    file is a worse failure than doing nothing at all."""
+    assert page.evaluate("() => dataUrlToBlob('https://example.com/logo.png')") is None
+    assert page.evaluate("() => dataUrlToBlob('')") is None

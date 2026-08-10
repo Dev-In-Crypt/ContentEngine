@@ -76,8 +76,11 @@ def test_nothing_may_be_loaded_from_anywhere_else(client):
     an injected script has nowhere to send what it steals."""
     csp = policy_of(client.get("/"))
     assert csp["default-src"] == {"'self'"}
-    assert csp["connect-src"] <= {"'self'", "data:"}
     assert csp["font-src"] == {"'self'"}
+    # No `data:` either. It was here for one call — a fetch() of a FileReader
+    # data URL — and that call is now an inline decode, so the directive closed
+    # with it rather than staying open for convenience.
+    assert csp["connect-src"] == {"'self'"}
 
 
 def test_the_page_cannot_be_reframed_or_re_based(client):

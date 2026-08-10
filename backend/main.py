@@ -272,9 +272,7 @@ CSP_DIRECTIVES: dict[str, str] = {
     "img-src": "'self' data: blob:",
     "media-src": "'self' blob:",
     "font-src": "'self'",
-    # data: is here for one call — a fetch() of a FileReader data URL during
-    # logo upload. It goes away with that call, and this relaxation with it.
-    "connect-src": "'self' data:",
+    "connect-src": "'self'",
     "style-src": "'self' 'unsafe-inline'",
     "script-src": "'self' 'unsafe-inline'",
 }
