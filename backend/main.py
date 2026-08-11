@@ -247,19 +247,40 @@ def _docs_urls(app_mode: str) -> dict:
 #: favicon is a data: URI, and `const API = window.location.origin`. That makes
 #: the usual allow-list argument disappear entirely.
 #:
-#: `script-src` is deliberately still permissive. index.html carries ~196 inline
-#: event handlers, and removing `'unsafe-inline'` before they are gone would
-#: silently disable every button in the product. It tightens in a later phase,
-#: once a static test proves there are none left; what ships here is the other
-#: half of CSP, and that half is complete.
+#: `script-src 'self'` — no `'unsafe-inline'`, no hashes, no `'unsafe-eval'`.
+#: Every script the pages run is fetched from this origin (/static/theme.js,
+#: /static/app.js, the vendored Tailwind), so `'self'` authorises all of it and
+#: there is no hash to regenerate on each edit. An injected <script> does not
+#: run and an injected `onerror=` does not compile, which is the attack the
+#: `esc()` helper in app.js used to stand against alone — with a session token
+#: in localStorage behind it.
 #:
-#: `style-src 'unsafe-inline'` is permanent, not pending. Tailwind Play computes
-#: its stylesheet at runtime from the classes present in the DOM and injects it
-#: through a <style> element, so that text cannot be hashed. Removing it means
-#: precompiling Tailwind, i.e. adopting the build step this project has
-#: deliberately declined. Never add a nonce or a hash here: doing so makes the
-#: spec ignore 'unsafe-inline' for this directive, which blocks Tailwind's own
-#: injection and every style= attribute at once.
+#: Getting here took the 196 inline handlers out of the markup first; a static
+#: test asserts the count is exactly zero, in both files, so this line cannot
+#: quietly stop being true.
+#:
+#: `style-src 'unsafe-inline'` is PERMANENT, not pending, and the difference
+#: matters to whoever reads this next. Tailwind Play computes its stylesheet at
+#: runtime from the classes present in the DOM and injects it through a <style>
+#: element, so that text cannot be hashed; the 96 style= attributes are the
+#: smaller half of the problem. Removing it means precompiling Tailwind — the
+#: build step this project has deliberately declined — and that is the whole
+#: condition, so nobody has to guess whether it is on somebody's list.
+#:
+#: The residual risk is small and worth stating rather than implying: an
+#: injected <style> or style= is permitted, but the classic exfiltration through
+#: `background:url(https://attacker/…)` is already refused by `img-src 'self'`,
+#: and the dominant XSS payload is script, which is now fully locked.
+#:
+#: Never add a nonce or a hash to `style-src`: the spec then IGNORES
+#: 'unsafe-inline' for that directive, which blocks Tailwind's own injection and
+#: every style= attribute at once, and the app renders as unstyled HTML.
+#:
+#: One tripwire, so it reads as deliberate rather than as a bug. `img-src` is
+#: this origin, and `api/routes/stock.py` returns REMOTE Unsplash/Pexels
+#: thumbnail URLs. The SPA never calls /api/stock/search today. The day somebody
+#: wires up a stock picker, those thumbnails will be blank — that is the policy
+#: working, forcing a proxy decision instead of a hotlink.
 CSP_DIRECTIVES: dict[str, str] = {
     "default-src": "'self'",
     "base-uri": "'none'",
@@ -274,7 +295,7 @@ CSP_DIRECTIVES: dict[str, str] = {
     "font-src": "'self'",
     "connect-src": "'self'",
     "style-src": "'self' 'unsafe-inline'",
-    "script-src": "'self' 'unsafe-inline'",
+    "script-src": "'self'",
 }
 
 #: Files served with `Cache-Control: no-cache` — revalidate, not "do not store".

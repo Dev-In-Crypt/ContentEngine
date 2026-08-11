@@ -129,11 +129,19 @@ def test_style_src_keeps_unsafe_inline_usable(client):
     assert not [s for s in style if s.startswith(("'nonce-", "'sha256-", "'sha384-", "'sha512-"))]
 
 
-def test_the_script_directive_is_still_permissive_in_this_phase(client):
-    """Stated, not assumed. Phase 1 changes nothing about script execution; the
-    directive tightens only once the inline handlers are gone, and this
-    assertion is what will be flipped to prove it."""
-    assert "'unsafe-inline'" in policy_of(client.get("/"))["script-src"]
+def test_inline_script_is_refused(client):
+    """The point of the whole exercise.
+
+    `script-src 'self'` with no `'unsafe-inline'` means an injected `<script>`
+    does not run and an injected `onerror=` does not compile — which is the
+    attack the escaping helper in app.js has been carrying alone, with an API
+    token in localStorage behind it.
+
+    Reaching this was a no-op by construction: the handlers were gone, proved by
+    a static count of exactly zero, before this line changed.
+    """
+    script = policy_of(client.get("/"))["script-src"]
+    assert script == {"'self'"}, script
 
 
 # ── the API docs, which are live off cloud ──────────────────────────────────
