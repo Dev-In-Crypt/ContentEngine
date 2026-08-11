@@ -586,3 +586,18 @@ def test_a_refusal_with_no_reason_still_says_something(page, live_server):
 
     expect(page.locator("#hero-status")).to_be_visible()
     expect(page.locator("#hero-status")).not_to_have_text("")
+
+
+def test_enter_in_the_topic_field_runs_it(page, live_server):
+    """The keydown that stayed out of the registry — a condition, not an action,
+    and the only one in the file. It is wired directly at start-up instead, so
+    it needs a test of its own: the mutation pass found nothing pressing Enter
+    here, which meant the wiring could have been deleted in silence."""
+    calls = _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+
+    page.locator("#hero-input").fill("Sourdough starters")
+    page.locator("#hero-input").press("Enter")
+
+    expect(page.locator("#hero-result")).to_be_visible()
+    assert calls, "Enter did not start a generation"

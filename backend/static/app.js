@@ -1643,6 +1643,18 @@ async function apiFetch(url, opts = {}) {
   return res;
 }
 
+/** Whether the Reel's own visuals are usable, given the voiceover checkbox.
+ *
+ *  Called from the change handler AND once at start-up. It used to live in an
+ *  inline attribute, which meant the initial state depended on the hardcoded
+ *  `disabled` in the HTML still agreeing with the checkbox's `checked` — an
+ *  invariant nothing enforced. Now there is one expression and it runs. */
+function syncReelVisuals(el) {
+  const box = el || document.getElementById('reel-voiceover');
+  const visuals = document.getElementById('reel-visuals');
+  if (box && visuals) visuals.disabled = !box.checked;
+}
+
 // ===== ACTIONS: one delegated click handler =====
 //
 // Markup carries an identifier, never code. `data-action` names an entry below
@@ -1675,6 +1687,135 @@ const ACTIONS = Object.freeze({
   'pick-voice':     (el) => pickVoice(el.dataset.arg),
   'ai-test':        (el) => testAI(el.dataset.arg),
   'onb-pick-color': (el) => onbPickColor(el.dataset.arg),
+
+  // ── from the static markup (CSP phase 4) ────────────────────
+  'add-hashtag':                         () => addHashtag(),
+  'add-own-photos':                      (el, ev) => addOwnPhotos(ev),
+  'add-plan-row':                        () => addPlanRow(),
+  'add-source':                          () => addSource(),
+  'apply-selected-preset':               () => applySelectedPreset(),
+  'auth-register-business':              () => showAuthScreen('register', 'business'),
+  'back-to-home':                        () => backToHome(),
+  'cal-shift':                           (el) => calShift(Number(el.dataset.arg)),
+  'clear-video-seed':                    () => clearVideoSeed(),
+  'close-brands-modal':                  () => closeBrandsModal(),
+  'close-delete-account':                () => closeDeleteAccount(),
+  'close-edit-slide':                    () => closeEditSlide(),
+  'close-edit-video-modal':              () => closeEditVideoModal(),
+  'close-library-picker':                () => closeLibraryPicker(),
+  'close-need-key':                      () => closeNeedKey(),
+  'close-onboarding':                    (el) => closeOnboarding(el.dataset.arg),
+  'close-publish-to-x-modal':            () => closePublishToXModal(),
+  'close-variations':                    () => closeVariations(),
+  'confirm-delete-account':              () => confirmDeleteAccount(),
+  'create-brand':                        () => createBrand(),
+  'delete-brand':                        () => deleteBrand(),
+  'delete-selected-preset':              () => deleteSelectedPreset(),
+  'dismiss-sources-offer':               () => document.getElementById('sources-offer').classList.add('hidden'),
+  'dismiss-voice-hint':                  () => dismissVoiceHint(),
+  'download-backup':                     () => downloadBackup(),
+  'download-hero-image':                 () => downloadHeroImage(),
+  'export-journal':                      (el) => exportJournal(el.dataset.arg),
+  'export-my-data':                      () => exportMyData(),
+  'export-post':                         () => exportPost(),
+  'generate-library-image':              () => generateLibraryImage(),
+  'generate-library-video':              () => generateLibraryVideo(),
+  'generate-post':                       () => generatePost(),
+  'go-home':                             () => goHome(),
+  'go-step':                             (el) => goStep(Number(el.dataset.arg)),
+  'goto-need-key':                       () => gotoNeedKey(),
+  'invite-teammate':                     () => inviteTeammate(),
+  'library-upload-image':                (el, ev) => uploadToLibrary(ev, 'image'),
+  'load-journal':                        () => loadJournal(),
+  'load-more-grid':                      () => loadMoreGrid(),
+  'logout':                              () => logout(),
+  'make-digest':                         () => makeDigest(),
+  'make-reel':                           () => makeReel(),
+  'menu-brands':                         () => { closeAvatarMenu(); openBrandsModal(); },
+  'menu-settings':                       () => { closeAvatarMenu(); openSettings('profiles'); },
+  'menu-setup-guide':                    () => { closeAvatarMenu(); startOnboarding({restart: true}); },
+  'menu-theme':                          () => { closeAvatarMenu(); toggleTheme(); },
+  'on-acct-switch':                      () => onAcctSwitch(),
+  'on-product-switch':                   () => onProductSwitch(),
+  'onb-copy-post':                       () => onbCopyPost(),
+  'onb-extract':                         () => onbExtract(),
+  'onb-finish':                          () => onbFinish(),
+  'onb-no-site':                         () => onbNoSite(),
+  'onb-pick-network':                    (el) => onbPickNetwork(el.dataset.arg),
+  'onb-pick-type':                       (el) => onbPickType(el.dataset.arg),
+  'onb-save-brand':                      () => onbSaveBrand(),
+  'onb-skip-network':                    () => onbSkipNetwork(),
+  'open-brand-voice':                    () => openBrandVoice(),
+  'open-delete-account':                 () => openDeleteAccount(),
+  'open-library-picker':                 (el) => openLibraryPicker(el.dataset.arg),
+  'open-results':                        (el) => openResults(el.dataset.arg),
+  'open-settings':                       (el) => openSettings(el.dataset.arg),
+  'publish-post':                        () => publishPost(),
+  'reel-voiceover-toggle':               (el) => syncReelVisuals(el),
+  'refresh-insights':                    () => refreshInsights(),
+  'remove-logo':                         () => removeLogo(),
+  'remove-music':                        () => removeMusic(),
+  'renew-instagram-token':               () => renewInstagramToken(),
+  'resend-verification':                 () => resendVerification(),
+  'reset-hero':                          () => resetHero(),
+  'reset-slide-style':                   () => resetSlideStyle(),
+  'restore-backup':                      (el, ev) => restoreBackup(ev),
+  'run-batch':                           () => runBatch(),
+  'run-demo':                            () => runDemo(),
+  'run-fact-check':                      () => runFactCheck(),
+  'run-hero-example':                    (el) => runHeroExample(el),
+  'run-hero-post':                       () => runHeroPost(),
+  'save-a-i-settings':                   () => saveAISettings(),
+  'save-brand':                          () => saveBrand(),
+  'save-brand-rules':                    () => saveBrandRules(),
+  'save-brand-voice':                    () => saveBrandVoice(),
+  'save-caption':                        () => saveCaption(),
+  'save-credentials':                    () => saveCredentials(),
+  'save-current-preset':                 () => saveCurrentPreset(),
+  'save-limits':                         () => saveLimits(),
+  'save-profile':                        () => saveProfile(),
+  'save-slide-style':                    () => saveSlideStyle(),
+  'save-x-settings':                     () => saveXSettings(),
+  'schedule-post':                       () => schedulePost(),
+  'set-calendar-mode':                   (el) => setCalendarMode(el.dataset.arg),
+  'set-create-mode':                     (el) => setCreateMode(el.dataset.arg),
+  'set-grid-mode':                       (el) => setGridMode(el.dataset.arg),
+  'set-hero-mode':                       (el) => setHeroMode(el.dataset.arg),
+  'set-landing-tab':                     (el) => setLandingTab(el.dataset.arg),
+  'set-network':                         (el) => setNetwork(el.dataset.arg),
+  'set-section':                         (el) => setSection(el.dataset.arg),
+  'set-signup-account-type':             (el) => setSignupAccountType(el.dataset.arg),
+  'show-all-features':                   () => showAllFeatures(),
+  'show-auth-screen':                    (el) => showAuthScreen(el.dataset.arg),
+  'show-cost-popover':                   () => showCostPopover(),
+  'show-failed-posts':                   () => showFailedPosts(),
+  'show-forgot-screen':                  () => showForgotScreen(),
+  'show-step':                           (el) => showStep(Number(el.dataset.arg)),
+  'show-variations':                     (el) => showVariations(el.dataset.arg),
+  'split-into-thread':                   () => splitIntoThread(),
+  'submit-auth':                         () => submitAuth(),
+  'submit-edit-video':                   () => submitEditVideo(),
+  'submit-forgot':                       () => submitForgot(),
+  'submit-publish-to-x':                 () => submitPublishToX(),
+  'submit-replace-slide':                () => submitReplaceSlide(),
+  'submit-reset':                        () => submitReset(),
+  'submit-upload-slide':                 (el, ev) => submitUploadSlide(ev),
+  'suggest-plan':                        () => suggestPlan(),
+  'suggest-video-idea':                  () => suggestVideoIdea(),
+  'switch-auth-tab':                     (el) => switchAuthTab(el.dataset.arg),
+  'sync-publish-x-counter':              () => syncPublishXCounter(),
+  'take-sources-offer':                  () => takeSourcesOffer(),
+  'test-publish-connection':             (el) => testPublishConnection(el.dataset.arg),
+  'toggle-avatar-menu':                  () => toggleAvatarMenu(),
+  'toggle-edit-video-voiceover-fields':  () => toggleEditVideoVoiceoverFields(),
+  'toggle-fact-source':                  () => toggleFactSource(),
+  'undo-edit':                           () => undoEdit(),
+  'unschedule-post':                     () => unschedulePost(),
+  'update-configure-summary':            () => updateConfigureSummary(),
+  'update-video-cost-estimate':          () => updateVideoCostEstimate(),
+  'upload-brand-logo':                   () => uploadBrandLogo(),
+  'upload-logo':                         (el, ev) => uploadLogo(ev),
+  'upload-music':                        (el, ev) => uploadMusic(ev),
 });
 
 document.addEventListener('click', ev => {
@@ -1684,9 +1825,38 @@ document.addEventListener('click', ev => {
   if (run) run(el, ev);
 });
 
+// `change` and `input` resolve into the SAME registry through their own
+// attributes. Both bubble, so one listener each is enough; `focus`/`blur` would
+// not, and the file already answers that with focusin (see the modal focus
+// trap) if either ever appears.
+document.addEventListener('change', ev => {
+  const el = ev.target.closest('[data-change]');
+  if (!el) return;
+  const run = ACTIONS[el.dataset.change];
+  if (run) run(el, ev);
+});
+
+document.addEventListener('input', ev => {
+  const el = ev.target.closest('[data-input]');
+  if (!el) return;
+  const run = ACTIONS[el.dataset.input];
+  if (run) run(el, ev);
+});
+
 // Keeping focus where it was. A picker button that steals focus on mousedown
 // makes the textarea it inserts into forget the caret, so the symbol lands at
 // position zero — or nowhere.
+// Enter in the landing's topic field runs it. A direct listener rather than a
+// registry entry: keydown carries a condition, not an action, and there is
+// exactly one of them — the same shape as the #auth-password listener below.
+document.addEventListener('DOMContentLoaded', () => {
+  const hero = document.getElementById('hero-input');
+  if (hero) hero.addEventListener('keydown', e => {
+    if (e.key === 'Enter') runHeroPost();
+  });
+  syncReelVisuals();     // the initial state, stated rather than implied
+});
+
 document.addEventListener('mousedown', ev => {
   if (ev.target.closest('[data-keep-focus]')) ev.preventDefault();
 });

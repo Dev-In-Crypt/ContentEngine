@@ -29,7 +29,7 @@ _HANDLER = re.compile(r"\son[a-z]+=")
 
 #: Lowered by each conversion commit. Not `<=`; see the module docstring.
 EXPECTED = {
-    "index.html": 178,   # the static markup — CSP phase 4
+    "index.html": 0,     # the static markup — CSP phase 4
     "app.js": 0,         # HTML built in JS — CSP phase 3
 }
 
@@ -69,7 +69,7 @@ def _registry_keys() -> set[str]:
 def _used_actions() -> set[str]:
     text = ((STATIC / "index.html").read_text(encoding="utf-8")
             + (STATIC / "app.js").read_text(encoding="utf-8"))
-    return set(re.findall(r"data-action=[\"']\$?\{?([a-z0-9-]+)\}?[\"']", text))
+    return set(re.findall(r"data-(?:action|change|input)=[\"']\$?\{?([a-z0-9-]+)\}?[\"']", text))
 
 
 def test_every_action_is_wired_both_ways():

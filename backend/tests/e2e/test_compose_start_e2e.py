@@ -19,7 +19,7 @@ would otherwise pass for the wrong reason.
 import pytest
 from playwright.sync_api import expect
 
-from tests.e2e.nav import open_configure
+from tests.e2e.nav import open_configure, open_create
 
 pytestmark = pytest.mark.e2e
 
@@ -84,3 +84,41 @@ def test_the_row_stays_open_once_opened(page, signed_in):
     open_configure(page)
     page.locator("#net-toggle-x").click()
     expect(page.locator("#tone")).to_be_visible()
+
+
+# ── the delegated change/input listeners (CSP phase 4) ──────────────────────
+#
+# Click has always had a test on every screen; change and input did not, and
+# the mutation pass proved it — deleting either dispatcher broke nothing. These
+# two are the cheapest honest coverage: one observable effect each.
+
+def test_typing_a_niche_updates_the_collapsed_summary(page, signed_in):
+    """`input` reaches the registry. The Configure row shows its own values in
+    the summary line so the row can stay closed, and that line is redrawn from
+    a delegated input listener now rather than an inline oninput."""
+    signed_in()
+    open_create(page)
+    open_configure(page)
+
+    page.locator("#niche").fill("Sourdough")
+
+    expect(page.locator("#configure-summary")).to_contain_text("Sourdough")
+
+
+def test_changing_the_tone_updates_it_too(page, signed_in):
+    """The same summary, reached from a <select> rather than a text field.
+
+    Note what this does NOT prove: the Configure row carries data-input and
+    data-change on one container, and a select fires both, so removing the
+    change dispatcher leaves this green. The change path is proved instead by
+    test_the_cost_estimate_scales_with_duration in the video library, where the
+    element carries data-change alone — which is how the mutation pass found
+    that this test was claiming more than it showed.
+    """
+    signed_in()
+    open_create(page)
+    open_configure(page)
+
+    page.locator("#tone").select_option("casual")
+
+    expect(page.locator("#configure-summary")).to_contain_text("Casual")

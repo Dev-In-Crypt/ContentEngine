@@ -215,3 +215,29 @@ def test_expanding_a_group_does_not_also_open_the_post(page, signed_in):
 
     expect(page.locator('#queue-list [data-group-row]').first).to_be_visible()
     assert opened == [], opened
+
+
+def test_no_element_is_wired_twice(page, signed_in):
+    """Registry key AND closure on the same element means the action runs twice.
+
+    Found the hard way in CSP phase 4: the Reel publish button kept
+    `data-action` from the conversion while `updateReelPublishButton` went on
+    assigning `btn.onclick`, so one click posted the video twice. The static
+    guard could not see it — one side lives in markup, the other in a function
+    that only runs once a post is bound — so the check belongs in a real page
+    with a real post open.
+
+    `el.onclick === null` is the whole test: an assigned property is visible on
+    the element, a delegated listener is not.
+    """
+    signed_in()
+    _serve(page, _post(id="p1", platform="instagram"))
+    open_section(page, "queue")
+    page.locator("#queue-list .ce-card").first.click()
+
+    doubled = page.evaluate(
+        "() => [...document.querySelectorAll('[data-action],[data-change],[data-input]')]"
+        "        .filter(el => el.onclick || el.onchange || el.oninput)"
+        "        .map(el => el.id || el.dataset.action || el.dataset.change)")
+
+    assert doubled == [], doubled

@@ -113,39 +113,39 @@
 <!-- ===== HEADER ===== -->
 <header class="border-b sticky top-0 z-30" style="border-color:var(--border);background:var(--bg)">
   <div class="max-w-7xl mx-auto px-5 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-    <div class="flex items-center gap-2 cursor-pointer" onclick="goHome()" title="Home — new post">
+    <div class="flex items-center gap-2 cursor-pointer" data-action="go-home" title="Home — new post">
       <span class="text-lg" style="color:var(--accent)"></span>
       <span class="font-bold tracking-tight">Content Engine</span>
     </div>
     <div class="ml-auto flex items-center gap-2 flex-wrap justify-end">
-      <button id="cost-badge" onclick="showCostPopover()" class="hidden ce-card px-3 py-1 text-xs" title="LLM spend today (click for details)">$0.00</button>
+      <button id="cost-badge" data-action="show-cost-popover" class="hidden ce-card px-3 py-1 text-xs" title="LLM spend today (click for details)">$0.00</button>
       <!-- One menu instead of three separate dropdowns in the header. The brand
            switcher, the product switcher and the setup guide were each their own
            control competing for the same corner; the UX document names exactly
            that as the problem. -->
       <div class="relative">
-        <button id="avatar-btn" onclick="toggleAvatarMenu()" class="ce-card px-3 py-1 text-xs flex items-center gap-2" title="Account" aria-haspopup="true" aria-expanded="false">
+        <button id="avatar-btn" data-action="toggle-avatar-menu" class="ce-card px-3 py-1 text-xs flex items-center gap-2" title="Account" aria-haspopup="true" aria-expanded="false">
           <span id="avatar-initial" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style="background:var(--accent);color:var(--on-accent)">?</span>
           <span id="user-chip" class="hidden sm:inline text-gray-300"></span>
         </button>
         <div id="avatar-menu" class="hidden absolute right-0 mt-2 w-64 ce-card p-2 space-y-1 z-40 shadow-2xl">
           <div id="menu-brand-row" class="hidden px-2 pt-1 pb-2 space-y-1 border-b" style="border-color:var(--border)">
             <div class="text-[10px] uppercase tracking-wide text-gray-500">Active brand</div>
-            <select id="menu-acct-switcher" onchange="onAcctSwitch()" class="ce-input w-full px-2 py-1 text-xs" title="Active brand"></select>
-            <button onclick="closeAvatarMenu(); openBrandsModal()" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs">Manage brands…</button>
+            <select id="menu-acct-switcher" data-change="on-acct-switch" class="ce-input w-full px-2 py-1 text-xs" title="Active brand"></select>
+            <button data-action="menu-brands" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs">Manage brands…</button>
           </div>
           <div id="menu-product-row" class="hidden px-2 py-2 space-y-1 border-b" style="border-color:var(--border)">
             <div class="text-[10px] uppercase tracking-wide text-gray-500">Product</div>
-            <select id="product-switcher" onchange="onProductSwitch()" class="ce-input w-full px-2 py-1 text-xs" title="Switch product">
+            <select id="product-switcher" data-change="on-product-switch" class="ce-input w-full px-2 py-1 text-xs" title="Switch product">
               <option value="creator">Creators</option>
               <option value="business">Business</option>
             </select>
           </div>
-          <button onclick="closeAvatarMenu(); openSettings('profiles')" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Settings</button>
-          <button onclick="closeAvatarMenu(); startOnboarding({restart: true})" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Setup guide</button>
-          <button id="show-all-features" onclick="showAllFeatures()" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs" title="Reveal every feature, including the ones that normally appear later">Show all features</button>
-          <button onclick="closeAvatarMenu(); toggleTheme()" id="theme-toggle" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Light / dark</button>
-          <button id="logout-btn" onclick="logout()" class="hidden ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Log out</button>
+          <button data-action="menu-settings" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Settings</button>
+          <button data-action="menu-setup-guide" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Setup guide</button>
+          <button id="show-all-features" data-action="show-all-features" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs" title="Reveal every feature, including the ones that normally appear later">Show all features</button>
+          <button data-action="menu-theme" id="theme-toggle" class="ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Light / dark</button>
+          <button id="logout-btn" data-action="logout" class="hidden ce-btn-ghost w-full text-left px-2 py-1.5 text-xs">Log out</button>
         </div>
       </div>
     </div>
@@ -160,8 +160,8 @@
     <span class="text-xl" style="color:var(--accent)"></span>
     <span class="font-bold tracking-tight text-lg">Content Engine</span>
     <div class="ml-auto flex gap-2">
-      <button onclick="showAuthScreen('login')" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-200 hover:bg-white/5 transition">Log in</button>
-      <button onclick="showAuthScreen('register')" class="ce-btn px-4 py-2 text-sm">Sign up</button>
+      <button data-action="show-auth-screen" data-arg="login" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-200 hover:bg-white/5 transition">Log in</button>
+      <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-4 py-2 text-sm">Sign up</button>
     </div>
   </header>
 
@@ -175,25 +175,25 @@
     <p class="mt-3 text-gray-400">No account, no API key. One topic or one link.</p>
 
     <div class="mt-6 flex gap-2 justify-center text-sm">
-      <button data-hero-mode="topic" onclick="setHeroMode('topic')"
+      <button data-hero-mode="topic" data-action="set-hero-mode" data-arg="topic"
               class="hero-mode-btn px-4 py-1.5 rounded-lg font-semibold border-2 border-purple-500 bg-purple-900 text-white">A topic</button>
-      <button data-hero-mode="link" onclick="setHeroMode('link')"
+      <button data-hero-mode="link" data-action="set-hero-mode" data-arg="link"
               class="hero-mode-btn px-4 py-1.5 rounded-lg font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">A link</button>
     </div>
 
     <div class="mt-4 flex flex-col sm:flex-row gap-2">
       <input id="hero-input" type="text" class="ce-input flex-1 px-4 py-3"
              placeholder="Sourdough starters for beginners"
-             onkeydown="if (event.key === 'Enter') runHeroPost()" />
-      <button id="hero-run" onclick="runHeroPost()" class="ce-btn px-6 py-3 text-sm">Write it</button>
+             />
+      <button id="hero-run" data-action="run-hero-post" class="ce-btn px-6 py-3 text-sm">Write it</button>
     </div>
 
     <!-- Three of them, because the hardest part of an empty field is the first
          idea. -->
     <div id="hero-examples" class="mt-3 flex flex-wrap justify-center gap-2 text-xs">
-      <button onclick="runHeroExample(this)" class="ce-card px-3 py-1.5">Sourdough starters for beginners</button>
-      <button onclick="runHeroExample(this)" class="ce-card px-3 py-1.5">Why B2B SaaS demos fail</button>
-      <button onclick="runHeroExample(this)" class="ce-card px-3 py-1.5">Three money habits for your twenties</button>
+      <button data-action="run-hero-example" class="ce-card px-3 py-1.5">Sourdough starters for beginners</button>
+      <button data-action="run-hero-example" class="ce-card px-3 py-1.5">Why B2B SaaS demos fail</button>
+      <button data-action="run-hero-example" class="ce-card px-3 py-1.5">Three money habits for your twenties</button>
     </div>
 
     <p id="hero-status" class="hidden mt-4 text-sm" style="color:var(--muted)"></p>
@@ -205,7 +205,7 @@
       <p class="mt-2 text-sm text-gray-400">
         An account is free and comes with 5 more — still no API key needed.
       </p>
-      <button id="hero-gate-signup" onclick="showAuthScreen('register')"
+      <button id="hero-gate-signup" data-action="show-auth-screen" data-arg="register"
               class="ce-btn px-6 py-2.5 text-sm mt-4">Create a free account →</button>
     </div>
 
@@ -221,8 +221,8 @@
         <div id="hero-caption" class="mt-2 text-sm whitespace-pre-line text-gray-300"></div>
         <div id="hero-hashtags" class="mt-2 text-sm" style="color:var(--accent)"></div>
         <div class="mt-4 flex flex-wrap gap-2">
-          <button id="hero-download" onclick="downloadHeroImage()" class="ce-btn-ghost px-4 py-2 text-sm">Download the picture</button>
-          <button onclick="resetHero()" class="ce-btn-ghost px-4 py-2 text-sm">Try another</button>
+          <button id="hero-download" data-action="download-hero-image" class="ce-btn-ghost px-4 py-2 text-sm">Download the picture</button>
+          <button data-action="reset-hero" class="ce-btn-ghost px-4 py-2 text-sm">Try another</button>
         </div>
       </div>
       </div>
@@ -232,8 +232,8 @@
   <!-- Two doors, one engine: Creators vs Business -->
   <div class="max-w-3xl mx-auto px-6 pt-4">
     <div class="flex gap-2 justify-center text-sm">
-      <button id="ltab-creator" onclick="setLandingTab('creator')" class="px-5 py-2 rounded-lg font-semibold border-2 border-purple-500 bg-purple-900 text-white">For Creators</button>
-      <button id="ltab-business" onclick="setLandingTab('business')" class="px-5 py-2 rounded-lg font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">For Business</button>
+      <button id="ltab-creator" data-action="set-landing-tab" data-arg="creator" class="px-5 py-2 rounded-lg font-semibold border-2 border-purple-500 bg-purple-900 text-white">For Creators</button>
+      <button id="ltab-business" data-action="set-landing-tab" data-arg="business" class="px-5 py-2 rounded-lg font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">For Business</button>
     </div>
   </div>
 
@@ -244,8 +244,8 @@
     <p class="mt-5 text-lg" style="color:var(--accent)">AI writes and publishes your content for you.</p>
     <p class="mt-4 text-gray-400 leading-relaxed max-w-2xl mx-auto">Give it a topic. Content Engine writes the copy, designs your branded slides, and posts to Instagram and X — 24/7, even when your computer is off.</p>
     <div class="mt-8 flex flex-wrap justify-center gap-3">
-      <button onclick="showAuthScreen('register')" class="ce-btn px-6 py-3 text-sm">Start free →</button>
-      <button onclick="showAuthScreen('login')" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
+      <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-6 py-3 text-sm">Start free →</button>
+      <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
     </div>
     <div class="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-400">
       <span>◆ Instagram &amp; X</span><span>◆ Your own API keys</span><span>◆ Encrypted &amp; isolated</span>
@@ -290,7 +290,7 @@
   <section class="max-w-3xl mx-auto px-6 py-14 text-center">
     <h2 class="text-2xl sm:text-3xl font-bold">Start creating in minutes.</h2>
     <p class="mt-3 text-gray-400">Free to start. Bring your own keys. Publish everywhere.</p>
-    <button onclick="showAuthScreen('register')" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
+    <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
   </section>
   </div><!-- /landing-creator -->
 
@@ -301,8 +301,8 @@
       <p class="mt-5 text-lg" style="color:var(--accent)">Sources → newsworthy events → human-approved drafts.</p>
       <p class="mt-4 text-gray-400 leading-relaxed max-w-2xl mx-auto">Point Content Engine at your public sources — release notes, changelogs, blogs. It spots what's worth posting, drafts it in your brand voice, and keeps a person in the loop before anything goes out.</p>
       <div class="mt-8 flex flex-wrap justify-center gap-3">
-        <button onclick="showAuthScreen('register','business')" class="ce-btn px-6 py-3 text-sm">Start free →</button>
-        <button onclick="showAuthScreen('login')" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
+        <button data-action="auth-register-business" class="ce-btn px-6 py-3 text-sm">Start free →</button>
+        <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
       </div>
       <div class="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-400">
         <span>◆ Public links only</span><span>◆ Human approval</span><span>◆ Full audit journal</span>
@@ -327,7 +327,7 @@
         <div class="text-sm text-gray-400 text-center mb-4">Paste a public link — a GitHub repo, an RSS feed, or a changelog page. You'll get draft starters from your latest updates (draft starters from your public data, not posts from you).</div>
         <div class="flex flex-col sm:flex-row gap-2">
           <input id="demo-url" type="url" placeholder="https://github.com/your-org/your-repo" class="ce-input flex-1 px-4 py-3" />
-          <button id="demo-run" onclick="runDemo()" class="ce-btn px-5 py-3 text-sm">Try it</button>
+          <button id="demo-run" data-action="run-demo" class="ce-btn px-5 py-3 text-sm">Try it</button>
         </div>
         <p id="demo-status" class="hidden text-sm text-gray-400 mt-3"></p>
         <div id="demo-results" class="mt-4 space-y-4 text-left"></div>
@@ -338,7 +338,7 @@
     <section class="max-w-3xl mx-auto px-6 py-14 text-center">
       <h2 class="text-2xl sm:text-3xl font-bold">Never miss a moment worth posting.</h2>
       <p class="mt-3 text-gray-400">Free to start. Public sources only. A person approves everything.</p>
-      <button onclick="showAuthScreen('register','business')" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
+      <button data-action="auth-register-business" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
     </section>
   </div><!-- /landing-business -->
 
@@ -367,14 +367,14 @@
       <div class="text-sm text-gray-400" id="auth-subhead">Log in to your workspace.</div>
     </div>
     <div class="flex gap-2 text-sm">
-      <button id="auth-tab-login" onclick="switchAuthTab('login')" class="flex-1 rounded-lg py-2 font-semibold border-2 border-purple-500 bg-purple-900 text-white">Log in</button>
-      <button id="auth-tab-register" onclick="switchAuthTab('register')" class="flex-1 rounded-lg py-2 font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">Sign up</button>
+      <button id="auth-tab-login" data-action="switch-auth-tab" data-arg="login" class="flex-1 rounded-lg py-2 font-semibold border-2 border-purple-500 bg-purple-900 text-white">Log in</button>
+      <button id="auth-tab-register" data-action="switch-auth-tab" data-arg="register" class="flex-1 rounded-lg py-2 font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">Sign up</button>
     </div>
     <div id="auth-accounttype-row" class="hidden space-y-1">
       <div class="text-xs text-gray-400">I'm signing up as</div>
       <div class="flex gap-2 text-sm">
-        <button id="atype-creator" onclick="setSignupAccountType('creator')" class="flex-1 rounded-lg py-2 font-semibold border-2 border-purple-500 bg-purple-900 text-white">Creator</button>
-        <button id="atype-business" onclick="setSignupAccountType('business')" class="flex-1 rounded-lg py-2 font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">Business</button>
+        <button id="atype-creator" data-action="set-signup-account-type" data-arg="creator" class="flex-1 rounded-lg py-2 font-semibold border-2 border-purple-500 bg-purple-900 text-white">Creator</button>
+        <button id="atype-business" data-action="set-signup-account-type" data-arg="business" class="flex-1 rounded-lg py-2 font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">Business</button>
       </div>
     </div>
     <input id="auth-email" type="email" placeholder="you@brand.com" autocomplete="username"
@@ -382,9 +382,9 @@
     <input id="auth-password" type="password" placeholder="••••••••" autocomplete="current-password"
       class="ce-input w-full px-4 py-3" />
     <p id="auth-error" class="hidden text-red-400 text-xs"></p>
-    <button id="auth-submit" onclick="submitAuth()" class="ce-btn w-full py-3">Log in</button>
-    <button id="auth-forgot-link" onclick="showForgotScreen()" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">Forgot password?</button>
-    <button onclick="backToHome()" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to home</button>
+    <button id="auth-submit" data-action="submit-auth" class="ce-btn w-full py-3">Log in</button>
+    <button id="auth-forgot-link" data-action="show-forgot-screen" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">Forgot password?</button>
+    <button data-action="back-to-home" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to home</button>
     <p class="text-[11px] text-gray-500 text-center leading-snug">By continuing you agree to our
       <a href="/terms" class="underline hover:text-gray-300">Terms</a> and
       <a href="/privacy" class="underline hover:text-gray-300">Privacy Policy</a>.</p>
@@ -399,8 +399,8 @@
     <input id="forgot-email" type="email" placeholder="you@brand.com" autocomplete="username"
       class="ce-input w-full px-4 py-3" />
     <p id="forgot-msg" class="hidden text-xs"></p>
-    <button onclick="submitForgot()" class="ce-btn w-full py-3">Send reset link</button>
-    <button onclick="showAuthScreen('login')" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to login</button>
+    <button data-action="submit-forgot" class="ce-btn w-full py-3">Send reset link</button>
+    <button data-action="show-auth-screen" data-arg="login" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to login</button>
   </div>
 </div>
 
@@ -412,15 +412,15 @@
     <input id="reset-password" type="password" placeholder="••••••••" autocomplete="new-password"
       class="ce-input w-full px-4 py-3" />
     <p id="reset-msg" class="hidden text-xs"></p>
-    <button onclick="submitReset()" class="ce-btn w-full py-3">Set new password</button>
-    <button onclick="backToHome()" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to home</button>
+    <button data-action="submit-reset" class="ce-btn w-full py-3">Set new password</button>
+    <button data-action="back-to-home" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to home</button>
   </div>
 </div>
 
 <!-- ===== EMAIL-VERIFY BANNER (shown in-app when unverified) ===== -->
 <div id="verify-banner" class="hidden fixed top-0 inset-x-0 z-40 bg-yellow-900/90 border-b border-yellow-700 text-yellow-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
   <span>Please verify your email to enable publishing.</span>
-  <button onclick="resendVerification()" class="underline font-semibold hover:text-white shrink-0">Resend email</button>
+  <button data-action="resend-verification" class="underline font-semibold hover:text-white shrink-0">Resend email</button>
 </div>
 
 <!-- ===== FAILED-PUBLISH BANNER ===== -->
@@ -429,7 +429,7 @@
      place a user finds out that a post never went out. -->
 <div id="failed-banner" class="hidden fixed inset-x-0 z-40 bg-red-900/90 border-b border-red-700 text-red-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
   <span id="failed-banner-text">Some posts failed to publish.</span>
-  <button onclick="showFailedPosts()" class="underline font-semibold hover:text-white shrink-0">Show them</button>
+  <button data-action="show-failed-posts" class="underline font-semibold hover:text-white shrink-0">Show them</button>
 </div>
 
 <!-- ===== TOKEN-EXPIRY BANNER ===== -->
@@ -438,7 +438,7 @@
      because unless the user pressed Renew, the date is an estimate. -->
 <div id="expiry-banner" class="hidden fixed inset-x-0 z-40 bg-yellow-900/90 border-b border-yellow-700 text-yellow-100 text-xs sm:text-sm px-3 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center">
   <span id="expiry-banner-text"></span>
-  <button onclick="openSettings('connections')" class="underline font-semibold hover:text-white shrink-0">Open Connections</button>
+  <button data-action="open-settings" data-arg="connections" class="underline font-semibold hover:text-white shrink-0">Open Connections</button>
 </div>
 
 <!-- ===== MISSING-KEY ONBOARDING MODAL ===== -->
@@ -447,8 +447,8 @@
     <div class="text-lg font-semibold" id="need-key-title">Add your API key</div>
     <div class="text-sm text-gray-400" id="need-key-msg"></div>
     <div class="flex gap-2 pt-1">
-      <button onclick="gotoNeedKey()" class="ce-btn flex-1 py-2 text-sm">Open settings</button>
-      <button onclick="closeNeedKey()" class="ce-btn-ghost flex-1 py-2 text-sm">Cancel</button>
+      <button data-action="goto-need-key" class="ce-btn flex-1 py-2 text-sm">Open settings</button>
+      <button data-action="close-need-key" class="ce-btn-ghost flex-1 py-2 text-sm">Cancel</button>
     </div>
   </div>
 </div>
@@ -463,7 +463,7 @@
   <div class="max-w-xl mx-auto px-6 py-12 space-y-6">
     <div class="flex items-center justify-between">
       <div class="text-sm" style="color:var(--muted)" id="onb-progress"></div>
-      <button id="onb-later" onclick="closeOnboarding('later')" class="text-xs" style="color:var(--muted)">I'll do this later</button>
+      <button id="onb-later" data-action="close-onboarding" data-arg="later" class="text-xs" style="color:var(--muted)">I'll do this later</button>
     </div>
 
     <!-- 1. what do you run -->
@@ -471,15 +471,15 @@
       <h1 class="text-2xl font-semibold">What are you posting for?</h1>
       <p class="text-sm" style="color:var(--muted)">This decides which screens you get. You can change it later in Settings.</p>
       <div class="grid gap-3">
-        <button data-onb-type="creator" onclick="onbPickType('creator')" class="ce-card p-4 text-left hover:opacity-90">
+        <button data-onb-type="creator" data-action="onb-pick-type" data-arg="creator" class="ce-card p-4 text-left hover:opacity-90">
           <div class="font-semibold">My own channel</div>
           <div class="text-sm" style="color:var(--muted)">You write, you post. The composer and the calendar.</div>
         </button>
-        <button data-onb-type="business" onclick="onbPickType('business')" class="ce-card p-4 text-left hover:opacity-90">
+        <button data-onb-type="business" data-action="onb-pick-type" data-arg="business" class="ce-card p-4 text-left hover:opacity-90">
           <div class="font-semibold">A business</div>
           <div class="text-sm" style="color:var(--muted)">We watch your sources and draft from what happens. A person approves.</div>
         </button>
-        <button data-onb-type="agency" onclick="onbPickType('agency')" class="ce-card p-4 text-left hover:opacity-90">
+        <button data-onb-type="agency" data-action="onb-pick-type" data-arg="agency" class="ce-card p-4 text-left hover:opacity-90">
           <div class="font-semibold">Clients' accounts</div>
           <div class="text-sm" style="color:var(--muted)">Several brands, one login, plus a Team screen.</div>
         </button>
@@ -495,9 +495,9 @@
       <div id="onb-site-row" class="space-y-3">
         <div class="flex flex-col sm:flex-row gap-2">
           <input id="onb-site" type="url" placeholder="https://your-site.com" class="ce-input flex-1 px-4 py-3" />
-          <button id="onb-read-site" onclick="onbExtract()" class="ce-btn px-5 py-3">Read it</button>
+          <button id="onb-read-site" data-action="onb-extract" class="ce-btn px-5 py-3">Read it</button>
         </div>
-        <button id="onb-no-site" onclick="onbNoSite()" class="text-sm" style="color:var(--muted)">I don't have a website</button>
+        <button id="onb-no-site" data-action="onb-no-site" class="text-sm" style="color:var(--muted)">I don't have a website</button>
       </div>
 
       <!-- What the site said about itself, shown as what it is. It used to be
@@ -534,7 +534,7 @@
         </div>
       </div>
       <p id="onb-brand-status" class="hidden text-sm"></p>
-      <button id="onb-continue-brand" onclick="onbSaveBrand()" class="hidden ce-btn w-full py-3">Continue</button>
+      <button id="onb-continue-brand" data-action="onb-save-brand" class="hidden ce-btn w-full py-3">Continue</button>
     </section>
 
     <!-- 3. one network -->
@@ -542,16 +542,16 @@
       <h1 class="text-2xl font-semibold">Where does it go first?</h1>
       <p class="text-sm" style="color:var(--muted)">Pick one. The same idea can be written for the other later, from the post itself.</p>
       <div class="grid gap-3">
-        <button data-onb-net="instagram" onclick="onbPickNetwork('instagram')" class="ce-card p-4 text-left hover:opacity-90">
+        <button data-onb-net="instagram" data-action="onb-pick-network" data-arg="instagram" class="ce-card p-4 text-left hover:opacity-90">
           <div class="font-semibold">&#128248; Instagram</div>
           <div class="text-sm" style="color:var(--muted)">Carousels, single images, Reels.</div>
         </button>
-        <button data-onb-net="x" onclick="onbPickNetwork('x')" class="ce-card p-4 text-left hover:opacity-90">
+        <button data-onb-net="x" data-action="onb-pick-network" data-arg="x" class="ce-card p-4 text-left hover:opacity-90">
           <div class="font-semibold">&#120143; X</div>
           <div class="text-sm" style="color:var(--muted)">Short posts and threads.</div>
         </button>
       </div>
-      <button id="onb-skip-net" onclick="onbSkipNetwork()" class="w-full text-sm py-2" style="color:var(--muted)">I'll decide later</button>
+      <button id="onb-skip-net" data-action="onb-skip-network" class="w-full text-sm py-2" style="color:var(--muted)">I'll decide later</button>
     </section>
 
     <!-- 4. the first post. Filled in 5.5; the shell is here so the resume key
@@ -560,10 +560,10 @@
       <h1 class="text-2xl font-semibold">Your first post</h1>
       <div id="onb-post" class="text-sm space-y-3" style="color:var(--muted)">Ready when you are.</div>
       <div class="flex gap-2">
-        <button id="onb-copy" onclick="onbCopyPost()" class="hidden ce-btn-ghost px-4 py-3">Copy</button>
+        <button id="onb-copy" data-action="onb-copy-post" class="hidden ce-btn-ghost px-4 py-3">Copy</button>
         <!-- Always enabled, in every outcome. A setup screen whose last button
              depends on a model answering is a dead end on the day it doesn't. -->
-        <button id="onb-finish" onclick="onbFinish()" class="ce-btn flex-1 py-3">Start creating</button>
+        <button id="onb-finish" data-action="onb-finish" class="ce-btn flex-1 py-3">Start creating</button>
       </div>
     </section>
   </div>
@@ -580,10 +580,10 @@
        became this: the two account types share the shell and differ in what is
        inside it, which is the whole of UX phase 3. -->
   <div id="section-nav" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
-    <button data-section="create" onclick="setSection('create')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
-    <button data-section="calendar" onclick="setSection('calendar')" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Calendar</button>
-    <button data-section="queue" onclick="setSection('queue')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Queue</button>
-    <button data-section="results" onclick="setSection('results')" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Results</button>
+    <button data-section="create" data-action="set-section" data-arg="create" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
+    <button data-section="calendar" data-action="set-section" data-arg="calendar" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Calendar</button>
+    <button data-section="queue" data-action="set-section" data-arg="queue" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Queue</button>
+    <button data-section="results" data-action="set-section" data-arg="results" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Results</button>
   </div>
 
   <!-- ===== CREATE VIEW (wizard) ===== -->
@@ -594,10 +594,10 @@
        something — so they live here, and the library grid under each generate
        form IS the library. -->
   <div id="create-modes" class="flex gap-1">
-    <button data-create-mode="leads" onclick="setCreateMode('leads')" class="business-only mode-btn px-3 py-1.5 rounded-lg text-sm">Leads</button>
-    <button data-create-mode="post" onclick="setCreateMode('post')" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Post</button>
-    <button data-create-mode="photo" onclick="setCreateMode('photo')" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Photo</button>
-    <button data-create-mode="video" onclick="setCreateMode('video')" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Video</button>
+    <button data-create-mode="leads" data-action="set-create-mode" data-arg="leads" class="business-only mode-btn px-3 py-1.5 rounded-lg text-sm">Leads</button>
+    <button data-create-mode="post" data-action="set-create-mode" data-arg="post" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Post</button>
+    <button data-create-mode="photo" data-action="set-create-mode" data-arg="photo" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Photo</button>
+    <button data-create-mode="video" data-action="set-create-mode" data-arg="video" class="creator-only mode-btn px-3 py-1.5 rounded-lg text-sm">Video</button>
   </div>
 
   <!-- For a Business account this IS Create: a post starts from a lead, never
@@ -607,7 +607,7 @@
       <div class="flex items-center gap-2 flex-wrap">
         <h2 class="text-lg font-semibold" style="color:var(--accent)">Leads</h2>
         <span class="text-xs text-gray-400">Newsworthy updates from your sources. Pick one to draft a post.</span>
-        <button id="biz-digest-btn" onclick="makeDigest()" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto hidden">Make digest from selected</button>
+        <button id="biz-digest-btn" data-action="make-digest" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto hidden">Make digest from selected</button>
       </div>
       <div id="biz-leads-list" class="mt-4 space-y-3">Loading…</div>
     </div>
@@ -620,11 +620,11 @@
       <div class="mt-4 flex flex-col sm:flex-row gap-2">
         <input id="lib-img-prompt" type="text" placeholder="Describe the image you want"
           class="ce-input flex-1 px-4 py-3" />
-        <button id="lib-img-generate-btn" onclick="generateLibraryImage()" class="ce-btn px-5 py-3 text-sm whitespace-nowrap">Generate</button>
+        <button id="lib-img-generate-btn" data-action="generate-library-image" class="ce-btn px-5 py-3 text-sm whitespace-nowrap">Generate</button>
         <label class="ce-btn-ghost px-5 py-3 text-sm whitespace-nowrap cursor-pointer text-center">
           Upload
           <input id="lib-img-upload-input" type="file" multiple accept="image/jpeg,image/png,image/webp"
-            class="hidden" onchange="uploadToLibrary(event, 'image')" />
+            class="hidden" data-change="library-upload-image" />
         </label>
       </div>
       <p id="lib-img-status" class="hidden text-sm text-gray-400 mt-2"></p>
@@ -641,11 +641,11 @@
         <div class="flex flex-col sm:flex-row gap-2">
           <textarea id="lib-vid-prompt" rows="2" placeholder="Describe the video you want"
             class="ce-input flex-1 px-4 py-3"></textarea>
-          <button id="lib-vid-idea-btn" onclick="suggestVideoIdea()" class="ce-btn-ghost px-4 py-3 text-sm whitespace-nowrap">✨ Suggest an idea</button>
+          <button id="lib-vid-idea-btn" data-action="suggest-video-idea" class="ce-btn-ghost px-4 py-3 text-sm whitespace-nowrap">✨ Suggest an idea</button>
         </div>
         <div class="flex flex-wrap gap-2 items-center text-sm">
-          <select id="lib-vid-model" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs"></select>
-          <select id="lib-vid-duration" onchange="updateVideoCostEstimate()" class="ce-input px-2 py-1.5 text-xs">
+          <select id="lib-vid-model" data-change="update-video-cost-estimate" class="ce-input px-2 py-1.5 text-xs"></select>
+          <select id="lib-vid-duration" data-change="update-video-cost-estimate" class="ce-input px-2 py-1.5 text-xs">
             <option value="5">5s</option>
             <option value="10">10s</option>
           </select>
@@ -654,14 +654,14 @@
             <option value="16:9">16:9</option>
             <option value="1:1">1:1</option>
           </select>
-          <button id="lib-vid-seed-btn" onclick="openLibraryPicker('video-seed')" class="ce-btn-ghost px-3 py-1.5 text-xs">Animate a photo</button>
+          <button id="lib-vid-seed-btn" data-action="open-library-picker" data-arg="video-seed" class="ce-btn-ghost px-3 py-1.5 text-xs">Animate a photo</button>
           <span id="lib-vid-seed-preview" class="hidden text-xs text-gray-400 flex items-center gap-1">
             <img id="lib-vid-seed-thumb" class="w-8 h-8 rounded object-cover" alt="Seed photo" />
-            <button onclick="clearVideoSeed()" class="text-gray-500 hover:text-gray-300">✕</button>
+            <button data-action="clear-video-seed" class="text-gray-500 hover:text-gray-300">✕</button>
           </span>
         </div>
         <div class="flex items-center gap-3">
-          <button id="lib-vid-generate-btn" onclick="generateLibraryVideo()" class="ce-btn px-5 py-2.5 text-sm">Generate</button>
+          <button id="lib-vid-generate-btn" data-action="generate-library-video" class="ce-btn px-5 py-2.5 text-sm">Generate</button>
           <span id="lib-vid-cost" class="text-xs text-gray-500"></span>
         </div>
       </div>
@@ -699,14 +699,14 @@
          the thread choice is one click away rather than buried in Settings. -->
     <details id="configure-row" class="rounded-xl border border-gray-800">
       <summary id="configure-summary" class="cursor-pointer select-none px-4 py-2 text-sm text-gray-400"></summary>
-      <div class="px-4 pb-4 pt-1 space-y-5" oninput="updateConfigureSummary()" onchange="updateConfigureSummary()">
+      <div class="px-4 pb-4 pt-1 space-y-5" data-input="update-configure-summary" data-change="update-configure-summary">
 
     <div>
       <label class="block text-sm text-gray-400 mb-1">Post to</label>
       <div class="flex gap-2" id="net-toggle">
-        <button type="button" onclick="setNetwork('instagram')" id="net-toggle-ig"
+        <button type="button" data-action="set-network" data-arg="instagram" id="net-toggle-ig"
           class="flex-1 rounded-xl py-2 text-sm font-medium border border-gray-700 bg-gray-800 text-gray-300 transition">📸 Instagram</button>
-        <button type="button" onclick="setNetwork('x')" id="net-toggle-x"
+        <button type="button" data-action="set-network" data-arg="x" id="net-toggle-x"
           class="flex-1 rounded-xl py-2 text-sm font-medium border border-gray-700 bg-gray-800 text-gray-300 transition">𝕏 X</button>
       </div>
     </div>
@@ -806,7 +806,7 @@
       </div>
     </details>
 
-    <button onclick="goStep(2)" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
+    <button data-action="go-step" data-arg="2" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
       Next →
     </button>
   </section>
@@ -819,9 +819,9 @@
     <div id="preset-row" class="hidden flex flex-wrap items-center gap-2 bg-gray-800/60 rounded-xl px-3 py-2">
       <span class="text-xs text-gray-400">Preset</span>
       <select id="preset-select" class="ce-input px-2 py-1 text-sm min-w-[10rem]"></select>
-      <button onclick="applySelectedPreset()" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
-      <button onclick="saveCurrentPreset()" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
-      <button onclick="deleteSelectedPreset()" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
+      <button data-action="apply-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
+      <button data-action="save-current-preset" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
+      <button data-action="delete-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
       <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
     </div>
 
@@ -855,7 +855,7 @@
             Choose photos
             <input id="own-photos-input" type="file" multiple
               accept="image/jpeg,image/png,image/webp" class="hidden"
-              onchange="addOwnPhotos(event)" />
+              data-change="add-own-photos" />
           </label>
           <span id="own-photos-count" class="text-xs text-gray-400"></span>
         </div>
@@ -901,10 +901,10 @@
     </details>
 
     <div class="flex gap-3">
-      <button onclick="goStep(1)" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-3 font-semibold">
+      <button data-action="go-step" data-arg="1" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-3 font-semibold">
         ← Back
       </button>
-      <button id="generate-btn" onclick="generatePost()" class="flex-1 bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
+      <button id="generate-btn" data-action="generate-post" class="flex-1 bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
         Generate
       </button>
     </div>
@@ -925,7 +925,7 @@
     <ul id="progress-list" class="w-full max-w-xs space-y-1 text-sm text-gray-300"></ul>
     <div id="gen-error" class="hidden w-full bg-red-950 border border-red-700 rounded-xl p-4 text-sm text-red-300 text-center space-y-3">
       <p id="gen-error-msg"></p>
-      <button onclick="goStep(2)" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-white text-xs">← Back to settings</button>
+      <button data-action="go-step" data-arg="2" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-white text-xs">← Back to settings</button>
     </div>
   </section>
 
@@ -938,8 +938,8 @@
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold text-purple-300">Preview & Edit</h2>
       <div class="flex items-center gap-2">
-        <button onclick="showStep(2)" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">← Back</button>
-        <button onclick="generatePost()" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">Regenerate</button>
+        <button data-action="show-step" data-arg="2" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">← Back</button>
+        <button data-action="generate-post" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">Regenerate</button>
       </div>
     </div>
 
@@ -965,8 +965,8 @@
         <label id="caption-label" class="block text-sm text-gray-400">Caption</label>
         <div class="flex items-center gap-3">
           <span id="caption-count" class="hidden text-xs font-mono text-gray-500"></span>
-          <button id="split-thread-btn" onclick="splitIntoThread()" class="hidden text-xs text-purple-400 hover:text-purple-300">Split into thread</button>
-          <button onclick="showVariations('caption')" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
+          <button id="split-thread-btn" data-action="split-into-thread" class="hidden text-xs text-purple-400 hover:text-purple-300">Split into thread</button>
+          <button data-action="show-variations" data-arg="caption" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
         </div>
       </div>
       <textarea id="caption-edit" rows="5"
@@ -978,14 +978,14 @@
       <div class="flex items-center justify-between mb-2">
         <label class="block text-sm text-gray-400">Hashtags</label>
         <div class="flex gap-3">
-          <button onclick="showVariations('hashtags')" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
+          <button data-action="show-variations" data-arg="hashtags" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
         </div>
       </div>
       <div id="hashtag-container" class="flex flex-wrap gap-2 p-3 bg-gray-800 rounded-xl min-h-[44px]"></div>
       <div class="flex gap-2 mt-2">
         <input id="hashtag-input" type="text" placeholder="#addhashtag" aria-label="Add a hashtag"
           class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
-        <button onclick="addHashtag()" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 text-sm transition">+ Add</button>
+        <button data-action="add-hashtag" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 text-sm transition">+ Add</button>
       </div>
     </div>
 
@@ -993,7 +993,7 @@
     <div id="seo-group">
       <div class="flex items-center justify-between mb-2">
         <label class="block text-sm text-gray-400">SEO keywords <span class="text-gray-600">(Instagram search)</span></label>
-        <button onclick="showVariations('seo_keywords')" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
+        <button data-action="show-variations" data-arg="seo_keywords" class="text-xs text-purple-400 hover:text-purple-300">Variations</button>
       </div>
       <div id="seo-container" class="flex flex-wrap gap-2 p-3 bg-gray-800 rounded-xl min-h-[44px]"></div>
     </div>
@@ -1003,7 +1003,7 @@
       <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl">
         <h3 id="variations-title" class="text-lg font-semibold text-purple-300">Variations</h3>
         <div id="variations-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
-        <button onclick="closeVariations()" class="w-full bg-gray-700 hover:bg-gray-600 rounded-lg py-2 text-sm">Close</button>
+        <button data-action="close-variations" class="w-full bg-gray-700 hover:bg-gray-600 rounded-lg py-2 text-sm">Close</button>
       </div>
     </div>
 
@@ -1017,10 +1017,10 @@
     </div>
 
     <div class="flex gap-2">
-      <button id="save-caption-btn" onclick="saveCaption()" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-2.5 text-sm font-semibold">
+      <button id="save-caption-btn" data-action="save-caption" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-2.5 text-sm font-semibold">
         Save edits
       </button>
-      <button id="undo-btn" onclick="undoEdit()" class="hidden bg-gray-800 hover:bg-gray-700 transition rounded-xl px-4 py-2.5 text-sm" title="Undo last saved edit" aria-label="Undo last saved edit">Undo</button>
+      <button id="undo-btn" data-action="undo-edit" class="hidden bg-gray-800 hover:bg-gray-700 transition rounded-xl px-4 py-2.5 text-sm" title="Undo last saved edit" aria-label="Undo last saved edit">Undo</button>
     </div>
 
     <!-- Offered once, the first time somebody rewrites what the AI wrote. -->
@@ -1028,8 +1028,8 @@
       <p class="text-xs text-purple-100/80 flex-1 min-w-[12rem]">
         You just rewrote our words. Tell us how your brand sounds and every new post starts closer to that.
       </p>
-      <button id="voice-hint-open" onclick="openBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Set the voice</button>
-      <button id="voice-hint-dismiss" onclick="dismissVoiceHint()" class="text-xs text-purple-200/60 hover:text-white underline">Not now</button>
+      <button id="voice-hint-open" data-action="open-brand-voice" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Set the voice</button>
+      <button id="voice-hint-dismiss" data-action="dismiss-voice-hint" class="text-xs text-purple-200/60 hover:text-white underline">Not now</button>
     </div>
 
     <!-- Claims to verify before posting under a brand -->
@@ -1043,8 +1043,8 @@
            deliberate action rather than something we run on every render. -->
       <div class="border-t border-yellow-800/40 pt-2 space-y-2">
         <div class="flex items-center gap-2 flex-wrap">
-          <button id="factcheck-btn" onclick="runFactCheck()" class="bg-yellow-800 hover:bg-yellow-700 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Check against sources</button>
-          <button onclick="toggleFactSource()" class="text-xs underline text-yellow-200/70 hover:text-yellow-100">Paste a source</button>
+          <button id="factcheck-btn" data-action="run-fact-check" class="bg-yellow-800 hover:bg-yellow-700 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Check against sources</button>
+          <button data-action="toggle-fact-source" class="text-xs underline text-yellow-200/70 hover:text-yellow-100">Paste a source</button>
         </div>
         <textarea id="factcheck-source" rows="4" maxlength="20000"
           class="hidden ce-input w-full px-3 py-2 text-xs"
@@ -1073,7 +1073,7 @@
     <div id="performance-panel" class="hidden bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold text-green-300">Performance</h3>
-        <button onclick="refreshInsights()" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1 text-xs font-semibold">Refresh</button>
+        <button data-action="refresh-insights" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1 text-xs font-semibold">Refresh</button>
       </div>
       <div id="insights-numbers" class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs"></div>
     </div>
@@ -1087,8 +1087,8 @@
       <div class="flex gap-2">
         <input id="schedule-dt" type="datetime-local" aria-label="Schedule date and time"
           class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500" />
-        <button id="schedule-btn" onclick="schedulePost()" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Schedule</button>
-        <button onclick="unschedulePost()" id="unschedule-btn" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-3 py-2 text-sm">Cancel</button>
+        <button id="schedule-btn" data-action="schedule-post" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Schedule</button>
+        <button data-action="unschedule-post" id="unschedule-btn" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-3 py-2 text-sm">Cancel</button>
       </div>
     </div>
 
@@ -1099,13 +1099,13 @@
       <div class="flex items-center justify-between">
         <label class="text-sm font-semibold text-purple-300">Turn this post into a video</label>
         <span class="flex gap-2">
-          <button onclick="makeReel()" id="make-reel-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-1.5 text-sm font-semibold">Make Reel</button>
-          <button onclick="openLibraryPicker('reel')" class="ce-btn-ghost rounded-lg px-3 py-1.5 text-sm">From library</button>
+          <button data-action="make-reel" id="make-reel-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-1.5 text-sm font-semibold">Make Reel</button>
+          <button data-action="open-library-picker" data-arg="reel" class="ce-btn-ghost rounded-lg px-3 py-1.5 text-sm">From library</button>
         </span>
       </div>
       <div class="flex items-center gap-2 flex-wrap text-xs">
         <label class="flex items-center gap-1.5 cursor-pointer text-gray-300">
-          <input type="checkbox" id="reel-voiceover" class="accent-purple-600" onchange="document.getElementById('reel-visuals').disabled = !this.checked" />
+          <input type="checkbox" id="reel-voiceover" class="accent-purple-600" data-change="reel-voiceover-toggle" />
           🎙 Add voiceover + subtitles
         </label>
         <input id="reel-voice-id" type="text" placeholder="Voice ID (default: Rachel)"
@@ -1128,17 +1128,20 @@
         <video id="reel-video" controls class="w-48 rounded-lg mx-auto bg-black"></video>
         <div class="flex gap-2 justify-center">
           <a id="reel-download" href="#" download="reel.mp4" class="bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 text-xs">⬇ Download MP4</a>
-          <button id="reel-publish-btn" onclick="publishReelOrToX()" class="ce-btn rounded-lg px-3 py-1.5 text-xs">📤 Publish Reel</button>
+          <!-- No data-action: updateReelPublishButton owns this one and swaps the
+                 handler with the state (publish / view on X / disabled mid-job).
+                 Carrying both would fire twice. -->
+            <button id="reel-publish-btn" class="ce-btn rounded-lg px-3 py-1.5 text-xs">📤 Publish Reel</button>
         </div>
       </div>
     </div>
 
     <!-- Output buttons -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-      <button onclick="exportPost()" class="ce-btn-ghost transition rounded-xl py-4 font-semibold flex items-center justify-center gap-2 text-lg shadow-lg">
+      <button data-action="export-post" class="ce-btn-ghost transition rounded-xl py-4 font-semibold flex items-center justify-center gap-2 text-lg shadow-lg">
         📦 Save ZIP to Downloads
       </button>
-      <button id="publish-btn" onclick="publishPost()" class="ce-btn transition rounded-xl py-4 font-semibold flex items-center justify-center gap-2 text-lg shadow-lg">
+      <button id="publish-btn" data-action="publish-post" class="ce-btn transition rounded-xl py-4 font-semibold flex items-center justify-center gap-2 text-lg shadow-lg">
         📤 Publish now
       </button>
     </div>
@@ -1156,8 +1159,8 @@
        until 3.7, which filed a second pair of glasses as a second place. -->
   <div id="view-calendar" class="hidden space-y-4">
     <div id="calendar-modes" class="flex gap-1">
-      <button data-calendar-mode="calendar" onclick="setCalendarMode('calendar')" class="cal-mode-btn sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">&#9638; Calendar</button>
-      <button data-calendar-mode="profile" onclick="setCalendarMode('profile')" class="cal-mode-btn sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">&#9636; Profile</button>
+      <button data-calendar-mode="calendar" data-action="set-calendar-mode" data-arg="calendar" class="cal-mode-btn sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">&#9638; Calendar</button>
+      <button data-calendar-mode="profile" data-action="set-calendar-mode" data-arg="profile" class="cal-mode-btn sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">&#9636; Profile</button>
     </div>
 
     <div id="calendar-panel" data-calendar-panel="calendar" class="space-y-4">
@@ -1206,23 +1209,23 @@
         </div>
       </div>
 
-      <button id="plan-suggest-btn" onclick="suggestPlan()" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Suggest topics</button>
+      <button id="plan-suggest-btn" data-action="suggest-plan" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Suggest topics</button>
 
       <div id="plan-list" class="hidden space-y-2"></div>
 
       <div id="plan-actions" class="hidden flex flex-wrap items-center gap-3 border-t border-gray-800 pt-3">
-        <button id="plan-add-btn" onclick="addPlanRow()" class="ce-btn-ghost px-3 py-1.5 text-sm">+ Add topic</button>
+        <button id="plan-add-btn" data-action="add-plan-row" class="ce-btn-ghost px-3 py-1.5 text-sm">+ Add topic</button>
         <span id="plan-estimate" class="text-xs text-gray-500"></span>
-        <button id="plan-generate-btn" onclick="runBatch()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold ml-auto">Generate posts</button>
+        <button id="plan-generate-btn" data-action="run-batch" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold ml-auto">Generate posts</button>
       </div>
       <div id="plan-progress" class="hidden text-sm text-gray-300"></div>
     </section>
 
     <section class="bg-gray-900 rounded-2xl p-6 space-y-4">
       <div class="flex items-center justify-between">
-        <button onclick="calShift(-1)" class="bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">← Prev</button>
+        <button data-action="cal-shift" data-arg="-1" class="bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">← Prev</button>
         <h2 id="cal-title" class="text-lg font-semibold text-purple-300">Calendar</h2>
-        <button onclick="calShift(1)" class="bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">Next →</button>
+        <button data-action="cal-shift" data-arg="1" class="bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">Next →</button>
       </div>
       <div class="grid grid-cols-7 gap-1 text-center text-[11px] text-gray-500">
         <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
@@ -1239,8 +1242,8 @@
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-purple-300">▦ Feed grid <span class="text-xs text-gray-500 font-normal">— how your profile feed looks</span></h2>
         <div class="flex gap-1 text-xs">
-          <button data-grid-mode="mobile" onclick="setGridMode('mobile')" class="grid-mode-btn px-2 py-1 rounded-lg border-2 border-purple-500 bg-purple-900 text-white">📱 Mobile</button>
-          <button data-grid-mode="desktop" onclick="setGridMode('desktop')" class="grid-mode-btn px-2 py-1 rounded-lg border-2 border-gray-700 bg-gray-800 text-gray-300">🖥 Desktop</button>
+          <button data-grid-mode="mobile" data-action="set-grid-mode" data-arg="mobile" class="grid-mode-btn px-2 py-1 rounded-lg border-2 border-purple-500 bg-purple-900 text-white">📱 Mobile</button>
+          <button data-grid-mode="desktop" data-action="set-grid-mode" data-arg="desktop" class="grid-mode-btn px-2 py-1 rounded-lg border-2 border-gray-700 bg-gray-800 text-gray-300">🖥 Desktop</button>
         </div>
       </div>
       <div id="grid-frame" class="mx-auto transition-all" style="max-width:430px">
@@ -1248,7 +1251,7 @@
         <!-- The profile grid is the one screen that legitimately wants all of
              history, so it is the one that pages. The button disappears when a
              short page comes back, which is how we know there is no more. -->
-        <button id="grid-more" onclick="loadMoreGrid()"
+        <button id="grid-more" data-action="load-more-grid"
                 class="hidden mt-3 w-full bg-gray-700 hover:bg-gray-600 transition rounded-lg py-2 text-sm">
           Load older posts
         </button>
@@ -1261,12 +1264,12 @@
   <!-- ===== ADMIN VIEW ===== -->
   <div id="view-settings" class="hidden space-y-4">
     <div id="settings-tabs" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
-      <button data-settings-tab="profiles" onclick="openSettings('profiles')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Profiles</button>
-      <button data-settings-tab="connections" onclick="openSettings('connections')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Connections</button>
-      <button data-settings-tab="keys" onclick="openSettings('keys')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Keys &amp; spend</button>
-      <button data-settings-tab="sources" onclick="openSettings('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
-      <button data-settings-tab="rules" onclick="openSettings('rules')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Brand rules</button>
-      <button data-settings-tab="team" onclick="openSettings('team')" style="display:none" class="agency-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Team</button>
+      <button data-settings-tab="profiles" data-action="open-settings" data-arg="profiles" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Profiles</button>
+      <button data-settings-tab="connections" data-action="open-settings" data-arg="connections" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Connections</button>
+      <button data-settings-tab="keys" data-action="open-settings" data-arg="keys" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Keys &amp; spend</button>
+      <button data-settings-tab="sources" data-action="open-settings" data-arg="sources" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
+      <button data-settings-tab="rules" data-action="open-settings" data-arg="rules" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Brand rules</button>
+      <button data-settings-tab="team" data-action="open-settings" data-arg="team" style="display:none" class="agency-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Team</button>
     </div>
 
     <!-- Credentials. One container on two tabs: they are never on screen
@@ -1280,11 +1283,11 @@
       <div id="conn-health" class="hidden space-y-2"></div>
       <div id="keys-form" class="space-y-4"></div>
       <div class="flex items-center gap-3 flex-wrap">
-        <button id="save-keys-btn" onclick="saveCredentials()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save keys</button>
-        <button id="renew-ig-btn" onclick="renewInstagramToken()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">♻️ Renew Instagram token</button>
-        <button id="test-conn-btn" onclick="testPublishConnection()" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test connection</button>
-        <button id="test-x-btn" onclick="testPublishConnection('x')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test 𝕏</button>
-        <button id="test-ig-btn" onclick="testPublishConnection('instagram')" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test Instagram</button>
+        <button id="save-keys-btn" data-action="save-credentials" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save keys</button>
+        <button id="renew-ig-btn" data-action="renew-instagram-token" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">♻️ Renew Instagram token</button>
+        <button id="test-conn-btn" data-action="test-publish-connection" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test connection</button>
+        <button id="test-x-btn" data-action="test-publish-connection" data-arg="x" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test 𝕏</button>
+        <button id="test-ig-btn" data-action="test-publish-connection" data-arg="instagram" class="hidden bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Test Instagram</button>
         <span id="test-conn-result" class="text-sm"></span>
       </div>
     </section>
@@ -1294,7 +1297,7 @@
       <h2 class="text-lg font-semibold text-purple-300">AI models</h2>
       <p class="text-xs text-gray-500">Choose who generates your content and paste that provider's key — you pay them directly. Text and images are independent, so you can mix providers. Not sure? OpenRouter gives every vendor's models with one key.</p>
       <div id="ai-models-form" class="space-y-5"></div>
-      <button id="save-ai-btn" onclick="saveAISettings()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save AI settings</button>
+      <button id="save-ai-btn" data-action="save-a-i-settings" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save AI settings</button>
     </section>
 
     <!-- Brand profile (cloud accounts only) -->
@@ -1316,7 +1319,7 @@
         <input id="profile-brand" type="text" maxlength="120" placeholder="e.g. Crumb & Co"
           class="ce-input w-full px-3 py-2 text-sm" />
       </div>
-      <button id="save-profile-btn" onclick="saveProfile()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save profile</button>
+      <button id="save-profile-btn" data-action="save-profile" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save profile</button>
     </section>
 
     <!-- X plan (cloud accounts only) -->
@@ -1327,7 +1330,7 @@
         <input id="x-premium" type="checkbox" class="w-4 h-4 accent-purple-500" />
         My X account has Premium
       </label>
-      <button id="save-x-btn" onclick="saveXSettings()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save</button>
+      <button id="save-x-btn" data-action="save-x-settings" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save</button>
     </section>
 
     <!-- Slide colours (cloud accounts only) -->
@@ -1356,8 +1359,8 @@
       </div>
       <div id="style-swatches" class="flex flex-wrap gap-2"></div>
       <div class="flex gap-2">
-        <button id="save-style-btn" onclick="saveSlideStyle()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save colours</button>
-        <button onclick="resetSlideStyle()" class="ce-btn-ghost px-4 py-2 text-sm">Reset to default</button>
+        <button id="save-style-btn" data-action="save-slide-style" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save colours</button>
+        <button data-action="reset-slide-style" class="ce-btn-ghost px-4 py-2 text-sm">Reset to default</button>
       </div>
 
       <!-- Brand logo -->
@@ -1369,9 +1372,9 @@
             style="background-image:linear-gradient(45deg,#374151 25%,transparent 25%),linear-gradient(-45deg,#374151 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#374151 75%),linear-gradient(-45deg,transparent 75%,#374151 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;">none</div>
           <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
             Upload logo
-            <input id="logo-input" type="file" accept="image/png,image/webp,image/jpeg" class="hidden" onchange="uploadLogo(event)" />
+            <input id="logo-input" type="file" accept="image/png,image/webp,image/jpeg" class="hidden" data-change="upload-logo" />
           </label>
-          <button id="logo-remove-btn" onclick="removeLogo()" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
+          <button id="logo-remove-btn" data-action="remove-logo" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
         </div>
         <p class="text-xs text-gray-500">PNG with a transparent background works best. It sits in the corner of every slide when “Show logo on slides” is on.</p>
       </div>
@@ -1383,9 +1386,9 @@
           <span id="music-state" class="text-xs text-gray-500">no track uploaded</span>
           <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
             Upload track
-            <input id="music-input" type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav" class="hidden" onchange="uploadMusic(event)" />
+            <input id="music-input" type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/wav" class="hidden" data-change="upload-music" />
           </label>
-          <button id="music-remove-btn" onclick="removeMusic()" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
+          <button id="music-remove-btn" data-action="remove-music" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
         </div>
         <p class="text-xs text-gray-500">Your own track (mp3/m4a/wav, you must own the rights). It loops quietly under the voiceover and ducks automatically when the voice speaks.</p>
       </div>
@@ -1402,7 +1405,7 @@
           placeholder="Describe how your brand sounds — tone, personality, who you speak to. Example: Warm and encouraging, like a coach who believes in you. Speak directly to 'you', keep it simple, celebrate small wins, never preachy."
           class="ce-input w-full px-3 py-2 text-sm"></textarea>
       </div>
-      <button id="save-voice-btn" onclick="saveBrandVoice()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save voice</button>
+      <button id="save-voice-btn" data-action="save-brand-voice" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold">Save voice</button>
     </section>
 
     <section data-settings-tab="sources" class="hidden space-y-4">
@@ -1411,7 +1414,7 @@
       <p class="text-xs text-gray-400 mt-1">Public links we watch for you — release notes, an RSS feed, a changelog page. We check them hourly and collect what's worth posting into Leads.</p>
       <div class="mt-4 flex flex-col sm:flex-row gap-2">
         <input id="biz-source-url" type="url" placeholder="https://github.com/your-org/your-repo" class="ce-input flex-1 px-4 py-3" />
-        <button id="biz-source-add" onclick="addSource()" class="ce-btn px-5 py-3 text-sm">Add source</button>
+        <button id="biz-source-add" data-action="add-source" class="ce-btn px-5 py-3 text-sm">Add source</button>
       </div>
       <p id="biz-source-status" class="hidden text-sm text-gray-400 mt-2"></p>
       <div id="biz-sources-list" class="mt-4 space-y-2">Loading…</div>
@@ -1432,7 +1435,7 @@
           <textarea id="rules-disclaimers" rows="6" class="ce-input w-full px-3 py-2 text-sm" placeholder="Not financial advice.&#10;Results may vary."></textarea>
         </div>
       </div>
-      <button onclick="saveBrandRules()" class="ce-btn px-5 py-2 text-sm mt-4">Save rules</button>
+      <button data-action="save-brand-rules" class="ce-btn px-5 py-2 text-sm mt-4">Save rules</button>
       <p id="rules-status" class="hidden text-sm text-gray-400 mt-2"></p>
     </div>
 
@@ -1442,7 +1445,7 @@
       <div class="mt-4 flex gap-4 flex-wrap text-sm items-end">
         <label class="text-gray-400">Max per day<br><input id="limit-day" type="number" min="1" max="100" class="ce-input px-3 py-2 mt-1 w-28"></label>
         <label class="text-gray-400">Max per week<br><input id="limit-week" type="number" min="1" max="100" class="ce-input px-3 py-2 mt-1 w-28"></label>
-        <button onclick="saveLimits()" class="ce-btn px-5 py-2 text-sm">Save limits</button>
+        <button data-action="save-limits" class="ce-btn px-5 py-2 text-sm">Save limits</button>
       </div>
       <p id="limits-status" class="hidden text-sm text-gray-400 mt-2"></p>
     </div>
@@ -1457,7 +1460,7 @@
         <p class="text-xs text-gray-400 mt-1">Invite the people you work with. For now an invitation only records that someone is on your team &mdash; <b>it does not give them access</b> to your brands, posts or keys. Shared access is still being built, and we'll email everyone you've invited when it arrives.</p>
         <div class="mt-4 flex flex-col sm:flex-row gap-2">
           <input id="team-email" type="email" placeholder="colleague@example.com" class="ce-input flex-1 px-4 py-3" />
-          <button id="team-invite-btn" onclick="inviteTeammate()" class="ce-btn px-5 py-3 text-sm">Send invitation</button>
+          <button id="team-invite-btn" data-action="invite-teammate" class="ce-btn px-5 py-3 text-sm">Send invitation</button>
         </div>
         <p id="team-status" class="hidden text-sm text-gray-400 mt-2"></p>
         <div id="team-list" class="mt-4 space-y-2">Loading&hellip;</div>
@@ -1473,10 +1476,10 @@
     <section id="backup-section" data-settings-tab="keys" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">Backup & Restore</h2>
       <div class="flex flex-wrap gap-3">
-        <button onclick="downloadBackup()" class="bg-blue-700 hover:bg-blue-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download backup</button>
+        <button data-action="download-backup" class="bg-blue-700 hover:bg-blue-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download backup</button>
         <label class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold cursor-pointer">
           ⬆ Restore from file
-          <input type="file" accept=".zip" class="hidden" onchange="restoreBackup(event)" />
+          <input type="file" accept=".zip" class="hidden" data-change="restore-backup" />
         </label>
       </div>
       <p class="text-xs text-gray-500">Backup contains the database + generated slides/videos. Restore replaces current data (a restart may be required locally).</p>
@@ -1486,11 +1489,11 @@
     <section id="mydata-section" data-settings-tab="keys" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">🗄 Your data</h2>
       <div class="space-y-2">
-        <button onclick="exportMyData()" id="export-data-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download my data</button>
+        <button data-action="export-my-data" id="export-data-btn" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">⬇ Download my data</button>
         <p class="text-xs text-gray-500">A ZIP with everything we hold about your account — profile, posts, captions, generated images, Business sources and leads. API keys are listed as set or not set only: we never write a usable key into a file you might forward.</p>
       </div>
       <div class="border-t border-gray-800 pt-4 space-y-2">
-        <button onclick="openDeleteAccount()" class="bg-red-800 hover:bg-red-700 transition rounded-lg px-4 py-2 text-sm font-semibold">Delete my account</button>
+        <button data-action="open-delete-account" class="bg-red-800 hover:bg-red-700 transition rounded-lg px-4 py-2 text-sm font-semibold">Delete my account</button>
         <p class="text-xs text-gray-500">Erases your account, posts, images and keys from our servers. This cannot be undone — download your data first if you want to keep it.</p>
       </div>
     </section>
@@ -1511,8 +1514,8 @@
     </div>
     <div id="del-acct-error" class="text-xs text-red-400"></div>
     <div class="flex gap-2 pt-1">
-      <button id="del-acct-btn" onclick="confirmDeleteAccount()" class="bg-red-800 hover:bg-red-700 transition rounded-lg flex-1 py-2 text-sm font-semibold">Delete permanently</button>
-      <button onclick="closeDeleteAccount()" class="ce-btn-ghost flex-1 py-2 text-sm">Cancel</button>
+      <button id="del-acct-btn" data-action="confirm-delete-account" class="bg-red-800 hover:bg-red-700 transition rounded-lg flex-1 py-2 text-sm font-semibold">Delete permanently</button>
+      <button data-action="close-delete-account" class="ce-btn-ghost flex-1 py-2 text-sm">Cancel</button>
     </div>
   </div>
 </div>
@@ -1533,8 +1536,8 @@
         It is a different way to work, and you can switch back whenever you like.
       </p>
       <div class="flex flex-wrap gap-2 pt-1">
-        <button id="sources-offer-take" onclick="takeSourcesOffer()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Show me Business mode</button>
-        <button id="sources-offer-dismiss" onclick="document.getElementById('sources-offer').classList.add('hidden')" class="text-xs text-purple-200/60 hover:text-white underline">Not for me</button>
+        <button id="sources-offer-take" data-action="take-sources-offer" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-3 py-1.5 text-xs font-semibold">Show me Business mode</button>
+        <button id="sources-offer-dismiss" data-action="dismiss-sources-offer" class="text-xs text-purple-200/60 hover:text-white underline">Not for me</button>
       </div>
     </div>
     <div class="ce-card p-5">
@@ -1553,15 +1556,15 @@
        a tab this account cannot see rather than trusting the strip. -->
   <div id="view-results" class="hidden space-y-4">
     <div id="results-tabs" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
-      <button data-results-tab="posts" onclick="openResults('posts')" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Posts</button>
-      <button data-results-tab="sources" onclick="openResults('sources')" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
+      <button data-results-tab="posts" data-action="open-results" data-arg="posts" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Posts</button>
+      <button data-results-tab="sources" data-action="open-results" data-arg="sources" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
       <!-- Starts hidden inline rather than by class: `business-only` is
            switched by a body-attribute rule that outranks any single class, so
            a Tailwind `hidden` here would lose for the very accounts it has to
            gate. Inline display can only hide; clearing it hands the decision
            back to the cascade, which is exactly the division of labour wanted —
            the milestone locks, the account type decides. -->
-      <button data-results-tab="journal" onclick="openResults('journal')" style="display:none" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
+      <button data-results-tab="journal" data-action="open-results" data-arg="journal" style="display:none" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Journal</button>
     </div>
 
     <div id="results-posts" data-results-tab="posts">
@@ -1587,14 +1590,14 @@
         <h2 class="text-lg font-semibold" style="color:var(--accent)">Journal</h2>
         <span class="text-xs text-gray-400">Every approval, with the AI draft vs the human's edits — your audit trail.</span>
         <span class="ml-auto flex gap-2">
-          <button onclick="exportJournal('csv')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export CSV</button>
-          <button onclick="exportJournal('json')" class="ce-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
+          <button data-action="export-journal" data-arg="csv" class="ce-btn-ghost px-3 py-1.5 text-xs">Export CSV</button>
+          <button data-action="export-journal" data-arg="json" class="ce-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
         </span>
       </div>
       <div class="flex gap-2 mt-3 text-xs items-center">
         <label class="text-gray-400">From <input id="journal-from" type="date" class="ce-input px-2 py-1 ml-1"></label>
         <label class="text-gray-400">To <input id="journal-to" type="date" class="ce-input px-2 py-1 ml-1"></label>
-        <button onclick="loadJournal()" class="ce-btn-ghost px-3 py-1.5">Apply</button>
+        <button data-action="load-journal" class="ce-btn-ghost px-3 py-1.5">Apply</button>
       </div>
       <div id="biz-journal-list" class="mt-4 space-y-3">Loading…</div>
     </div>
@@ -1614,11 +1617,11 @@
       <div class="flex items-center gap-2">
         <h3 class="text-lg font-semibold" style="color:var(--accent)">Brands</h3>
         <span class="text-xs text-gray-400">Manage client brands. Each has its own voice, profile and logo. Posts publish to your own connected account for now.</span>
-        <button onclick="closeBrandsModal()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+        <button data-action="close-brands-modal" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
       </div>
       <div class="flex gap-2">
         <input id="brand-new-name" type="text" placeholder="New brand name" class="ce-input flex-1 px-3 py-2 text-sm" />
-        <button onclick="createBrand()" class="ce-btn px-4 py-2 text-sm">Add</button>
+        <button data-action="create-brand" class="ce-btn px-4 py-2 text-sm">Add</button>
       </div>
       <div id="brands-list" class="space-y-1"></div>
       <div id="brand-editor" class="hidden border-t pt-4 space-y-3" style="border-color:var(--border)">
@@ -1634,12 +1637,12 @@
         <div class="flex items-center gap-2 text-sm">
           <span class="text-gray-400">Logo:</span>
           <input id="brand-f-logo" type="file" accept="image/png,image/webp,image/jpeg" class="text-xs" />
-          <button onclick="uploadBrandLogo()" class="ce-btn-ghost px-3 py-1.5 text-xs">Upload</button>
+          <button data-action="upload-brand-logo" class="ce-btn-ghost px-3 py-1.5 text-xs">Upload</button>
           <span id="brand-logo-state" class="text-xs text-gray-500"></span>
         </div>
         <div class="flex gap-2">
-          <button onclick="saveBrand()" class="ce-btn px-4 py-2 text-sm">Save brand</button>
-          <button id="brand-delete" onclick="deleteBrand()" class="ce-btn-ghost px-4 py-2 text-sm">Delete</button>
+          <button data-action="save-brand" class="ce-btn px-4 py-2 text-sm">Save brand</button>
+          <button id="brand-delete" data-action="delete-brand" class="ce-btn-ghost px-4 py-2 text-sm">Delete</button>
         </div>
         <p id="brand-editor-status" class="hidden text-xs text-gray-400"></p>
       </div>
@@ -1674,15 +1677,15 @@
       </div>
 
       <div class="flex flex-col gap-2 pt-1">
-        <button id="edit-replace-btn" onclick="submitReplaceSlide()" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg py-2 text-sm font-semibold">
+        <button id="edit-replace-btn" data-action="submit-replace-slide" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg py-2 text-sm font-semibold">
           Replace
         </button>
         <label class="bg-gray-700 hover:bg-gray-600 transition rounded-lg py-2 text-sm font-semibold text-center cursor-pointer">
           Upload custom image
-          <input id="edit-upload-input" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="submitUploadSlide(event)" />
+          <input id="edit-upload-input" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" data-change="submit-upload-slide" />
         </label>
-        <button onclick="openLibraryPicker('slide')" class="ce-btn-ghost rounded-lg py-2 text-sm">From library</button>
-        <button onclick="closeEditSlide()" class="bg-gray-800 hover:bg-gray-700 transition rounded-lg py-2 text-sm">Cancel</button>
+        <button data-action="open-library-picker" data-arg="slide" class="ce-btn-ghost rounded-lg py-2 text-sm">From library</button>
+        <button data-action="close-edit-slide" class="bg-gray-800 hover:bg-gray-700 transition rounded-lg py-2 text-sm">Cancel</button>
       </div>
     </div>
   </div>
@@ -1692,16 +1695,16 @@
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-md w-full space-y-3 shadow-2xl">
       <div class="flex items-center gap-2">
         <h3 class="text-lg font-semibold text-purple-300">𝕏 Publish to X</h3>
-        <button onclick="closePublishToXModal()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+        <button data-action="close-publish-to-x-modal" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
       </div>
       <textarea id="publish-x-text" rows="4" placeholder="What do you want to say?"
-        class="ce-input w-full px-3 py-2 text-sm" oninput="syncPublishXCounter()"></textarea>
+        class="ce-input w-full px-3 py-2 text-sm" data-input="sync-publish-x-counter"></textarea>
       <div class="flex justify-end">
         <span id="publish-x-counter" class="text-xs text-gray-500"></span>
       </div>
       <input id="publish-x-alt" type="text" placeholder="Alt text (optional)"
              class="ce-input w-full px-3 py-2 text-sm" />
-      <button id="publish-x-submit-btn" onclick="submitPublishToX()" class="ce-btn w-full px-5 py-2.5 text-sm">𝕏 Publish</button>
+      <button id="publish-x-submit-btn" data-action="submit-publish-to-x" class="ce-btn w-full px-5 py-2.5 text-sm">𝕏 Publish</button>
       <p id="publish-x-status" class="hidden text-sm text-gray-400"></p>
     </div>
   </div>
@@ -1711,11 +1714,11 @@
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl" style="max-height:90vh;overflow-y:auto">
       <div class="flex items-center gap-2">
         <h3 class="text-lg font-semibold text-purple-300">Edit video</h3>
-        <button onclick="closeEditVideoModal()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+        <button data-action="close-edit-video-modal" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
       </div>
 
       <div id="edit-video-clips" class="space-y-2"></div>
-      <button onclick="openLibraryPicker('edit-clip')" class="ce-btn-ghost w-full px-3 py-1.5 text-xs">+ Add a clip</button>
+      <button data-action="open-library-picker" data-arg="edit-clip" class="ce-btn-ghost w-full px-3 py-1.5 text-xs">+ Add a clip</button>
 
       <div class="flex flex-wrap gap-3 text-xs items-center pt-2 border-t" style="border-color:var(--border)">
         <label class="flex items-center gap-1.5 cursor-pointer text-gray-300" title="Needs at least 2 clips">
@@ -1733,7 +1736,7 @@
       </div>
 
       <label class="flex items-center gap-1.5 cursor-pointer text-gray-300 text-xs">
-        <input type="checkbox" id="edit-video-voiceover" class="accent-purple-600" onchange="toggleEditVideoVoiceoverFields()" />
+        <input type="checkbox" id="edit-video-voiceover" class="accent-purple-600" data-change="toggle-edit-video-voiceover-fields" />
         🎙 Add voiceover + subtitles
       </label>
       <div id="edit-video-voiceover-fields" class="hidden space-y-2">
@@ -1743,7 +1746,7 @@
                class="ce-input px-2 py-1 text-xs w-52" />
       </div>
 
-      <button id="edit-video-submit-btn" onclick="submitEditVideo()" class="ce-btn w-full px-5 py-2.5 text-sm">Save edit</button>
+      <button id="edit-video-submit-btn" data-action="submit-edit-video" class="ce-btn w-full px-5 py-2.5 text-sm">Save edit</button>
       <p id="edit-video-status" class="hidden text-sm text-gray-400"></p>
     </div>
   </div>
@@ -1753,7 +1756,7 @@
     <div class="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-lg w-full space-y-3 shadow-2xl" style="max-height:85vh;overflow-y:auto">
       <div class="flex items-center gap-2">
         <h3 id="library-picker-title" class="text-lg font-semibold text-purple-300">Choose from your library</h3>
-        <button onclick="closeLibraryPicker()" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
+        <button data-action="close-library-picker" class="ml-auto text-gray-400 hover:text-gray-200">✕</button>
       </div>
       <div id="library-picker-grid" class="grid grid-cols-3 gap-2">Loading…</div>
     </div>
