@@ -46,3 +46,19 @@
 	# policy in ways nothing tests — the failure mode being a blank screen for
 	# whichever resource the second header forgot.
 }
+
+# Every other hostname that must keep resolving — `www`, and an old address
+# during a move — sends visitors to the canonical one above.
+#
+# A redirect rather than a second copy of the site, because two hostnames are
+# two ORIGINS: the session token lives in localStorage, which is per-origin, so
+# signing in on www would leave the apex looking logged out. The same reasoning
+# applies to anything cached under an origin.
+#
+# The default is www.localhost on purpose: Caddy issues an internal certificate
+# for localhost names instead of asking Let's Encrypt, so a deployment that
+# never sets this variable gets a harmless no-op rather than a certificate
+# request that fails on a loop.
+{$ALIAS_DOMAINS:www.localhost} {
+	redir https://{$DOMAIN}{uri} permanent
+}

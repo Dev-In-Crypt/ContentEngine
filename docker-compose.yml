@@ -100,6 +100,9 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      # Hostnames that redirect to DOMAIN — www, and an old address kept alive
+      # during a move. Comma-separated. Unset is a safe no-op (see Caddyfile).
+      ALIAS_DOMAINS: ${ALIAS_DOMAINS:-www.localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data          # Let's Encrypt certificates (persisted)
