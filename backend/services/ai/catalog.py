@@ -60,6 +60,15 @@ PROVIDERS: dict[str, dict] = {
         "hint": "Direct OpenAI account. Text and images.",
         "supports_grounding": False,
         "text_models": [
+            # GPT-5.6, newest first. Prices are the published per-1M-token rates
+            # for short context on the standard tier — the same basis as every
+            # other row here, so estimate_cost stays comparable across vendors.
+            # Long context and Fast mode cost about double; the app does not
+            # request either, so quoting the short-context number is honest
+            # rather than optimistic.
+            _m("gpt-5.6-sol", "GPT-5.6 Sol", 5.00, 30.00),
+            _m("gpt-5.6-terra", "GPT-5.6 Terra", 2.00, 12.00),
+            _m("gpt-5.6-luna", "GPT-5.6 Luna", 0.20, 1.20),
             _m("gpt-5.4", "GPT-5.4", 2.50, 15.00),
             _m("gpt-5", "GPT-5", 1.25, 10.00),
             _m("gpt-5-mini", "GPT-5 mini", 0.25, 2.00),
@@ -68,6 +77,8 @@ PROVIDERS: dict[str, dict] = {
             _m("gpt-4o-mini", "GPT-4o mini", 0.15, 0.60),
         ],
         "image_models": [
+            # Image tokens, not text tokens: $8.00 in / $30.00 out per 1M.
+            _m("gpt-image-2", "GPT Image 2", 8.00, 30.00),
             _m("gpt-image-1", "GPT Image 1", 5.00, 40.00),
             _m("gpt-image-1-mini", "GPT Image 1 mini", 2.50, 20.00),
         ],

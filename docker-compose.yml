@@ -55,6 +55,23 @@ services:
       # Leave it empty and all three answer 503 instead of failing mid-run, which
       # is what this deployment has been doing since those phases shipped.
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # …or a direct vendor key, if that is where the platform's own account is.
+      # Which of these is actually spent is decided by DEFAULT_*_PROVIDER below,
+      # not by which one happens to be filled: the app looks up the key field for
+      # the configured vendor and ignores the rest.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # Stock photography for the giveaway. Cheaper than generating a picture —
+      # Pexels is free — and the code prefers it whenever one of these is set,
+      # falling back to AI generation only when neither is.
+      #
+      # These were missing from this list entirely, which is a silent failure
+      # rather than a loud one: the key sits in .env looking configured, never
+      # reaches the process, and every free generation dies in "Generation
+      # failed" because the stock client was built holding nothing.
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
       # The ceiling on that giveaway, in dollars per day, counted across every
       # anonymous and free generation. Worst case is roughly $1.5 per registered
       # account (5 generations x up to 10 AI images), so $10 is about seven such
@@ -65,6 +82,13 @@ services:
       # The defaults below are what this deployment has always run; config.py's
       # own defaults are newer, and moving to them is a spending decision rather
       # than an upgrade, so it is made here rather than inherited silently.
+      #
+      # Provider and model travel together: a model id belongs to exactly one
+      # vendor, so changing one without the other asks OpenRouter for an OpenAI
+      # id or the reverse, and the failure arrives as an unhelpful 400 from a
+      # third party rather than as a configuration error.
+      DEFAULT_TEXT_PROVIDER: ${DEFAULT_TEXT_PROVIDER:-openrouter}
+      DEFAULT_IMAGE_PROVIDER: ${DEFAULT_IMAGE_PROVIDER:-openrouter}
       DEFAULT_TEXT_MODEL: ${DEFAULT_TEXT_MODEL:-anthropic/claude-sonnet-4}
       DEFAULT_IMAGE_MODEL: ${DEFAULT_IMAGE_MODEL:-google/gemini-2.5-flash-image-preview}
       PORT: "8000"

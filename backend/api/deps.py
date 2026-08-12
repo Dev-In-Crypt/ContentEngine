@@ -303,11 +303,28 @@ def get_image_provider(
 
 
 def get_demo_text_provider(settings: Annotated[Settings, Depends(get_settings)]):
-    """Text provider for the public no-auth demo — built from the app's OWN
-    OpenRouter key (anonymous visitors have none). None when the key is unset, so
-    the route can 503 cleanly instead of failing partway. Deliberately uses base
-    get_settings (app-level), never a per-user resolver."""
-    return _ai_provider_or_none("openrouter", settings.openrouter_api_key, settings)
+    """Text provider for the public no-auth demo — built from the PLATFORM's own
+    credentials, because an anonymous visitor has none. None when the platform
+    has no key, so the route can 503 cleanly instead of failing partway.
+
+    `resolve_ai_choice(None, …)` is what "the platform's own" means everywhere
+    else: passing None for the user is exactly the branch that reads
+    `default_text_provider` and finds the key through `key_field_for()`, and it
+    is already how the free-generation path picks its credentials.
+
+    It used to name OpenRouter here and read `openrouter_api_key` directly. That
+    made the vendor a property of this one function rather than of the
+    deployment: an owner who pointed the platform at another vendor got a
+    working free tier and a landing page that still called OpenRouter, with a key
+    field nothing else was filling — a 503 on the first screen of the product,
+    on a deployment that looked correctly configured everywhere you would think
+    to look.
+
+    Base `get_settings` on purpose, never the per-user resolver: this must not be
+    reachable with somebody else's key.
+    """
+    provider, _model, api_key = resolve_ai_choice(None, settings, "text")
+    return _ai_provider_or_none(provider, api_key, settings)
 
 
 def assemble_content_engine(text_provider, image_provider, stock: StockClient,
