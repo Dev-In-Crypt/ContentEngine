@@ -76,6 +76,44 @@ def test_the_app_bundle_is_a_classic_script_at_the_end_of_the_body():
     assert html.index(tag.group(0)) > html.index('id="view-settings"')
 
 
+def _toast_tag():
+    from bs4 import BeautifulSoup
+    el = BeautifulSoup(_html("index.html"), "html.parser").find(id="toast")
+    assert el is not None, "index.html has no #toast"
+    return el
+
+
+def test_the_toast_hangs_off_the_body_and_nothing_else():
+    """It is the app's only general-purpose way of saying anything, and it was
+    nested inside `<section id="step-4">` — the composer's result screen, which
+    is `display:none` on every other screen. So all 139 `toast()` calls wrote
+    into a box with a hidden ancestor: the text was set, `hidden` was removed,
+    and the element still measured 0x0.
+
+    A direct child of <body> has no ancestor anybody can hide, which is the only
+    version of this that cannot come back.
+    """
+    parent = _toast_tag().parent
+    assert parent.name == "body", (
+        f"#toast sits inside <{parent.name} id={parent.get('id')!r}>, whose "
+        "display is not this element's to control")
+
+
+def test_the_toast_layer_survives_its_own_restyling():
+    """`toast()` assigns `el.className` wholesale on every call, so a z-index
+    carried as a class is gone the first time a toast fires. The layer therefore
+    lives in the inline style, which a className assignment does not touch.
+
+    Above 50 specifically: the landing is `fixed inset-0 z-40` and the auth,
+    forgot and reset screens are z-50 — and those are precisely the screens a
+    link from an email lands on.
+    """
+    style = (_toast_tag().get("style") or "").replace(" ", "")
+    m = re.search(r"z-index:(\d+)", style)
+    assert m, "#toast carries no inline z-index; a class would be wiped by toast()"
+    assert int(m.group(1)) > 50, f"z-index {m.group(1)} is under the auth screens"
+
+
 def test_nothing_fetches_a_data_url():
     """`connect-src` is `'self'` with no `data:`, and this is what let it be.
 

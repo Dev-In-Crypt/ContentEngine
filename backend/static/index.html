@@ -1145,9 +1145,6 @@
         📤 Publish now
       </button>
     </div>
-
-    <!-- Toast -->
-    <div id="toast" class="hidden fixed bottom-6 right-6 bg-gray-800 border border-gray-700 rounded-xl px-5 py-3 shadow-xl text-sm"></div>
   </section>
 
   </div><!-- /#create-post-panel -->
@@ -1765,6 +1762,22 @@
  </div><!-- /#app-content -->
  </div><!-- /flex row -->
 </main>
+
+<!-- Toast — the app's only general-purpose way of saying anything, and every
+     one of the ~140 toast() calls ends up here.
+
+     A direct child of <body> on purpose. It used to live inside
+     <section id="step-4">, the composer's result screen, which is display:none
+     on every other screen — so the text was written, `hidden` was removed, and
+     the element still measured 0x0 everywhere except that one screen. Nothing
+     up the tree can hide it from here.
+
+     The z-index is an inline style, not a class, because toast() assigns
+     el.className wholesale on every call: a Tailwind z- class would survive
+     exactly until the first toast fired. 60 clears the landing (z-40) and the
+     auth/forgot/reset screens and modals (z-50), which are the screens a link
+     from an email lands on. -->
+<div id="toast" class="hidden fixed bottom-6 right-6 bg-gray-800 border border-gray-700 rounded-xl px-5 py-3 shadow-xl text-sm" style="z-index:60"></div>
 
 <script src="/static/app.js"></script>
 </body>
