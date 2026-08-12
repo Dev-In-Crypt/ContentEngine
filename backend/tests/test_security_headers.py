@@ -202,6 +202,37 @@ def test_the_app_bundle_revalidates(client, path):
     assert client.get(path).headers.get("cache-control") == "no-cache"
 
 
+@pytest.mark.parametrize("path", ["/", "/static/index.html", "/privacy", "/terms",
+                                  "/verify?token=x"])
+def test_every_document_revalidates(client, path):
+    """The half the bundle rule assumed rather than checked.
+
+    It reasoned about "a stale app.js against a freshly fetched index.html" —
+    but index.html has no Cache-Control either, so the browser applies the same
+    heuristic freshness to the document, and the document is the file that
+    carries all the markup and names the bundles. Deploying a markup fix and
+    watching the old markup keep rendering is how this was found.
+
+    By content type rather than by a list of paths: the shell is served from `/`,
+    from /static/index.html and from every SPA fallback route an emailed link
+    uses, and a hand-kept list of those goes stale the first time somebody adds
+    a route.
+    """
+    r = client.get(path)
+    assert r.headers["content-type"].startswith("text/html")
+    assert r.headers.get("cache-control") == "no-cache"
+
+
+def test_bytes_that_are_not_documents_stay_cacheable(client):
+    """Scoped to documents on purpose. A blanket rule would put `no-cache` on
+    the generated slides and the reel MP4s, which are immutable once written and
+    are the heaviest thing this app serves — a revalidation round trip per image
+    on every render of a feed."""
+    r = client.get("/health")
+    assert not r.headers["content-type"].startswith("text/html")
+    assert "no-cache" not in r.headers.get("cache-control", "")
+
+
 def test_ordinary_static_files_are_left_alone(client):
     """Only the two hand-written bundles revalidate. Doing it to the 407 KB
     Tailwind and the fonts would spend a round trip per page load to re-learn

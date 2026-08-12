@@ -300,9 +300,26 @@ CSP_DIRECTIVES: dict[str, str] = {
 
 #: Files served with `Cache-Control: no-cache` — revalidate, not "do not store".
 #: StaticFiles sends an ETag and no freshness, so a browser falls back to
-#: heuristic caching and can keep serving a stale bundle for days after a deploy
-#: while the HTML that needs it is fresh.
+#: heuristic caching and can keep serving a stale bundle for days after a deploy.
 REVALIDATE_PATHS = frozenset({"/static/app.js", "/static/theme.js"})
+
+#: …and every HTML document, which the path set above cannot express.
+#:
+#: The rule started as "the bundles must revalidate against a freshly fetched
+#: index.html" — and index.html has no Cache-Control either, so the browser
+#: applies the same heuristic to the document that carries all of the markup and
+#: names both bundles. A markup fix was deployed, verified with curl, and kept
+#: rendering in its old form in a real browser; that is what this closes.
+#:
+#: By content type rather than by path, because the shell is served from `/`,
+#: from /static/index.html and from every SPA fallback route an emailed link
+#: lands on (/verify, /reset, /team/accept). A hand-kept list of those goes stale
+#: the first time somebody adds a route, and goes stale silently.
+#:
+#: Scoped to documents, not applied to everything: the generated slides and the
+#: reel MP4s are immutable once written and are the heaviest bytes here, and a
+#: blanket rule would spend a revalidation round trip per image on every feed.
+REVALIDATE_CONTENT_TYPE = "text/html"
 
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 
@@ -350,7 +367,9 @@ class SecurityHeadersMiddleware:
                 headers = MutableHeaders(scope=message)
                 if path not in self.exempt:
                     headers["content-security-policy"] = self.policy
-                if path in self.revalidate:
+                if (path in self.revalidate
+                        or headers.get("content-type", "").startswith(
+                            REVALIDATE_CONTENT_TYPE)):
                     headers["cache-control"] = "no-cache"
             await send(message)
 
