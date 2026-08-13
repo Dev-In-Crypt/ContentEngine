@@ -325,3 +325,39 @@ def test_the_apps_own_spend_is_not_billed_to_the_user(client, ready, caption_gen
 
     assert _events(r)[-1]["type"] == "complete"
     assert seen["billed_to"] is None
+
+
+# ── the payoff is not gated on a click in an inbox ──────────────────────────
+
+def test_a_brand_new_account_gets_its_post_before_confirming_its_email(
+        client, db_url, sm, caption_gen):
+    """Screen 4 is where onboarding pays off, and everybody arriving at it is
+    unverified — they registered ninety seconds ago.
+
+    The route carried `require_verified`, which was inert while
+    REQUIRE_VERIFIED_EMAIL was false and became live the day the flag went on:
+    every new account then reached the last screen of onboarding and was told
+    "Please verify your email before publishing" — on a screen that publishes
+    nothing — instead of being shown the post it was promised. Found by walking
+    the path on prod; no test saw it because the suite ran with the flag off,
+    which is why this one turns it on.
+
+    Nothing is protected by refusing here. The identical capability is one click
+    later and ungated: the same unverified account gets a 200 from
+    /api/posts/generate. What actually bounds this route is unchanged — the
+    allowance is one post, the per-IP limit stands, and the daily ceiling stands.
+    Verification still gates publishing, which is where it means something.
+    """
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        database_url=db_url, api_token="", app_mode="cloud",
+        default_text_model="app/text-model", require_verified_email=True)
+
+    headers = _register(client)
+    _set_brand(sm, "new@example.com", niche="Sourdough baking",
+               target_audience="Home bakers", brand_name="Crumb & Co")
+
+    r = client.post("/api/onboarding/first-post", headers=headers,
+                    json={"platform": "instagram"})
+
+    assert r.status_code == 200, r.text
+    assert "complete" in [e.get("type") for e in _events(r)]

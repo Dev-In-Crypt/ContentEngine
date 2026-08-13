@@ -19,6 +19,17 @@ becoming an LLM proxy:
 
 The order of the guards is itself a guard: anything that will be refused is
 refused *before* it costs anything.
+
+**No email-verification guard here, on purpose.** It used to carry one, which
+was inert while REQUIRE_VERIFIED_EMAIL was false and turned live the day that
+flag went on — and everybody who reaches this screen is unverified, because they
+registered ninety seconds ago. So the payoff moment of onboarding started
+answering "Please verify your email before publishing", on a screen that
+publishes nothing, to every new account. It bought nothing either: the same
+unverified account gets a 200 from /api/posts/generate one click later, so the
+farm it was supposed to stop simply walks around it. What actually bounds this
+route is above — one post per account, per-IP limits, and the daily ceiling.
+Verification still gates publishing and scheduling, where it means something.
 """
 import asyncio
 import json
@@ -32,7 +43,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (
-    get_current_user, get_db, get_demo_text_provider, get_settings, require_verified,
+    get_current_user, get_db, get_demo_text_provider, get_settings,
 )
 from api.ratelimit import limiter
 from config import Settings
@@ -91,7 +102,6 @@ async def first_post(
     text_provider: Annotated[object, Depends(get_demo_text_provider)],
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[UserModel, Depends(get_current_user)],
-    _verified: Annotated[None, Depends(require_verified)] = None,
 ) -> StreamingResponse:
     """Write one post on the application's key and stream it back.
 
