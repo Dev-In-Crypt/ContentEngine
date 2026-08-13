@@ -23,7 +23,11 @@ from services.sources.base import FetchedItem
 _IMPACT = re.compile(
     r"\b(?:price|pricing|cost|free|plan|tier|limit|quota|deprecat\w*|discontinu\w*|"
     r"sunset|end of life|eol|breaking|security|vulnerab\w*|outage|incident|downtime|"
-    r"availab\w*|launch\w*|release[ds]?|now available|general availability|\bga\b|"
+    # "release" is NOT here, for the reason written next to _LAUNCH below: every
+    # changelog entry literally says it, so it separates nothing. It survived here
+    # until a calibration run over real repositories returned prisma 8 of 8 worthy,
+    # each one on that single word — visible only once reasons quoted their match.
+    r"availab\w*|launch\w*|now available|general availability|\bga\b|"
     r"acqui\w*|partnership|integration|support for|support[s]? )\b",
     re.IGNORECASE,
 )
@@ -94,6 +98,28 @@ def _is_dev_prerelease(item: FetchedItem) -> bool:
     return bool(_DEV_PRERELEASE.search(f"{item.title or ''} {tag}"))
 
 
+#: How much of an item's body the ADMITTING rules are allowed to read.
+#:
+#: Measured before it was chosen. The rules were run over real releases from
+#: supabase, PostHog, prisma, grafana, next.js and sentry — eight items each.
+#: next.js's canaries and grafana's 135-byte patches came out right. sentry was
+#: 8 of 8 "worthy", every one for the same reason, on bodies of 26 KB to 125 KB:
+#: in an aggregated changelog a word like "limit" or "support for" is a
+#: certainty, not a signal. Reading the whole body meant the rules lost their
+#: power to discriminate exactly as the changelog grew — on precisely the
+#: companies this product is for.
+#:
+#: So a signal counts when it sits where the post would be about: the title and
+#: the opening of the release notes. Page 40 of a changelog is not the news.
+#:
+#: The asymmetry is deliberate. Rules that ADMIT an item read this window,
+#: because a false "worthy" spends the reader's trust on junk and the feed stops
+#: being worth opening. Rules that REFUSE or WARN — the trivial anti-rule's
+#: escape aside — keep the whole text: `detect_bad_news` and `_SECURITY` are
+#: cheaper to over-fire than to miss.
+_SIGNAL_CHARS = 1200
+
+
 def _normalise(title: str) -> str:
     return " ".join((title or "").lower().split())
 
@@ -114,9 +140,10 @@ def score_item(item: FetchedItem, recent_titles: Iterable[str]) -> tuple[str, st
 
     body = (item.body or "").strip()
     text = f"{title}\n{body}"
+    head = f"{title}\n{body[:_SIGNAL_CHARS]}"
 
     # Anti-rule: internal/cosmetic churn with nothing customer-facing.
-    if _TRIVIAL.search(title) and not _IMPACT.search(text):
+    if _TRIVIAL.search(title) and not _IMPACT.search(head):
         return ("weak", "looks like an internal or cosmetic change")
 
     # Anti-rule: a dev-channel pre-release (nightly/alpha/canary) — continuous
@@ -125,20 +152,26 @@ def score_item(item: FetchedItem, recent_titles: Iterable[str]) -> tuple[str, st
         return ("weak", "a pre-release / dev-channel build — not usually post-worthy")
 
     signals: list[str] = []
-    if _IMPACT.search(text):
-        signals.append("affects customers (price, limits, availability, security)")
-    if _NUMBER.search(text):
-        signals.append("carries a concrete number or result")
-    if _CHANGE.search(text):
-        signals.append("describes a before→after change")
-    if _LAUNCH.search(text):
-        signals.append("a launch")
+    if (m := _IMPACT.search(head)):
+        signals.append(f'affects customers — "{m.group(0).strip()}"')
+    if (m := _NUMBER.search(head)):
+        signals.append(f'carries a concrete number — "{m.group(0).strip()}"')
+    if (m := _CHANGE.search(head)):
+        signals.append(f'describes a before→after change — "{m.group(0).strip()}"')
+    if (m := _LAUNCH.search(head)):
+        signals.append(f'a launch — "{m.group(0).strip()}"')
+    # Security reads the WHOLE body — see _SIGNAL_CHARS. It is also a signal in
+    # its own right, not only an escape from the patch rule below: an item whose
+    # single newsworthy fact sits at the bottom of a long changelog would
+    # otherwise be demoted for having nothing near the top.
+    if (m := _SECURITY.search(text)):
+        signals.append(f'mentions security — "{m.group(0).strip()}"')
 
     # Anti-rule: a semver patch (x.y.Z, Z>0) needs a STRONG signal to be worthy —
     # a number, a before→after change, a launch, or security. A patch riding only
     # the generic customer-impact keyword is churn; demote it. (Hypothesis test 2.)
     if _SEMVER_PATCH.search(title) and not _SECURITY.search(text):
-        strong = _NUMBER.search(text) or _CHANGE.search(text) or _LAUNCH.search(text)
+        strong = _NUMBER.search(head) or _CHANGE.search(head) or _LAUNCH.search(head)
         if not strong:
             return ("weak", "patch release with no strong signal")
 
