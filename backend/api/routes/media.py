@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (
     get_current_user, get_db, get_effective_settings, get_image_provider, get_text_provider,
+    require_verified,
 )
 from api.ratelimit import limiter
 from api.routes.publish_jobs import build_job_status
@@ -666,7 +667,8 @@ async def edit_video_asset(
 # services/x_video_publish.py drives through X's chunked upload.
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.post("/{asset_id}/publish-x", response_model=VideoPublishJobStatus, status_code=202)
+@router.post("/{asset_id}/publish-x", response_model=VideoPublishJobStatus,
+             status_code=202, dependencies=[Depends(require_verified)])
 @limiter.limit("6/minute;30/hour")
 async def publish_video_to_x(
     asset_id: str,
