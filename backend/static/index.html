@@ -57,10 +57,16 @@
     .from-purple-900{ --tw-gradient-from:var(--panel) var(--tw-gradient-from-position) !important; --tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important; }
     .to-pink-900{ --tw-gradient-to:var(--panel) var(--tw-gradient-to-position) !important; }
 
-    /* reusable component bits */
-    .ce-btn{ background:var(--accent); color:var(--on-accent); border-radius:10px; font-weight:600; transition:background .15s; }
+    /* reusable component bits.
+       The padding is part of the component. Without it every call site invented
+       its own, and the landing alone asked for four different pairs — px-4 py-2,
+       px-5 py-3, px-6 py-3, px-7 py-3 — which is why one page looked like it had
+       buttons from three products. A utility at the call site still wins (the
+       Tailwind runtime injects after this block), so a deliberately larger
+       button stays one class away. */
+    .ce-btn{ background:var(--accent); color:var(--on-accent); border-radius:10px; font-weight:600; padding:.625rem 1.25rem; transition:background .15s; }
     .ce-btn:hover{ background:var(--accent-strong); }
-    .ce-btn-ghost{ background:var(--accent-dim); color:var(--text); border-radius:10px; font-weight:600; }
+    .ce-btn-ghost{ background:var(--accent-dim); color:var(--text); border-radius:10px; font-weight:600; padding:.625rem 1.25rem; }
     .ce-card{ background:var(--panel); border:1px solid var(--border); border-radius:16px; }
     /* theme-aware chip (SEO keywords etc.) — flips with light/dark instead of a fixed blue */
     .chip{ background:var(--panel3); border:1px solid var(--border); color:var(--text); }
@@ -85,6 +91,14 @@
     .mode-btn{ color:var(--muted); transition:background .12s,color .12s; }
     .mode-btn:hover{ background:var(--accent-dim); color:var(--text); }
     .mode-btn.mode-active{ background:var(--accent-dim); color:var(--text); font-weight:600; }
+    /* The landing's own two tab rows — the field's topic/link switch and the
+       creator/business doors. They belonged to none of the five families above
+       and were drawn instead by swapping six Tailwind utilities each, in JS, per
+       button. Six chances to disagree with the theme, in a file whose whole
+       point is that colour lives in one place. */
+    .lt-btn{ background:var(--panel2); border:2px solid var(--border); color:var(--muted); border-radius:10px; font-weight:600; transition:background .15s,color .15s,border-color .15s; }
+    .lt-btn:hover{ color:var(--text); }
+    .lt-btn.lt-active{ background:var(--accent-dim); border-color:var(--accent); color:var(--text); }
     /* Business vs Creator app-shell: one engine, two experiences (gated on account_type) */
     .business-only{ display:none; }
     body[data-account-type="business"] .business-only{ display:block; }
@@ -105,7 +119,6 @@
     .slide-img { transition: opacity .3s; }
     .spinner { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .step-dot { transition: background .2s; }
   </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen font-sans">
@@ -161,14 +174,14 @@
     <span class="font-bold tracking-tight text-lg">Content Engine</span>
     <div class="ml-auto flex gap-2">
       <button data-action="show-auth-screen" data-arg="login" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-200 hover:bg-white/5 transition">Log in</button>
-      <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-4 py-2 text-sm">Sign up</button>
+      <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-sm">Sign up</button>
     </div>
   </header>
 
   <!-- The working field. First thing on the page for everybody: the landing's
        argument is "here is what it does", and until UX phase 7.2 the only thing
        it could show a visitor was a sign-up form. -->
-  <section id="hero-field" class="max-w-3xl mx-auto px-6 pt-10 text-center">
+  <section id="hero-field" class="max-w-3xl mx-auto px-6 pt-12 text-center">
     <h1 class="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
       See it write a post. Right now.
     </h1>
@@ -176,16 +189,16 @@
 
     <div class="mt-6 flex gap-2 justify-center text-sm">
       <button data-hero-mode="topic" data-action="set-hero-mode" data-arg="topic"
-              class="hero-mode-btn px-4 py-1.5 rounded-lg font-semibold border-2 border-purple-500 bg-purple-900 text-white">A topic</button>
+              class="hero-mode-btn lt-btn lt-active px-4 py-1.5">A topic</button>
       <button data-hero-mode="link" data-action="set-hero-mode" data-arg="link"
-              class="hero-mode-btn px-4 py-1.5 rounded-lg font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">A link</button>
+              class="hero-mode-btn lt-btn px-4 py-1.5">A link</button>
     </div>
 
     <div class="mt-4 flex flex-col sm:flex-row gap-2">
       <input id="hero-input" type="text" class="ce-input flex-1 px-4 py-3"
              placeholder="Sourdough starters for beginners"
              />
-      <button id="hero-run" data-action="run-hero-post" class="ce-btn px-6 py-3 text-sm">Write it</button>
+      <button id="hero-run" data-action="run-hero-post" class="ce-btn text-sm">Write it</button>
     </div>
 
     <!-- Three of them, because the hardest part of an empty field is the first
@@ -206,7 +219,7 @@
         An account is free and comes with 2 more — still no API key needed.
       </p>
       <button id="hero-gate-signup" data-action="show-auth-screen" data-arg="register"
-              class="ce-btn px-6 py-2.5 text-sm mt-4">Create a free account →</button>
+              class="ce-btn text-sm mt-4">Create a free account →</button>
     </div>
 
     <!-- `hidden` stays alone on this element. Paired with a responsive display
@@ -228,8 +241,8 @@
         <div id="hero-caption" class="mt-2 text-sm whitespace-pre-line text-gray-300"></div>
         <div id="hero-hashtags" class="mt-2 text-sm" style="color:var(--accent)"></div>
         <div class="mt-4 flex flex-wrap gap-2">
-          <button id="hero-download" data-action="download-hero-image" class="ce-btn-ghost px-4 py-2 text-sm">Download the picture</button>
-          <button data-action="reset-hero" class="ce-btn-ghost px-4 py-2 text-sm">Try another</button>
+          <button id="hero-download" data-action="download-hero-image" class="ce-btn-ghost text-sm">Download the picture</button>
+          <button data-action="reset-hero" class="ce-btn-ghost text-sm">Try another</button>
         </div>
       </div>
       </div>
@@ -239,8 +252,8 @@
   <!-- Two doors, one engine: Creators vs Business -->
   <div class="max-w-3xl mx-auto px-6 pt-4">
     <div class="flex gap-2 justify-center text-sm">
-      <button id="ltab-creator" data-action="set-landing-tab" data-arg="creator" class="px-5 py-2 rounded-lg font-semibold border-2 border-purple-500 bg-purple-900 text-white">For Creators</button>
-      <button id="ltab-business" data-action="set-landing-tab" data-arg="business" class="px-5 py-2 rounded-lg font-semibold border-2 border-gray-700 bg-gray-800 text-gray-300">For Business</button>
+      <button id="ltab-creator" data-action="set-landing-tab" data-arg="creator" class="lt-btn lt-active px-5 py-2">For Creators</button>
+      <button id="ltab-business" data-action="set-landing-tab" data-arg="business" class="lt-btn px-5 py-2">For Business</button>
     </div>
   </div>
 
@@ -250,12 +263,12 @@
        and shown it being kept; a second headline a screen later is a second
        product introducing itself. What belongs here is what the field could not
        show — that the same thing happens on a schedule, without you. -->
-  <section class="max-w-3xl mx-auto px-6 pt-14 pb-12 text-center">
+  <section class="max-w-5xl mx-auto px-6 py-16 text-center">
     <p class="text-lg" style="color:var(--accent)">And then it keeps doing it without you.</p>
     <p class="mt-4 text-gray-400 leading-relaxed max-w-2xl mx-auto">Give it a topic. Content Engine writes the copy, designs your branded slides, and posts to Instagram and X — 24/7, even when your computer is off.</p>
     <div class="mt-8 flex flex-wrap justify-center gap-3">
-      <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-6 py-3 text-sm">Start free →</button>
-      <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
+      <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-sm">Start free →</button>
+      <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost text-sm">Log in</button>
     </div>
     <div class="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-400">
       <span>◆ Instagram &amp; X</span><span>◆ No API key to start</span><span>◆ Encrypted &amp; isolated</span>
@@ -268,7 +281,7 @@
        open with "Connect your keys" — true when nothing ran without one, and a
        lie for every month since the free tier landed. A key is asked for once
        the free posts are gone, and that is where this now says so. -->
-  <section id="how-it-works" class="max-w-5xl mx-auto px-6 py-10">
+  <section id="how-it-works" class="max-w-5xl mx-auto px-6 py-12">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">HOW IT WORKS</div>
     <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">1</div><div class="font-semibold mb-1">Give it a topic</div><div class="text-sm text-gray-400">One line is enough. No niche form, no tone picker — those have answers already.</div></div>
@@ -283,7 +296,7 @@
        row that reads as a card which failed to load. Four fills both a two- and
        a four-column row exactly. No icon slots — the glyphs were removed from
        four of the five cards and left their empty two-line boxes behind. -->
-  <section id="features" class="max-w-5xl mx-auto px-6 py-10">
+  <section id="features" class="max-w-5xl mx-auto px-6 py-12">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">EVERYTHING YOU NEED</div>
     <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="ce-card p-5"><div class="font-semibold mb-1">AI copywriting</div><div class="text-sm text-gray-400">Hook, caption, hashtags and SEO keywords, tuned to your tone.</div></div>
@@ -294,7 +307,7 @@
   </section>
 
   <!-- Built for -->
-  <section class="max-w-4xl mx-auto px-6 py-10 text-center">
+  <section class="max-w-5xl mx-auto px-6 py-12 text-center">
     <div class="text-sm text-gray-400 mb-4">Built for</div>
     <div class="flex flex-wrap justify-center gap-3 text-sm">
       <span class="ce-card px-4 py-2">SMM specialists</span>
@@ -305,22 +318,22 @@
   </section>
 
   <!-- CTA -->
-  <section class="max-w-3xl mx-auto px-6 py-14 text-center">
+  <section class="max-w-5xl mx-auto px-6 py-16 text-center">
     <h2 class="text-2xl sm:text-3xl font-bold">Start creating in minutes.</h2>
     <p class="mt-3 text-gray-400">Free to start, no API key. Bring your own when you outgrow it.</p>
-    <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
+    <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-sm mt-7">Start free →</button>
   </section>
   </div><!-- /landing-creator -->
 
   <div id="landing-business" class="hidden">
     <!-- Business hero -->
-    <section class="max-w-3xl mx-auto px-6 pt-14 pb-12 text-center">
+    <section class="max-w-5xl mx-auto px-6 py-16 text-center">
       <h1 class="text-4xl sm:text-5xl font-bold tracking-tight leading-tight">Turn company updates into content</h1>
       <p class="mt-5 text-lg" style="color:var(--accent)">Sources → newsworthy events → human-approved drafts.</p>
       <p class="mt-4 text-gray-400 leading-relaxed max-w-2xl mx-auto">Point Content Engine at your public sources — release notes, changelogs, blogs. It spots what's worth posting, drafts it in your brand voice, and keeps a person in the loop before anything goes out.</p>
       <div class="mt-8 flex flex-wrap justify-center gap-3">
-        <button data-action="auth-register-business" class="ce-btn px-6 py-3 text-sm">Start free →</button>
-        <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
+        <button data-action="auth-register-business" class="ce-btn text-sm">Start free →</button>
+        <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost text-sm">Log in</button>
       </div>
       <div class="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-400">
         <span>◆ Public links only</span><span>◆ Human approval</span><span>◆ Full audit journal</span>
@@ -328,7 +341,7 @@
     </section>
 
     <!-- Business flow -->
-    <section class="max-w-5xl mx-auto px-6 py-10">
+    <section class="max-w-5xl mx-auto px-6 py-12">
       <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">HOW IT WORKS</div>
       <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">1</div><div class="font-semibold mb-1">Connect sources</div><div class="text-sm text-gray-400">Paste public links — release notes, changelogs, a blog feed. No logins to your internal systems.</div></div>
@@ -345,7 +358,7 @@
         <div class="text-sm text-gray-400 text-center mb-4">Paste a public link — a GitHub repo, an RSS feed, or a changelog page. You'll get draft starters from your latest updates (draft starters from your public data, not posts from you).</div>
         <div class="flex flex-col sm:flex-row gap-2">
           <input id="demo-url" type="url" placeholder="https://github.com/your-org/your-repo" class="ce-input flex-1 px-4 py-3" />
-          <button id="demo-run" data-action="run-demo" class="ce-btn px-5 py-3 text-sm">Try it</button>
+          <button id="demo-run" data-action="run-demo" class="ce-btn text-sm">Try it</button>
         </div>
         <p id="demo-status" class="hidden text-sm text-gray-400 mt-3"></p>
         <div id="demo-results" class="mt-4 space-y-4 text-left"></div>
@@ -353,10 +366,10 @@
     </section>
 
     <!-- Business CTA -->
-    <section class="max-w-3xl mx-auto px-6 py-14 text-center">
+    <section class="max-w-5xl mx-auto px-6 py-16 text-center">
       <h2 class="text-2xl sm:text-3xl font-bold">Never miss a moment worth posting.</h2>
       <p class="mt-3 text-gray-400">Free to start. Public sources only. A person approves everything.</p>
-      <button data-action="auth-register-business" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
+      <button data-action="auth-register-business" class="ce-btn text-sm mt-7">Start free →</button>
     </section>
   </div><!-- /landing-business -->
 

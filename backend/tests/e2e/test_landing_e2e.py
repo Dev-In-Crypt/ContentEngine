@@ -287,6 +287,29 @@ def test_no_card_holds_space_for_an_icon_that_is_not_there(page, live_server):
     assert empty == 0
 
 
+def test_the_chosen_field_mode_looks_chosen(page, live_server):
+    """Both tab rows on this page were drawn by swapping six Tailwind utilities
+    per button, in JS — the only controls in the product belonging to none of
+    the five `-active` families the stylesheet already had. Asserted through
+    what a person sees rather than through a class name, so the next tidy-up is
+    free to change the mechanism and not the meaning.
+    """
+    _land(page, live_server)
+    topic = page.locator('[data-hero-mode="topic"]')
+    link = page.locator('[data-hero-mode="link"]')
+    idle = link.evaluate("e => getComputedStyle(e).backgroundColor")
+    chosen = topic.evaluate("e => getComputedStyle(e).backgroundColor")
+    assert idle != chosen
+
+    link.click()
+
+    # to_have_css, not another evaluate: reading a computed style is a single
+    # look with no retry, and it takes it before the click's class change has
+    # landed. The first version of this test failed against working code.
+    expect(link).to_have_css("background-color", chosen)
+    expect(topic).to_have_css("background-color", idle)
+
+
 def test_the_mark_next_to_the_name_is_not_an_empty_box(page, live_server):
     """The favicon still draws it and the comment above still names it; only the
     markup lost the glyph, leaving a gap in front of the product's own name."""

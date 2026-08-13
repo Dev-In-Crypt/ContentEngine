@@ -179,13 +179,7 @@ function setLandingTab(tab) {
   if (businessEl) businessEl.classList.toggle('hidden', !biz);
   for (const [id, on] of [['ltab-creator', !biz], ['ltab-business', biz]]) {
     const b = document.getElementById(id);
-    if (!b) continue;
-    b.classList.toggle('border-purple-500', on);
-    b.classList.toggle('bg-purple-900', on);
-    b.classList.toggle('text-white', on);
-    b.classList.toggle('border-gray-700', !on);
-    b.classList.toggle('bg-gray-800', !on);
-    b.classList.toggle('text-gray-300', !on);
+    if (b) b.classList.toggle('lt-active', on);
   }
 }
 function backToHome() {
@@ -221,15 +215,8 @@ function setHeroMode(mode) {
   const input = document.getElementById('hero-input');
   input.placeholder = HERO_PLACEHOLDER[S.heroMode];
   input.value = '';
-  document.querySelectorAll('[data-hero-mode]').forEach(b => {
-    const on = b.dataset.heroMode === S.heroMode;
-    b.classList.toggle('border-purple-500', on);
-    b.classList.toggle('bg-purple-900', on);
-    b.classList.toggle('text-white', on);
-    b.classList.toggle('border-gray-700', !on);
-    b.classList.toggle('bg-gray-800', !on);
-    b.classList.toggle('text-gray-300', !on);
-  });
+  document.querySelectorAll('[data-hero-mode]').forEach(b =>
+    b.classList.toggle('lt-active', b.dataset.heroMode === S.heroMode));
 }
 
 function heroStatus(message) {
