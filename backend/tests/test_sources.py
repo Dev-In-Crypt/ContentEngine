@@ -470,3 +470,63 @@ def test_github_still_accepts_ordinary_names():
     fetcher = GitHubReleasesFetcher(token="")
     assert fetcher._owner_repo("https://github.com/pallets/flask") == ("pallets", "flask")
     assert fetcher._owner_repo("https://github.com/o-n_e/repo.js") == ("o-n_e", "repo.js")
+
+
+# ── measured against real changelog pages, not imagined ones ───────────────
+
+@pytest.mark.asyncio
+async def test_a_page_title_carrying_the_brand_is_still_the_page_title(
+        httpx_mock: HTTPXMock):
+    """"<h1>Changelog</h1>" on /changelog was suppressed; "<h1>Clerk Changelog</h1>"
+    was not, because the rule slugified the heading and required it to EQUAL a
+    path segment. Brand + section is the ordinary way to title such a page.
+
+    It is not a harmless extra row either: the page title's body is the top of
+    the document, so it collects the newest entries' text and comes out as the
+    single most post-worthy "event" on the page. Measured on clerk.com, which
+    returned "Clerk Changelog" as worthy on "price" and "launch".
+    """
+    httpx_mock.add_response(
+        text=_page('<h1>Clerk Changelog</h1><p>Everything new.</p>'
+                   '<h2>Discounts and promo codes</h2><p>Create a discount once.</p>'),
+        headers={"content-type": "text/html"})
+
+    items = await GenericPageFetcher().fetch("https://clerk.com/changelog")
+
+    assert [i.title for i in items] == ["Discounts and promo codes"]
+
+
+@pytest.mark.asyncio
+async def test_a_bare_page_title_is_still_suppressed(httpx_mock: HTTPXMock):
+    """The case the rule already handled — widening it must not narrow this."""
+    httpx_mock.add_response(
+        text=_page('<h1>Changelog</h1><p>Everything new.</p>'
+                   '<h2>Real entry</h2><p>Something shipped.</p>'),
+        headers={"content-type": "text/html"})
+
+    items = await GenericPageFetcher().fetch("https://ex.com/changelog")
+
+    assert [i.title for i in items] == ["Real entry"]
+
+
+@pytest.mark.asyncio
+async def test_a_heading_that_merely_mentions_the_section_survives(
+        httpx_mock: HTTPXMock):
+    """The risk in widening the rule. A real entry whose title happens to contain
+    the section word must not be swallowed — only the page announcing itself is."""
+    httpx_mock.add_response(
+        text=_page('<h1>Changelog rebuilt in Rust</h1><p>It is faster now.</p>'),
+        headers={"content-type": "text/html"})
+
+    items = await GenericPageFetcher().fetch("https://ex.com/changelog")
+
+    assert [i.title for i in items] == ["Changelog rebuilt in Rust"]
+
+
+def test_the_size_cap_clears_the_changelogs_people_actually_have():
+    """Chosen from measurement rather than roundness. The largest real target in
+    the calibration run was docs.stripe.com at 3.31 MB, with posthog.com at 2.81
+    and linear.app at 1.65 — the old 2 MB cap sat in the middle of that
+    distribution, so it rejected two of seven and linear only just survived."""
+    from services.sources.page import _MAX_BYTES
+    assert _MAX_BYTES >= 4 * 1024 * 1024

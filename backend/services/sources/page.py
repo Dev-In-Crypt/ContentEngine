@@ -31,7 +31,14 @@ _MAX_ITEMS = 30
 _MAX_BODY = 600
 #: A changelog is text. Anything larger is not a page we can use, and reading it
 #: to find that out is the cost we're declining to pay.
-_MAX_BYTES = 2 * 1024 * 1024
+#:
+#: Eight, not two, and the number comes from measurement rather than roundness.
+#: Running the fetcher over real targets: docs.stripe.com 3.31 MB, posthog.com
+#: 2.81, linear.app 1.65, the rest around half a megabyte. The old 2 MB cap sat
+#: in the middle of that distribution — it rejected two of seven outright and
+#: linear cleared it by a third of a megabyte. A cap that lands mid-distribution
+#: is not a safety limit, it is a coin toss.
+_MAX_BYTES = 8 * 1024 * 1024
 _HEADINGS = ("h1", "h2", "h3")
 
 #: Elements that are never content, wherever they appear.
@@ -70,7 +77,17 @@ def _is_page_title(heading, title: str, page_url: str, first: bool) -> bool:
     if not first or heading.name != "h1":
         return False
     slug = title.lower().replace(" ", "-")
-    return slug in {p.lower() for p in urlparse(page_url).path.split("/") if p}
+    segments = {p.lower() for p in urlparse(page_url).path.split("/") if p}
+    # Equality, or the segment at the END of the heading: "Clerk Changelog" on
+    # /changelog is the page announcing itself exactly as "Changelog" is, and
+    # brand + section is the ordinary way to write it. Measured on clerk.com,
+    # where the untitled-by-brand version came through as an item — and not a
+    # harmless one, since a page title's body is the top of the document, so it
+    # collects the newest entries and scores as the most post-worthy thing there.
+    #
+    # Anchored at the end rather than "contains": that keeps a real entry called
+    # "Changelog rebuilt in Rust" — which starts with the word — as an entry.
+    return any(slug == s or slug.endswith(f"-{s}") for s in segments)
 
 
 def _is_nav_link(heading, body: str) -> bool:
