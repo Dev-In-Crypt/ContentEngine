@@ -648,3 +648,39 @@ def test_the_preview_is_not_a_cropped_version_of_the_download(page, live_server)
     assert abs(shown - natural) < 0.02, (
         f"preview is {shown:.3f} against the picture's own {natural:.3f} — "
         "the visitor is being shown a crop of what they would download")
+
+
+# ── the landing is a screen, not a sheet laid over a live app ───────────────
+
+def test_tabbing_around_the_landing_never_reaches_the_app_behind_it(page, live_server):
+    """The overlay covers the application visually and nothing else.
+
+    Counted on prod: 34 focusable elements on the page, 17 of them in the
+    landing. Tab order started on an invisible control *above* the overlay and,
+    past "Contact", walked into the whole product — Create, Calendar, Queue,
+    Results, the composer's fields — none of it on screen. Same shape as the
+    toast that was written into a hidden box: the interface says one thing and
+    the DOM says another, and a keyboard or screen-reader user gets the DOM.
+
+    Asserted by pressing Tab rather than by reading an attribute, because the
+    attribute is the mechanism and this is the behaviour.
+    """
+    _land(page, live_server)
+    page.evaluate("document.body.focus()")
+
+    escaped = []
+    for _ in range(30):
+        page.keyboard.press("Tab")
+        where = page.evaluate(
+            """() => {
+                const a = document.activeElement;
+                if (!a || a === document.body || a === document.documentElement) return null;
+                const landing = document.getElementById('landing-screen');
+                return landing.contains(a) ? null
+                     : (a.id || a.tagName + ':' + (a.innerText || '').trim().slice(0, 30));
+            }"""
+        )
+        if where:
+            escaped.append(where)
+
+    assert not escaped, f"Tab reached {len(escaped)} controls behind the overlay: {escaped[:6]}"

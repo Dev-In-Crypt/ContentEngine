@@ -113,6 +113,49 @@ function startHeroFromLink() {
   runHeroPost();
 }
 
+//: Every screen that covers the whole viewport instead of sitting inside it.
+//: Kept in one place because what matters about them is shared: while one is up,
+//: the application behind it must not be reachable.
+const FULLSCREEN_SCREENS = ['landing-screen', 'auth-screen', 'forgot-screen',
+                            'reset-screen', 'onboarding-screen'];
+
+/** Make the app shell inert while a full-screen screen is over it.
+ *
+ *  These overlays are `fixed inset-0`, so they hide the product from the eye and
+ *  from nothing else. Counted on prod: 34 focusable controls on the landing, 17
+ *  of them in the landing — Tab started on an invisible button *above* the
+ *  overlay and, past the footer links, walked into Create, Calendar, Queue,
+ *  Results and the composer's fields, none of which were on screen.
+ *
+ *  `inert` rather than a focus trap: it removes the subtree from tab order, from
+ *  hit-testing and from the accessibility tree in one attribute, which is all
+ *  three of the ways the shell was still there. A trap would fix only the first.
+ *
+ *  Driven by an observer rather than by calls at each show/hide site: there are
+ *  six of those across three features, and the one somebody forgets is exactly
+ *  the screen that leaks. test_every_fullscreen_screen_is_covered keeps this
+ *  list honest against the markup.
+ */
+function syncShellInert() {
+  const covered = FULLSCREEN_SCREENS.some(id => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  });
+  document.querySelectorAll('body > header, body > main').forEach(el => {
+    if (covered) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  });
+}
+
+function watchFullscreenScreens() {
+  const observer = new MutationObserver(syncShellInert);
+  FULLSCREEN_SCREENS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+  syncShellInert();
+}
+
 function showLanding() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('forgot-screen').classList.add('hidden');
@@ -6393,4 +6436,5 @@ document.getElementById('auth-password').addEventListener('keydown', e => { if (
 // startApp() (called from initAuth on success) registers the status + cost polls.
 // A /verify or /reset link is handled first; /reset stops here (user sets a new
 // password), everything else falls through to the normal who-am-I boot.
+watchFullscreenScreens();
 (async () => { if (!await handleAuthLink()) initAuth(); })();

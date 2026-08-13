@@ -122,3 +122,29 @@ def test_nothing_fetches_a_data_url():
     trade; the decode is inline now.
     """
     assert "fetch(read.logo_data_url)" not in (STATIC / "app.js").read_text(encoding="utf-8")
+
+
+def test_every_fullscreen_screen_is_covered_by_the_inert_list():
+    """The list in app.js has to match the markup, or the screen somebody adds
+    next covers the app visually and leaves it tabbable underneath.
+
+    Derived from the markup rather than restated: anything `fixed inset-0` that
+    starts `hidden` is a screen laid over the product, which is exactly the
+    shape that needs the shell made inert. Modals are `fixed inset-0` too and
+    are deliberately out — they are opened from inside the app, over a shell
+    that should stay where it is; the ones here replace it.
+    """
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(_html("index.html"), "html.parser")
+    overlays = {
+        el.get("id") for el in soup.find_all(attrs={"class": True})
+        if el.get("id")
+        and "fixed" in el["class"] and "inset-0" in el["class"]
+        and "hidden" in el["class"]
+        and el.get("id", "").endswith("-screen")
+    }
+    listed = set(re.findall(r"'([a-z-]+-screen)'",
+                            (STATIC / "app.js").read_text(encoding="utf-8")
+                            .split("const FULLSCREEN_SCREENS")[1].split("]")[0]))
+    assert overlays == listed, (
+        f"markup has {sorted(overlays)}, app.js lists {sorted(listed)}")
