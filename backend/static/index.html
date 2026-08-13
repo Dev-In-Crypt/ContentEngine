@@ -114,7 +114,7 @@
 <header class="border-b sticky top-0 z-30" style="border-color:var(--border);background:var(--bg)">
   <div class="max-w-7xl mx-auto px-5 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
     <div class="flex items-center gap-2 cursor-pointer" data-action="go-home" title="Home — new post">
-      <span class="text-lg" style="color:var(--accent)"></span>
+      <span class="text-lg" style="color:var(--accent)">✦</span>
       <span class="font-bold tracking-tight">Content Engine</span>
     </div>
     <div class="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -157,7 +157,7 @@
 <!-- ===== LANDING (guests, cloud mode) ===== -->
 <div id="landing-screen" class="hidden fixed inset-0 z-40 overflow-y-auto" style="background:var(--bg)">
   <header class="max-w-6xl mx-auto px-6 py-5 flex items-center gap-2">
-    <span class="text-xl" style="color:var(--accent)"></span>
+    <span class="text-xl" style="color:var(--accent)">✦</span>
     <span class="font-bold tracking-tight text-lg">Content Engine</span>
     <div class="ml-auto flex gap-2">
       <button data-action="show-auth-screen" data-arg="login" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-200 hover:bg-white/5 transition">Log in</button>
@@ -203,7 +203,7 @@
     <div id="hero-gate" class="hidden mt-6 ce-card p-5 text-center">
       <div class="font-semibold">That's your two free posts.</div>
       <p class="mt-2 text-sm text-gray-400">
-        An account is free and comes with 5 more — still no API key needed.
+        An account is free and comes with 2 more — still no API key needed.
       </p>
       <button id="hero-gate-signup" data-action="show-auth-screen" data-arg="register"
               class="ce-btn px-6 py-2.5 text-sm mt-4">Create a free account →</button>
@@ -246,39 +246,50 @@
 
   <div id="landing-creator">
   <!-- Hero -->
+  <!-- No second <h1>. The page has already made its promise in the field above
+       and shown it being kept; a second headline a screen later is a second
+       product introducing itself. What belongs here is what the field could not
+       show — that the same thing happens on a schedule, without you. -->
   <section class="max-w-3xl mx-auto px-6 pt-14 pb-12 text-center">
-    <h1 class="text-4xl sm:text-5xl font-bold tracking-tight leading-tight">AI social content, on autopilot</h1>
-    <p class="mt-5 text-lg" style="color:var(--accent)">AI writes and publishes your content for you.</p>
+    <p class="text-lg" style="color:var(--accent)">And then it keeps doing it without you.</p>
     <p class="mt-4 text-gray-400 leading-relaxed max-w-2xl mx-auto">Give it a topic. Content Engine writes the copy, designs your branded slides, and posts to Instagram and X — 24/7, even when your computer is off.</p>
     <div class="mt-8 flex flex-wrap justify-center gap-3">
       <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-6 py-3 text-sm">Start free →</button>
       <button data-action="show-auth-screen" data-arg="login" class="ce-btn-ghost px-6 py-3 text-sm">Log in</button>
     </div>
     <div class="mt-7 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-gray-400">
-      <span>◆ Instagram &amp; X</span><span>◆ Your own API keys</span><span>◆ Encrypted &amp; isolated</span>
+      <span>◆ Instagram &amp; X</span><span>◆ No API key to start</span><span>◆ Encrypted &amp; isolated</span>
     </div>
   </section>
 
   <!-- How it works -->
-  <section class="max-w-5xl mx-auto px-6 py-10">
+  <!-- Step one is what the visitor has already done in the field above, which is
+       the point: the page describes the thing they just watched work. It used to
+       open with "Connect your keys" — true when nothing ran without one, and a
+       lie for every month since the free tier landed. A key is asked for once
+       the free posts are gone, and that is where this now says so. -->
+  <section id="how-it-works" class="max-w-5xl mx-auto px-6 py-10">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">HOW IT WORKS</div>
     <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">1</div><div class="font-semibold mb-1">Connect your keys</div><div class="text-sm text-gray-400">OpenRouter for generation, Instagram/X for publishing. Encrypted and isolated.</div></div>
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">2</div><div class="font-semibold mb-1">Set a topic</div><div class="text-sm text-gray-400">Niche, audience, tone and length — that's all the AI needs.</div></div>
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">3</div><div class="font-semibold mb-1">AI writes &amp; designs</div><div class="text-sm text-gray-400">Copy, hashtags, SEO, plus branded slides in your style.</div></div>
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">4</div><div class="font-semibold mb-1">Publish or schedule</div><div class="text-sm text-gray-400">Post now or queue it — the server publishes 24/7.</div></div>
+      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">1</div><div class="font-semibold mb-1">Give it a topic</div><div class="text-sm text-gray-400">One line is enough. No niche form, no tone picker — those have answers already.</div></div>
+      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">2</div><div class="font-semibold mb-1">AI writes &amp; designs</div><div class="text-sm text-gray-400">Copy, hashtags and branded slides in your colours and your logo.</div></div>
+      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">3</div><div class="font-semibold mb-1">Read it and change it</div><div class="text-sm text-gray-400">Every word and every slide is yours to edit before anything leaves.</div></div>
+      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">4</div><div class="font-semibold mb-1">Publish or schedule</div><div class="text-sm text-gray-400">Post now or queue it — the server publishes 24/7. Your own key takes over once the free posts run out.</div></div>
     </div>
   </section>
 
   <!-- Features -->
-  <section class="max-w-5xl mx-auto px-6 py-10">
+  <!-- Four, not five: five in a three-column grid leaves a hole in the second
+       row that reads as a card which failed to load. Four fills both a two- and
+       a four-column row exactly. No icon slots — the glyphs were removed from
+       four of the five cards and left their empty two-line boxes behind. -->
+  <section id="features" class="max-w-5xl mx-auto px-6 py-10">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">EVERYTHING YOU NEED</div>
-    <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">AI copywriting</div><div class="text-sm text-gray-400">Hook, caption, hashtags and SEO keywords, tuned to your tone.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">Branded slides</div><div class="text-sm text-gray-400">Carousels in your template — niche plate, title plate, logo.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2">▶</div><div class="font-semibold mb-1">Reels video</div><div class="text-sm text-gray-400">Turn a topic into a short-form video script and shot list.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">24/7 scheduler</div><div class="text-sm text-gray-400">Publishes from the server even when your computer is off.</div></div>
-      <div class="ce-card p-5"><div class="text-2xl mb-2"></div><div class="font-semibold mb-1">Post analytics</div><div class="text-sm text-gray-400">Reach, saves, shares and comments pulled from the network.</div></div>
+    <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="ce-card p-5"><div class="font-semibold mb-1">AI copywriting</div><div class="text-sm text-gray-400">Hook, caption, hashtags and SEO keywords, tuned to your tone.</div></div>
+      <div class="ce-card p-5"><div class="font-semibold mb-1">Branded slides</div><div class="text-sm text-gray-400">Carousels in your template — niche plate, title plate, logo.</div></div>
+      <div class="ce-card p-5"><div class="font-semibold mb-1">Reels video</div><div class="text-sm text-gray-400">Turn a post into a short vertical video, voiced and subtitled.</div></div>
+      <div class="ce-card p-5"><div class="font-semibold mb-1">24/7 scheduler</div><div class="text-sm text-gray-400">Publishes from the server even when your computer is off.</div></div>
     </div>
   </section>
 
@@ -296,7 +307,7 @@
   <!-- CTA -->
   <section class="max-w-3xl mx-auto px-6 py-14 text-center">
     <h2 class="text-2xl sm:text-3xl font-bold">Start creating in minutes.</h2>
-    <p class="mt-3 text-gray-400">Free to start. Bring your own keys. Publish everywhere.</p>
+    <p class="mt-3 text-gray-400">Free to start, no API key. Bring your own when you outgrow it.</p>
     <button data-action="show-auth-screen" data-arg="register" class="ce-btn px-7 py-3 text-sm mt-7">Start free →</button>
   </section>
   </div><!-- /landing-creator -->
@@ -366,7 +377,7 @@
 <div id="auth-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:var(--bg)">
   <div class="ce-card p-8 max-w-sm w-full space-y-4 shadow-2xl">
     <div class="flex items-center gap-2">
-      <span class="text-xl" style="color:var(--accent)"></span>
+      <span class="text-xl" style="color:var(--accent)">✦</span>
       <h2 class="text-lg font-bold">Content Engine</h2>
     </div>
     <div>

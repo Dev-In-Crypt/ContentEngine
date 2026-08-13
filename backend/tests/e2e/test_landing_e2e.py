@@ -18,6 +18,8 @@ import json
 import pytest
 from playwright.sync_api import expect
 
+from services.free_generation import FREE_POST_LIMIT
+
 pytestmark = pytest.mark.e2e
 
 
@@ -233,13 +235,73 @@ def test_a_second_run_started_mid_flight_does_not_ask_twice(page, live_server):
     assert len(calls) == 1
 
 
+# ── what the page claims (UX phase 10.1) ────────────────────────────────────
+#
+# Almost none of the landing's prose is under test, and that is deliberate —
+# marketing copy that a test pins down is copy nobody edits. What is pinned here
+# is the handful of places where the page was making a claim the product no
+# longer honours, plus the two bits of geometry that made it look unfinished.
+
+def test_the_first_step_is_not_a_key(page, live_server):
+    """"Connect your keys" was step one for months after the product stopped
+    needing a key to start: the landing generates for a stranger, and an account
+    adds more on our key. The first thing the page asks of somebody is the thing
+    it teaches them the product is — and it was teaching the wrong one."""
+    _land(page, live_server)
+
+    first = page.locator("#how-it-works .ce-card").first
+    expect(first).to_contain_text("topic")
+    expect(first).not_to_contain_text("key")
+
+
+def test_the_creator_page_makes_one_promise(page, live_server):
+    """Two <h1>s stacked a screen apart is two products introducing themselves."""
+    _land(page, live_server)
+
+    assert page.locator("#landing-creator h1, #hero-field h1").count() == 1
+
+
+def test_the_feature_grid_has_no_hole_in_it(page, live_server):
+    """Five cards in a three-column grid leave a gap in the second row, which
+    reads as a card that failed to load. The fix is the count, not a rule about
+    the count — four cards fill both a two- and a four-column row exactly."""
+    _land(page, live_server)
+
+    assert page.locator("#features .ce-card").count() == 4
+
+
+def test_no_card_holds_space_for_an_icon_that_is_not_there(page, live_server):
+    """Four of the five feature cards carried an empty two-line icon slot — not
+    a styling accident but literally `<div class="text-2xl mb-2"></div>`, a glyph
+    removed without its box. Either every card has one or none does.
+
+    The count assertion is not decoration: written without it this test passed
+    against the broken page, because `#features` did not exist yet and "no empty
+    boxes among no cards" is true.
+    """
+    _land(page, live_server)
+
+    assert page.locator("#features .ce-card").count() > 0
+    empty = page.locator("#features .ce-card div").evaluate_all(
+        "els => els.filter(el => !el.textContent.trim() && !el.children.length).length")
+    assert empty == 0
+
+
+def test_the_mark_next_to_the_name_is_not_an_empty_box(page, live_server):
+    """The favicon still draws it and the comment above still names it; only the
+    markup lost the glyph, leaving a gap in front of the product's own name."""
+    _land(page, live_server)
+
+    expect(page.locator("#landing-screen header span").first).not_to_have_text("")
+
+
 # ── the soft gate (UX phase 7.3) ────────────────────────────────────────────
 #
-# Two runs, then an account. The counter lives in localStorage and is a polite
-# request rather than a defence — clearing it takes two clicks, which is why the
-# real limits are per-IP and the daily ceiling, both server-side. What this
-# buys is the moment: somebody who has seen it work twice is being asked at the
-# only point where the answer is obviously worth it.
+# Two runs, then an account. The counting is the server's (services/anon_quota.py)
+# and reaches the browser as a 402 — it used to live in localStorage, where
+# clearing it took two clicks. What the gate buys is the moment: somebody who has
+# seen it work twice is being asked at the only point where the answer is
+# obviously worth it.
 
 FREE_TRIES = 2
 
@@ -284,15 +346,19 @@ def test_the_third_try_asks_for_an_account(page, live_server):
     assert len(calls) == FREE_TRIES          # the refusal costs us nothing
 
 
-def test_the_gate_says_what_is_waiting_on_the_other_side(page, live_server):
-    """A wall that only says "no" reads as the end. The five free posts an
-    account comes with (UX phase 6) are the reason the answer is worth giving."""
+def test_the_gate_promises_what_the_server_gives(page, live_server):
+    """A wall that only says "no" reads as the end, so the gate names what an
+    account comes with. The number is read from the server's own constant
+    rather than typed here, because that is the whole failure this test exists
+    for: the gate said "5 more" for weeks after `FREE_POST_LIMIT` became 2, and
+    a hard-coded "5" on both sides would have agreed with the lie.
+    """
     _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
     _run(page)
 
-    expect(page.locator("#hero-gate")).to_contain_text("5")
+    expect(page.locator("#hero-gate")).to_contain_text(str(FREE_POST_LIMIT))
 
 
 def test_the_gate_leads_to_sign_up(page, live_server):
