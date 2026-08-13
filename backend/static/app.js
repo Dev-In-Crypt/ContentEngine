@@ -551,7 +551,13 @@ async function addSource() {
     if (!res.ok) { setStatus('Couldn\'t add that source.'); return; }
     const d = await res.json();
     input.value = '';
-    setStatus(`Added. Found ${d.leads_found} lead${d.leads_found === 1 ? '' : 's'} in the last 90 days.`);
+    // The first headline, not just the count. A page that builds itself with
+    // JavaScript answers, gets added, looks healthy and never produces anything —
+    // its one "entry" reads like a page subtitle. Nothing tells them apart from
+    // a real short changelog, so we show what came out and let the person who
+    // chose the URL see it while they are still looking at the field.
+    const found = `Added. Found ${d.leads_found} lead${d.leads_found === 1 ? '' : 's'} in the last 90 days.`;
+    setStatus(d.sample ? `${found} First one: “${d.sample}”` : found);
     await loadSources();
   } catch { setStatus('Something went wrong. Please try again.'); }
   finally { btn.disabled = false; }
@@ -593,7 +599,27 @@ async function loadLeads() {
     const list = res.ok ? await res.json() : [];
     if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No leads yet. Add a source and we\'ll collect what\'s worth posting.</div>'; return; }
     box.innerHTML = '';
-    list.forEach(l => box.appendChild(renderLeadRow(l)));
+    // The product's promise is that it decides what is worth writing about, and
+    // a list that shows everything with a label on it has not decided anything.
+    // So the weak ones are folded away rather than dropped: the rules are worth
+    // trusting, not obeying, and getting them back is one click — which is also
+    // the only honest position while nothing has ever measured how often they
+    // are wrong.
+    const shown = list.filter(l => l.strength !== 'weak' && l.strength !== 'duplicate');
+    const folded = list.filter(l => !shown.includes(l));
+    shown.forEach(l => box.appendChild(renderLeadRow(l)));
+    if (!folded.length) return;
+    const more = document.createElement('button');
+    more.className = 'ce-btn-ghost px-3 py-2 text-xs mt-2';
+    more.id = 'biz-show-weak';
+    more.textContent = shown.length
+      ? `Show ${folded.length} we didn't think were worth posting`
+      : `Nothing looked worth posting. Show ${folded.length} anyway`;
+    more.onclick = () => {
+      more.remove();
+      folded.forEach(l => box.appendChild(renderLeadRow(l)));
+    };
+    box.appendChild(more);
   } catch { box.innerHTML = '<div class="text-sm text-gray-400">Couldn\'t load leads.</div>'; }
 }
 

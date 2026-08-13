@@ -461,3 +461,52 @@ def test_a_creator_has_no_journal_even_if_the_milestone_is_there(page, signed_in
 
     expect(page.locator('#results-tabs [data-results-tab="journal"]')).to_be_hidden()
 
+
+
+# ── the product decides, rather than labelling and handing it back ──────────
+
+def test_weak_leads_are_folded_away_until_asked_for(page, signed_in):
+    """The pitch is that it works out what is worth writing about. A list that
+    shows everything with a badge on it has not worked anything out — the reader
+    still does the sorting, which is the job they were buying.
+
+    Folded, not dropped: the rules have never been measured against a person's
+    judgement, so hiding them for good would be trusting them further than they
+    have earned. One click brings them back.
+    """
+    signed_in(account_type="business")
+    _serve(page, "**/api/business/leads*", [
+        _lead(id="a", what_happened="v4.2 ships incremental builds"),
+        _lead(id="b", what_happened="Bumped a dependency", strength="weak",
+              reason="looks like an internal or cosmetic change"),
+        _lead(id="c", what_happened="Fixed a typo", strength="weak",
+              reason="looks like an internal or cosmetic change"),
+    ])
+    open_section(page, "create")
+
+    expect(page.locator("#biz-leads-list")).to_contain_text("v4.2 ships")
+    expect(page.locator("#biz-leads-list")).not_to_contain_text("Bumped a dependency")
+    expect(page.locator("#biz-show-weak")).to_contain_text("2")
+
+    page.locator("#biz-show-weak").click()
+
+    expect(page.locator("#biz-leads-list")).to_contain_text("Bumped a dependency")
+    expect(page.locator("#biz-leads-list")).to_contain_text("Fixed a typo")
+
+
+def test_a_day_with_nothing_worth_posting_says_so_and_still_offers_the_rest(
+        page, signed_in):
+    """The case that decides whether folding is honest or just hiding. If
+    everything scored weak, an empty screen would read as "nothing happened" when
+    what happened is "we judged it all unremarkable" — and that judgement is
+    exactly the one the reader might disagree with."""
+    signed_in(account_type="business")
+    _serve(page, "**/api/business/leads*", [
+        _lead(id="a", what_happened="Bumped a dependency", strength="weak",
+              reason="looks like an internal or cosmetic change"),
+    ])
+    open_section(page, "create")
+
+    expect(page.locator("#biz-show-weak")).to_contain_text("Nothing looked worth posting")
+    page.locator("#biz-show-weak").click()
+    expect(page.locator("#biz-leads-list")).to_contain_text("Bumped a dependency")

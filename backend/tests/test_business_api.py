@@ -230,3 +230,43 @@ def test_limits_round_trip_and_isolation(client):
     # out-of-range → 422
     assert client.put("/api/business/limits", headers=ha,
                       json={"max_per_day": 999}).status_code == 422
+
+
+def test_adding_a_source_shows_what_it_actually_found(client):
+    """A page that builds itself with JavaScript still answers, and the fetcher
+    still extracts something from the shell — railway.com/changelog yields one
+    entry reading "Weekly product updates since 2021". The source is added, looks
+    healthy, and will never produce anything.
+
+    No threshold separates that from a real changelog with one short entry: this
+    file's own fixture is a single lead of thirty characters, indistinguishable
+    from the broken case. One example of a broken page is not a distribution, and
+    a guess dressed as a rule is worse than nothing.
+
+    So the product does not guess — it shows what it pulled out. Nonsense is
+    obvious to the person who chose the URL, immediately, while they are still
+    looking at the field they typed it into.
+    """
+    h = _register(client, "sample@ex.com")
+
+    r = client.post("/api/business/sources", headers=h,
+                    json={"url": "https://github.com/o/r"})
+
+    assert r.status_code == 200
+    assert r.json()["sample"] == "New pricing tier"
+
+
+def test_a_source_that_found_nothing_says_nothing_rather_than_guessing(client, monkeypatch):
+    """No leads means no sample — and no invented explanation for why."""
+    async def _empty(db, source, ssl_verify=True):
+        source.status = "ok"
+        return 0
+
+    monkeypatch.setattr(business_routes, "poll_source", _empty)
+    h = _register(client, "empty@ex.com")
+
+    r = client.post("/api/business/sources", headers=h,
+                    json={"url": "https://ex.com/changelog"})
+
+    assert r.status_code == 200
+    assert r.json()["sample"] is None

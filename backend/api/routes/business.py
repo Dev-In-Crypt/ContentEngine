@@ -101,7 +101,27 @@ async def add_source(
         log.warning("Initial poll failed for %s: %s", body.url, e)
         source.status = "unreachable"
         await db.commit()
-    return {"source": _source_out(source).model_dump(mode="json"), "leads_found": leads_found}
+    # What we actually pulled out, shown back straight away.
+    #
+    # A page that builds its content with JavaScript still answers, and the
+    # fetcher still finds something in the shell: railway.com/changelog yields a
+    # single entry reading "Weekly product updates since 2021", so the source is
+    # added, looks healthy, and never produces anything.
+    #
+    # Detecting that automatically was tried and dropped. One entry of twenty
+    # characters is exactly what a real changelog with one short entry looks
+    # like — no threshold separates them, and one broken example is not a
+    # distribution. Showing the first headline instead makes nonsense obvious to
+    # the person who chose the URL, while they are still looking at the field
+    # they typed it into, and it works for failure modes nobody has seen yet.
+    sample = None
+    if leads_found:
+        sample = (await db.execute(
+            select(LeadModel.what_happened)
+            .where(LeadModel.source_id == source.id)
+            .order_by(LeadModel.created_at.desc()).limit(1))).scalar_one_or_none()
+    return {"source": _source_out(source).model_dump(mode="json"),
+            "leads_found": leads_found, "sample": sample}
 
 
 @router.get("/sources", response_model=list[SourceOut])
