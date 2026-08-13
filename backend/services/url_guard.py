@@ -57,6 +57,21 @@ _CHUNK = 64 * 1024
 #: it: the body is no longer gzipped and no longer that many bytes.
 _DROP_HEADERS = frozenset({"content-encoding", "content-length"})
 
+#: Sent on every guarded fetch unless the caller overrides it.
+#:
+#: Content negotiation happens on the address making the request, and this server
+#: is in a German datacentre. Without this, a site that speaks several languages
+#: answers in German: stripe.com described itself as "eine
+#: Finanzdienstleistungsplattform" to brand extraction, and docs.stripe.com came
+#: back to the changelog fetcher as "Änderungsprotokoll".
+#:
+#: It belongs here rather than at each call site, and that is the lesson rather
+#: than the fix: the header WAS added at one call site first, and the very next
+#: fetcher written against a user's URL did not have it. A default in the one
+#: transport every outbound request already passes through cannot be forgotten by
+#: the next one. Downloads of images and video neither care nor suffer.
+_DEFAULT_HEADERS = {"Accept-Language": "en"}
+
 
 class BlockedURL(Exception):
     """This URL is not allowed to be fetched.
@@ -194,7 +209,7 @@ async def guarded_stream(
         allow_private = _allow_private_default()
     async with httpx.AsyncClient(
         timeout=timeout, verify=ssl_verify, follow_redirects=False,
-        headers=headers or {},
+        headers={**_DEFAULT_HEADERS, **(headers or {})},
     ) as client:
         current = url
         for hop in range(MAX_REDIRECTS + 1):

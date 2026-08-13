@@ -330,3 +330,36 @@ async def test_a_blocked_address_still_says_nothing(httpx_mock, monkeypatch):
         await url_guard.guarded_get("https://internal.example/")
 
     assert str(e.value) == BLOCKED_MESSAGE
+
+
+async def test_every_guarded_fetch_asks_in_english_by_default(httpx_mock, monkeypatch):
+    """Content negotiation happens on the server's IP address, and the server is
+    in Germany.
+
+    brand_extract learned this the expensive way — stripe.com described itself as
+    "eine Finanzdienstleistungsplattform" — and the header was added there, at
+    that one call site. The changelog fetcher then returned docs.stripe.com as
+    "Änderungsprotokoll", because knowing it at one call site is exactly the shape
+    of knowledge that gets forgotten at the next one.
+
+    So the default lives in the transport every outbound fetch already goes
+    through. Asset downloads (images, video) neither care nor suffer.
+    """
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: ["93.184.216.34"])
+    httpx_mock.add_response(url="https://site.example/", text="ok")
+
+    await url_guard.guarded_get("https://site.example/")
+
+    assert httpx_mock.get_requests()[0].headers["accept-language"].startswith("en")
+
+
+async def test_a_caller_that_wants_another_language_still_wins(httpx_mock, monkeypatch):
+    """A default, not a policy — nothing here should stop a future caller asking
+    for the reader's own language."""
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: ["93.184.216.34"])
+    httpx_mock.add_response(url="https://site.example/", text="ok")
+
+    await url_guard.guarded_get("https://site.example/",
+                                headers={"Accept-Language": "de"})
+
+    assert httpx_mock.get_requests()[0].headers["accept-language"] == "de"
