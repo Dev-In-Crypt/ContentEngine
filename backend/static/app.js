@@ -1800,6 +1800,7 @@ const ACTIONS = Object.freeze({
   'on-acct-switch':                      () => onAcctSwitch(),
   'on-product-switch':                   () => onProductSwitch(),
   'onb-copy-post':                       () => onbCopyPost(),
+  'onb-back':                            () => onbBack(),
   'onb-extract':                         () => onbExtract(),
   'onb-finish':                          () => onbFinish(),
   'onb-no-site':                         () => onbNoSite(),
@@ -5965,9 +5966,43 @@ function showOnboardingScreen(n) {
   });
   if (want === '4') onbGenerateFirstPost();
   const idx = ONB_SCREENS.indexOf(want);
-  const prog = document.getElementById('onb-progress');
-  if (prog) prog.textContent = idx >= 0 ? `Step ${idx + 1} of ${ONB_SCREENS.length}` : '';
+  renderOnbProgress(idx);
+  const back = document.getElementById('onb-back');
+  if (back) back.classList.toggle('hidden', idx <= 0);
   onbRemember(want);
+}
+
+/** The bar, and the same thing in words.
+ *
+ *  Both, not one: the bar is what tells somebody at a glance that this ends,
+ *  and the sentence is what tells anybody the bar fails — a screen reader, a
+ *  narrow window, a person who does not read four dashes as a scale. */
+function renderOnbProgress(idx) {
+  const bar = document.getElementById('onb-progress');
+  const text = document.getElementById('onb-progress-text');
+  if (text) {
+    text.textContent = idx >= 0 ? `Step ${idx + 1} of ${ONB_SCREENS.length}` : '';
+  }
+  if (!bar) return;
+  bar.innerHTML = ONB_SCREENS.map((_, i) => {
+    const done = idx >= 0 && i <= idx;
+    return `<span class="block h-1 w-6 rounded-full"${done ? ' data-onb-step-done' : ''}
+      style="background:${done ? 'var(--accent)' : 'var(--panel3)'}"></span>`;
+  }).join('');
+}
+
+/** One screen back.
+ *
+ *  Screen 4 spends real money on arrival, out of an allowance of two — so this
+ *  is only safe because `onbGenerateFirstPost` refuses to run twice. Going back
+ *  from it and forward again must cost nothing, and there is a test that says so.
+ *
+ *  The resume key follows: `showOnboardingScreen` records where you ARE, so a
+ *  reload after Back lands on the screen in front of you rather than the one
+ *  you just left. */
+function onbBack() {
+  const at = ONB_SCREENS.indexOf(onbState());
+  if (at > 0) showOnboardingScreen(ONB_SCREENS[at - 1]);
 }
 
 function startOnboarding(opts) {
@@ -6095,11 +6130,18 @@ async function onbExtract() {
       read.classList.add('hidden');
     }
 
+    // The ring is the theme's ink, not `border-white`: the default theme is
+    // light, and a white ring on a near-white page turned three swatches into
+    // three identical dots with no way to tell which one was chosen. The tick
+    // is for the same reason from the other side — a ring alone is a fine
+    // signal until the chosen colour happens to be pale.
     const colors = document.getElementById('onb-colors');
     colors.innerHTML = (body.colors || []).map((c, i) =>
       `<button type="button" data-onb-color="${esc(c)}" data-action="onb-pick-color" data-arg="${esc(c)}"
-         class="w-8 h-8 rounded-full border-2 ${i === 0 ? 'border-white' : 'border-transparent'}"
-         style="background:${esc(c)}" title="${esc(c)}"></button>`).join('');
+         aria-pressed="${i === 0}"
+         class="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold"
+         style="background:${esc(c)};border-color:${i === 0 ? 'var(--text)' : 'transparent'}"
+         title="${esc(c)}">${i === 0 ? '&#10003;' : ''}</button>`).join('');
     document.getElementById('onb-colors-row').classList.toggle('hidden', !(body.colors || []).length);
     S.onbColor = (body.colors || [])[0] || null;
 
@@ -6122,8 +6164,12 @@ async function onbExtract() {
 
 function onbPickColor(c) {
   S.onbColor = c;
-  document.querySelectorAll('#onb-colors [data-onb-color]').forEach(b =>
-    b.classList.toggle('border-white', b.dataset.onbColor === c));
+  document.querySelectorAll('#onb-colors [data-onb-color]').forEach(b => {
+    const on = b.dataset.onbColor === c;
+    b.setAttribute('aria-pressed', String(on));
+    b.style.borderColor = on ? 'var(--text)' : 'transparent';
+    b.innerHTML = on ? '&#10003;' : '';
+  });
 }
 
 /** Save the colour, if one was chosen. Non-blocking on purpose — see onbSaveBrand. */

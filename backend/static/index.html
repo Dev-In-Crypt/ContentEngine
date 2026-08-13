@@ -478,11 +478,27 @@
      and the publishing credentials to the first publish, because asking for
      either before showing anything is what the UX document says not to do. -->
 <div id="onboarding-screen" class="hidden fixed inset-0 z-40 overflow-y-auto" style="background:var(--bg)">
-  <div class="max-w-xl mx-auto px-6 py-12 space-y-6">
-    <div class="flex items-center justify-between">
-      <div class="text-sm" style="color:var(--muted)" id="onb-progress"></div>
-      <button id="onb-later" data-action="close-onboarding" data-arg="later" class="text-xs" style="color:var(--muted)">I'll do this later</button>
+  <!-- `min-h-full` + centring, the way #auth-screen next door already does it.
+       Without them the column was correctly centred horizontally and pinned to
+       the top by its own padding, so in a wide window the whole of setup sat in
+       a narrow strip against the ceiling with the rest of the screen empty. -->
+  <div class="min-h-full flex items-center justify-center px-6 py-12">
+  <div class="w-full max-w-xl space-y-6">
+    <div class="flex items-center justify-between gap-4">
+      <!-- Four screens with no sense of depth read as an unbounded form. The
+           bar is the shape of it; the words are for anyone the shape fails. -->
+      <div class="flex items-center gap-3">
+        <div id="onb-progress" class="flex items-center gap-1"></div>
+        <span id="onb-progress-text" class="text-sm" style="color:var(--muted)"></span>
+      </div>
+      <button id="onb-later" data-action="close-onboarding" data-arg="later" class="text-xs whitespace-nowrap" style="color:var(--muted)">I'll do this later</button>
     </div>
+
+    <!-- Backwards. Every path through setup was one-way until 10.3, and the
+         first question decides which shell the whole app boots into — the most
+         expensive mis-click in the product, with no way to undo it short of
+         closing setup and reopening it from the avatar menu, which starts over. -->
+    <button id="onb-back" data-action="onb-back" class="hidden text-sm" style="color:var(--muted)">← Back</button>
 
     <!-- 1. what do you run -->
     <section id="onb-s1" class="hidden space-y-4">
@@ -584,6 +600,7 @@
         <button id="onb-finish" data-action="onb-finish" class="ce-btn flex-1 py-3">Start creating</button>
       </div>
     </section>
+  </div>
   </div>
 </div>
 
@@ -896,21 +913,14 @@
       <label for="show-logo" class="text-sm text-gray-300">Show my logo on the image</label>
     </div>
 
-    <!-- Presets: apply a saved bundle of everything in this row (cloud only).
-         `hidden` sits alone on the outer element and `flex` on the row inside:
-         on one element Tailwind emits .flex after .hidden at equal specificity,
-         so display:flex won and renderPresetSelect's toggle did nothing — the
-         desktop build showed a presets bar it has no presets for. Same trap the
-         comment on #hero-result describes. -->
-    <div id="preset-row" class="hidden bg-gray-800/60 rounded-xl px-3 py-2">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-gray-400">Preset</span>
-        <select id="preset-select" class="ce-input px-2 py-1 text-sm min-w-[10rem]"></select>
-        <button data-action="apply-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
-        <button data-action="save-current-preset" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
-        <button data-action="delete-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
-        <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
-      </div>
+    <!-- Presets: apply a saved bundle of everything in this row (cloud only). -->
+    <div id="preset-row" class="hidden flex flex-wrap items-center gap-2 bg-gray-800/60 rounded-xl px-3 py-2">
+      <span class="text-xs text-gray-400">Preset</span>
+      <select id="preset-select" class="ce-input px-2 py-1 text-sm min-w-[10rem]"></select>
+      <button data-action="apply-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
+      <button data-action="save-current-preset" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
+      <button data-action="delete-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
+      <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
     </div>
 
       </div>

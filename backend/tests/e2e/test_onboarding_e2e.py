@@ -129,6 +129,50 @@ def test_reading_a_site_fills_the_fields_as_a_proposal(page, signup):
     expect(page.locator('#onb-colors [data-onb-color]').first).to_be_visible()
 
 
+def test_the_chosen_colour_is_marked_in_a_colour_the_theme_knows(page, signup):
+    """The selected swatch wore `border-white` — a fixed white ring, in a
+    product whose default theme is light and whose every other colour comes from
+    a token. White on near-white is not a selection, it is three identical dots.
+    """
+    signup()
+    _extract(page, _read(colors=("#8a4b2a", "#2a5c8a")))
+    _to_brand(page)
+    page.locator("#onb-site").fill("https://crumb.example")
+    page.locator("#onb-read-site").click()
+
+    chosen = page.locator("#onb-colors [data-onb-color]").first
+    expect(chosen).to_have_attribute("aria-pressed", "true")
+    ring = chosen.evaluate("el => getComputedStyle(el).borderColor")
+    accent = page.evaluate(
+        "getComputedStyle(document.body).getPropertyValue('color')")
+    assert ring == accent, f"ring {ring} does not follow the theme's ink {accent}"
+
+
+def test_a_site_with_no_logo_does_not_offer_one(page, signup):
+    """An empty <img> beside a checkbox reading "Use this as your logo" is an
+    offer of nothing, and half the sites we read have no icon we can use.
+
+    The row carries `class="hidden flex …"`, which reads like the specificity
+    trap the comment on #hero-result describes — but measured in this build,
+    `hidden flex` on ONE element computes to `none`: both are plain utilities
+    and `hidden` is emitted last. The trap is real only for the responsive form
+    (`hidden sm:flex`), where the variant lands in a later media block. So this
+    test guards behaviour that works, rather than a bug.
+
+    The fields have to be open for it to mean anything — with `#onb-fields`
+    still collapsed the row is hidden by its ancestor and the assertion would
+    pass without looking at the row at all.
+    """
+    signup()
+    _extract(page, _read(logo=None))
+    _to_brand(page)
+    page.locator("#onb-site").fill("https://crumb.example")
+    page.locator("#onb-read-site").click()
+
+    expect(page.locator("#onb-niche")).to_be_visible()
+    expect(page.locator("#onb-logo-row")).to_be_hidden()
+
+
 def test_a_site_we_could_not_guess_says_so_without_calling_it_a_failure(page, signup):
     """The ordinary case for a brand-new account: the niche is guessed by an LLM
     and a tenant with no model gets "" back. The name and the colours DID
@@ -421,8 +465,12 @@ def test_starting_lands_in_the_composer_with_the_topic_ready(page, signup):
 
 
 def test_the_post_is_asked_for_once(page, signup):
-    """It costs money. Arriving on the screen twice — a resume, a back — must
-    not buy a second one, and the server's own cap only saves the row."""
+    """It costs money, and it comes out of an allowance of two.
+
+    The re-entry is the real Back button now (10.3) rather than a call into
+    `showOnboardingScreen` from the test: adding a way backwards to a screen
+    that spends money on arrival is precisely the change this guard exists for.
+    """
     signup()
     calls = []
     page.on("request", lambda r: calls.append(r.url)
@@ -435,9 +483,62 @@ def test_the_post_is_asked_for_once(page, signup):
     _to_last_screen(page)
     expect(page.locator("#onb-post")).to_contain_text("c")
 
-    page.evaluate("showOnboardingScreen('4')")
+    page.locator("#onb-back").click()
+    expect(page.locator("#onb-s3")).to_be_visible()
+    page.locator("#onb-skip-net").click()
+    expect(page.locator("#onb-s4")).to_be_visible()
+
     page.wait_for_timeout(400)
     assert len(calls) == 1, calls
+
+
+# ── finding your way (UX phase 10.3) ────────────────────────────────────────
+#
+# Every path through setup was one-way: five calls to showOnboardingScreen, all
+# forwards, and no control to undo a mis-click. The only way back was to close
+# the whole thing and reopen it from the avatar menu, which starts over.
+
+def test_the_first_screen_has_nowhere_to_go_back_to(page, signup):
+    signup()
+    expect(page.locator("#onb-s1")).to_be_visible()
+    expect(page.locator("#onb-back")).to_be_hidden()
+
+
+def test_a_mis_click_on_the_first_question_can_be_undone(page, signup):
+    """Account type decides which shell the app boots into. Picking the wrong
+    one and having no way back is the most expensive mis-click in the product."""
+    signup()
+    _to_brand(page)
+
+    page.locator("#onb-back").click()
+
+    expect(page.locator("#onb-s1")).to_be_visible()
+    expect(page.locator("#onb-s2")).to_be_hidden()
+
+
+def test_where_you_are_is_where_you_resume(page, signup):
+    """Going back rewrites the resume key, or a reload after Back lands on the
+    screen you just left rather than the one you are looking at."""
+    signup()
+    _to_brand(page)
+    page.locator("#onb-back").click()
+    expect(page.locator("#onb-s1")).to_be_visible()
+
+    assert _state(page) == "1"
+
+
+def test_the_progress_bar_follows_the_screen(page, signup):
+    """A bar that does not move is a decoration; the point of it is that four
+    screens in a row with no indication of depth read as an unbounded form."""
+    signup()
+    filled = page.locator("#onb-progress [data-onb-step-done]")
+    # to_have_count, not count(): the screen opens a tick after the boot
+    # settles, and a bare count() takes one look and reports zero.
+    expect(filled).to_have_count(1)
+
+    _to_brand(page)
+
+    expect(filled).to_have_count(2)
 
 
 # ── leaving, and coming back ────────────────────────────────────────────────
