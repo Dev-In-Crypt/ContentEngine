@@ -148,3 +148,23 @@ def test_every_fullscreen_screen_is_covered_by_the_inert_list():
                             .split("const FULLSCREEN_SCREENS")[1].split("]")[0]))
     assert overlays == listed, (
         f"markup has {sorted(overlays)}, app.js lists {sorted(listed)}")
+
+
+def test_the_server_is_started_behind_a_proxy_it_trusts():
+    """Every "per address" limit in this app depends on one flag in the Dockerfile.
+
+    Without --proxy-headers uvicorn reports the peer that opened the socket, and
+    behind the reverse proxy that is the proxy: on the live deployment every
+    request arrived from 172.18.0.5. So the landing's hourly limit, the sign-up
+    limit and the free-post count per address were all one shared limit for the
+    entire internet — one busy visitor spending everyone else's allowance, with
+    nothing in any log to suggest it.
+
+    Nothing in the Python can detect this: the app is handed an address and
+    believes it. The only place it can be asserted is the command that starts the
+    server.
+    """
+    cmd = (Path(__file__).resolve().parent.parent.parent / "Dockerfile").read_text(
+        encoding="utf-8")
+    assert "--proxy-headers" in cmd
+    assert "--forwarded-allow-ips" in cmd

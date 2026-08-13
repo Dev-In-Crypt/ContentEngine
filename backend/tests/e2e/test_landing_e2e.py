@@ -259,10 +259,23 @@ def test_the_first_two_runs_are_free(page, live_server):
     assert len(calls) == FREE_TRIES
 
 
+def _refuse_with_402(page):
+    """What the server answers once the address has had its two."""
+    page.route("**/api/demo/post", lambda r: r.fulfill(
+        status=402, content_type="application/json",
+        body=json.dumps({"detail": "That's your two free posts. "
+                                   "Create a free account for two more."})))
+
+
 def test_the_third_try_asks_for_an_account(page, live_server):
+    """The allowance moved to the server (services/anon_quota.py), so what the
+    landing has to get right is no longer counting — it is reacting. A 402 means
+    "that was the free part" and shows the gate; a 429 means "too fast" and says
+    something else entirely."""
     calls = _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
+    _refuse_with_402(page)
 
     _run(page)
 
@@ -286,6 +299,7 @@ def test_the_gate_leads_to_sign_up(page, live_server):
     _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
+    _refuse_with_402(page)
     _run(page)
 
     page.locator("#hero-gate-signup").click()
@@ -298,6 +312,7 @@ def test_downloading_never_asks_who_you_are(page, live_server):
     _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
+    _refuse_with_402(page)
     _run(page)
 
     expect(page.locator("#hero-gate")).to_be_visible()
@@ -311,6 +326,7 @@ def test_the_last_post_stays_on_screen_behind_the_gate(page, live_server):
     _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
+    _refuse_with_402(page)
     _run(page)
 
     # Wait for the gate FIRST. Both assertions below are already true the
@@ -327,11 +343,13 @@ def test_the_last_post_stays_on_screen_behind_the_gate(page, live_server):
 
 
 def test_a_returning_visitor_is_still_out_of_tries(page, live_server):
-    """localStorage, not a page variable — otherwise the wall is a reload away
-    from being no wall at all."""
+    """The allowance is the server's, so a reload — or a new browser, or cleared
+    storage — changes nothing. That was the whole reason it stopped being kept
+    in localStorage, where two clicks bought two more posts forever."""
     calls = _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
+    _refuse_with_402(page)
 
     page.reload()
     _run(page)
@@ -504,20 +522,12 @@ def test_the_query_is_cleaned_off_the_address_bar(page, live_server):
     assert "topic=" not in page.url
 
 
-def test_a_deep_link_counts_as_one_of_the_free_tries(page, live_server):
-    """It is a real generation on our key. Not counting it would make the gate
-    a link away from meaning nothing."""
-    _serve(page, {"type": "complete", "post": _post()})
-    page.goto(f"{live_server}/?topic=Sourdough+starters")
-    expect(page.locator("#hero-result")).to_be_visible()
-
-    assert page.evaluate("localStorage.getItem('landing_tries')") == "1"
-
-
 def test_a_deep_link_past_the_gate_asks_for_an_account(page, live_server):
+    """A link is not a way around the allowance — it lands on the same refusal."""
     calls = _serve(page, {"type": "complete", "post": _post()})
     _land(page, live_server)
     _run_twice(page)
+    _refuse_with_402(page)
 
     page.goto(f"{live_server}/?topic=One+more+please")
 

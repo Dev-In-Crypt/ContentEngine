@@ -36,7 +36,7 @@ from api.deps import (
 from api.ratelimit import limiter
 from config import Settings
 from models.schemas import ImageSource, Platform, PostFormat
-from services import app_spend
+from services import anon_quota, app_spend
 from services.brand_extract import extract_brand
 from services.generation_credits import image_source_for
 from services.url_guard import BlockedURL
@@ -69,6 +69,22 @@ class DemoRequest(BaseModel):
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
+
+
+def _client_ip(request: Request) -> str:
+    """The visitor's address, decided the same way the rate limiter decides it.
+
+    Deliberately the limiter's own function rather than a second reading of the
+    request: two guards on the same route that disagree about what counts as one
+    address is a bug nobody would think to look for.
+
+    Behind the reverse proxy this is only the visitor's address because uvicorn
+    is started with --proxy-headers — see the Dockerfile. Without that flag every
+    request looks like it came from the proxy, and both guards silently become
+    one shared limit for the whole internet.
+    """
+    from slowapi.util import get_remote_address
+    return get_remote_address(request) or ""
 
 
 @router.post("/from-url")
@@ -238,6 +254,19 @@ async def landing_post(
         raise HTTPException(
             status_code=503,
             detail="The free demo is resting until tomorrow. Sign up to keep going.")
+
+    # Two per address, counted server-side. The browser used to count this, and
+    # the code called it what it was — a polite request that clearing the storage
+    # undid, forever. Refused with 402 rather than 429: this is not "too fast",
+    # it is "that was the free part", and the landing shows a different screen
+    # for each.
+    #
+    # After the ceiling and before the model, like every other guard here: a
+    # request that will be refused must not cost anything first.
+    if not await anon_quota.reserve(db, _client_ip(request), settings.secret_key):
+        raise HTTPException(
+            status_code=402,
+            detail="That's your two free posts. Create a free account for two more.")
 
     engine = build_content_engine(settings, None, actor=None)
     image_source = image_source_for(ImageSource.STOCK, settings, on_our_key=True)

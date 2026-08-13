@@ -22,15 +22,18 @@ from models.database import User
 
 log = logging.getLogger(__name__)
 
-#: Five, including the one onboarding spends on its sample post. Enough to use
-#: the product properly — generate, adapt, try another angle — before being asked
-#: for a key, which is the whole point of moving that question off the doorstep.
+#: Two, including the one onboarding spends on its sample post — so an account
+#: buys one more post than the landing already gave away for free.
 #:
-#: Five and not fifteen because a generation here is a full post: up to ten AI
-#: images on our key, so the worst case per account is dollars rather than cents.
+#: It was five. The owner cut it to two once the shape of the funnel was settled:
+#: two anonymous posts on the landing, two more for signing up, then a key. The
+#: argument for five was "enough to use the product properly before being asked";
+#: the argument for two is that the landing now does that job, and what an
+#: account buys is a reason to come back rather than a longer free trial.
+#:
 #: The number that actually protects the bill is the daily ceiling in
 #: services/app_spend.py; this one decides when a person is asked for a key.
-FREE_POST_LIMIT = 5
+FREE_POST_LIMIT = 2
 
 
 def remaining(user: User) -> int:

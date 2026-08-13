@@ -426,6 +426,29 @@ class PostInsight(Base):
     post = relationship("Post", back_populates="insights")
 
 
+class AnonUsage(Base):
+    """Free landing posts already spent by one address.
+
+    The landing's whole point is seeing the product work without an account, so
+    there is no user to hang a counter on. The previous counter lived in the
+    browser and reset with it; this one does not.
+
+    The address itself is never here — only a salted hash of it, so the table
+    cannot be read back into a list of visitors. Nothing joins to a user, which
+    also means there is nothing for GDPR export or erasure to find: we do not
+    know whose row is whose, by construction.
+
+    See services/anon_quota.py for why the count expires rather than lasting
+    forever, and for what this does and does not defend against.
+    """
+    __tablename__ = "anon_usage"
+
+    ip_hash = Column(String(40), primary_key=True)
+    used = Column(Integer, nullable=False, default=0)
+    first_seen = Column(DateTime(timezone=True), server_default=func.now())
+    last_seen = Column(DateTime(timezone=True), server_default=func.now())
+
+
 # ===== Business module (Phase 2): sources → leads =====
 
 class Workspace(Base):

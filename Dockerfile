@@ -37,4 +37,16 @@ ENV PORT=8000
 # Cloud DB should be Postgres via DATABASE_URL env (see DEPLOY.md).
 # Enter as root only to fix ownership of the mounted uploads volume (named
 # volumes are created root-owned), then exec the app as the non-root appuser.
-CMD ["sh", "-c", "chown -R appuser:appuser /app/uploads 2>/dev/null || true; exec gosu appuser uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+# --proxy-headers: read the visitor's address from X-Forwarded-For instead of the
+# reverse proxy's own. Without it every request on this deployment arrived from
+# 172.18.0.5 — Caddy inside the Docker network — so every "per address" limit in
+# the app was really one shared limit for the whole internet: one busy visitor
+# used up the landing's hourly allowance for everybody, and the free-post count
+# per address would have meant two posts in total, ever.
+#
+# --forwarded-allow-ips="*" is safe HERE and only here: the app is published to
+# the Docker network with `expose`, never to a host port, so the only peer that
+# can open a connection is the proxy. Publish the port directly and this becomes
+# a header anyone can forge — at which point the value must be narrowed to the
+# proxy's address.
+CMD ["sh", "-c", "chown -R appuser:appuser /app/uploads 2>/dev/null || true; exec gosu appuser uvicorn main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips=*"]

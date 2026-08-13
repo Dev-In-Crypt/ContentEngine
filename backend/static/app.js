@@ -201,26 +201,12 @@ S.heroMode = 'topic';
 S.heroPost = null;
 S.heroRunning = false;
 
-//: How many posts a visitor gets before being asked to make an account. Two:
-//: the first shows the product, the second shows the first was not a fluke.
-//:
-//: The count lives in localStorage, which makes it a polite request rather than
-//: a defence — clearing it takes two clicks. That is fine, and saying so is
-//: better than pretending otherwise: what actually bounds our spending is the
-//: per-IP limit and the daily ceiling, both on the server. This exists to pick
-//: the MOMENT to ask, which is after somebody has seen it work twice.
-const HERO_FREE_TRIES = 2;
-const HERO_TRIES_KEY = 'landing_tries';
-
-function heroTriesUsed() {
-  try { return parseInt(localStorage.getItem(HERO_TRIES_KEY) || '0', 10) || 0; }
-  catch { return 0; }
-}
-
-function heroCountTry() {
-  try { localStorage.setItem(HERO_TRIES_KEY, String(heroTriesUsed() + 1)); } catch {}
-}
-
+//: Two free posts before an account is asked for — counted by the SERVER now,
+//: per address, in services/anon_quota.py. This file used to count them in
+//: localStorage and said so plainly: clearing the storage bought two more,
+//: forever. The count is gone from here rather than kept "for the UI", because
+//: two counters that can disagree is a bug waiting for the day one of them is
+//: right. The landing learns it is out by being told, on a 402.
 function showHeroGate() {
   document.getElementById('hero-gate').classList.remove('hidden');
 }
@@ -272,13 +258,11 @@ function runHeroExample(btn) {
  *  a refusal it could have read locally is a poor first impression. */
 async function runHeroPost() {
   if (S.heroRunning) return;          // every run costs a model call and a picture
-  if (heroTriesUsed() >= HERO_FREE_TRIES) {
-    // Nothing is spent and nothing is taken away: the last post stays on
-    // screen, Download keeps working, and the gate says what is on the other
-    // side rather than only saying no.
-    showHeroGate();
-    return;
-  }
+  // The allowance is the server's to count, not this file's. It used to live in
+  // localStorage, and the comment beside it admitted what that was: clearing the
+  // storage bought two more, forever. Asking and being refused costs one round
+  // trip and nothing else, and it is the only version of this the visitor cannot
+  // edit.
   const value = (document.getElementById('hero-input').value || '').trim();
   if (S.heroMode === 'topic' && value.length < 3) {
     return heroStatus('Give it a little more to go on — a few words.');
@@ -290,13 +274,16 @@ async function runHeroPost() {
   S.heroRunning = true;
   const btn = document.getElementById('hero-run');
   btn.disabled = true;
-  document.getElementById('hero-result').classList.add('hidden');
   heroStatus('Starting…');
   try {
     const res = await fetch(`${API}/api/demo/post`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(S.heroMode === 'link' ? { url: value } : { topic: value }),
     });
+    // 402 is "that was the free part", 429 is "too fast". Different answers to
+    // different questions: one invites an account, the other asks for patience,
+    // and showing the wrong one turns an invitation into a complaint.
+    if (res.status === 402) { heroStatus(''); showHeroGate(); return; }
     if (res.status === 429) return heroStatus("That's a few in a row — give it an hour, or sign up to keep going.");
     // Relay the server's reason. There are two 503s behind this and they mean
     // opposite things — "today's budget is spent" and "nobody configured a key
@@ -310,6 +297,14 @@ async function runHeroPost() {
       return heroStatus(detail || 'The free demo is not available right now.');
     }
     if (!res.ok) return heroStatus('Something went wrong. Please try again.');
+
+    // Only now is the previous post cleared. It used to go the moment the button
+    // was pressed, which was invisible while the browser did its own counting —
+    // the third press never reached the network. With the server deciding, that
+    // press does reach it, and clearing first meant the refusal swept away the
+    // post the visitor had just made, Download button and all. The gate is
+    // supposed to take nothing away.
+    document.getElementById('hero-result').classList.add('hidden');
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
@@ -343,7 +338,6 @@ function renderHeroPost(post) {
   // Counted here rather than at the start of the run: an error produced nothing
   // to be asked about, and charging a try for our own failure spends a
   // stranger's patience on it.
-  heroCountTry();
   parkHeroDraft(post);
   heroStatus('');
   document.getElementById('hero-hook').textContent = post.hook || '';

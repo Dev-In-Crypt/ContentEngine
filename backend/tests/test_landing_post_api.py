@@ -319,3 +319,33 @@ def test_an_engine_with_no_owner_refuses_an_upload_id(env):
     with pytest.raises(ImageFetchError) as refusal:
         asyncio.run(engine.image_router.fetch_image(cfg))
     assert "account" in str(refusal.value).lower()
+
+
+# ── two per address, counted where the visitor cannot reach it ──────────────
+
+def test_the_third_post_from_one_address_asks_for_an_account(env):
+    """The allowance used to live in localStorage, and the code said what that
+    was: a polite request. Clearing the browser bought two more, forever.
+
+    402 rather than 429 on purpose — the landing shows a different screen for
+    each, and they mean different things: "that was the free part" is an
+    invitation, "too fast" is a complaint.
+    """
+    assert _post(env).status_code == 200
+    assert _post(env).status_code == 200
+
+    r = _post(env)
+
+    assert r.status_code == 402
+    assert "account" in r.json()["detail"].lower()
+
+
+def test_a_refused_third_post_costs_nothing(env, sm):
+    """The refusal lands before the model, like every other guard on this route.
+    A visitor who is being turned away must not have spent our money first."""
+    _post(env), _post(env)
+    before = len(env.engine.calls)
+
+    _post(env)
+
+    assert len(env.engine.calls) == before
