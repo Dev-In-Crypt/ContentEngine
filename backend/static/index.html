@@ -250,7 +250,7 @@
   </section>
 
   <!-- Two doors, one engine: Creators vs Business -->
-  <div class="max-w-3xl mx-auto px-6 pt-4">
+  <div class="max-w-3xl mx-auto px-6 pt-16">
     <div class="flex gap-2 justify-center text-sm">
       <button id="ltab-creator" data-action="set-landing-tab" data-arg="creator" class="lt-btn lt-active px-5 py-2">For Creators</button>
       <button id="ltab-business" data-action="set-landing-tab" data-arg="business" class="lt-btn px-5 py-2">For Business</button>
@@ -739,13 +739,13 @@
     <div>
       <label class="block text-sm text-gray-400 mb-1">Topic</label>
       <input id="topic" type="text" placeholder="e.g. 5 AI tools every marketer needs in 2026"
-        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+        class="ce-input w-full px-4 py-3" />
     </div>
 
     <!-- Instagram formats. Hidden on X, which has no carousels. -->
     <div id="format-group">
       <label class="block text-sm text-gray-400 mb-2">Post format</label>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="format-btns">
+      <div class="flex flex-wrap gap-2" id="format-btns">
         <button data-val="single"       class="fmt-btn">Single image</button>
         <button data-val="carousel_3"   class="fmt-btn">Carousel 3</button>
         <button data-val="carousel_5"   class="fmt-btn">Carousel 5</button>
