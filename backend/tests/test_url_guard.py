@@ -294,3 +294,39 @@ async def test_allow_private_lets_a_self_hoster_through(
     httpx_mock.add_response(text="internal wiki")
     resp = await guarded_get("http://wiki.internal:8080/", allow_private=True)
     assert resp.text == "internal wiki"
+
+
+# ── a page being too big is not a security refusal ──────────────────────────
+
+async def test_an_oversized_body_says_so_instead_of_hiding_behind_the_guard(
+        httpx_mock, monkeypatch):
+    """BLOCKED_MESSAGE is deliberately uninformative so the guard cannot be used
+    to probe the internal network — a refusal must not tell you whether a host
+    exists. A body over the cap reveals none of that: it is a public page that is
+    simply large, and the person who pasted it needs to know which.
+
+    Found by running the product's own fetcher over real changelogs. posthog.com
+    (2.81 MB) and docs.stripe.com (3.31 MB) both came back as "That address can't
+    be fetched." — on the first step of the product, for two entirely ordinary
+    targets, with nothing to act on.
+    """
+    from services.url_guard import ResponseTooLarge, guarded_get
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: ["93.184.216.34"])
+    httpx_mock.add_response(url="https://big.example/", content=b"x" * 5000)
+
+    with pytest.raises(ResponseTooLarge) as e:
+        await guarded_get("https://big.example/", max_bytes=1000)
+
+    assert "large" in str(e.value).lower()
+    assert str(e.value) != BLOCKED_MESSAGE
+
+
+async def test_a_blocked_address_still_says_nothing(httpx_mock, monkeypatch):
+    """The other half, and the one that must not move: separating the size error
+    must not turn any part of the address check into an oracle."""
+    monkeypatch.setattr(url_guard, "_resolve", lambda host: ["127.0.0.1"])
+
+    with pytest.raises(url_guard.BlockedURL) as e:
+        await url_guard.guarded_get("https://internal.example/")
+
+    assert str(e.value) == BLOCKED_MESSAGE

@@ -70,6 +70,31 @@ class BlockedURL(Exception):
         self.reason = reason
 
 
+class ResponseTooLarge(BlockedURL):
+    """The address was fine; the body was bigger than the caller's cap.
+
+    Separate from its parent because the vagueness of BLOCKED_MESSAGE buys
+    something real — a refusal that named its reason would let the guard be used
+    to probe the internal network — and this refusal buys none of it. The size of
+    a public page tells an attacker nothing, while telling the person who pasted
+    the URL exactly what happened.
+
+    Kept as a SUBCLASS so every existing `except BlockedURL` still catches it:
+    nothing that treats this as a refusal has to learn a second name, and callers
+    that want to explain it opt in by catching this one first.
+
+    Found by running the fetcher over real changelogs: posthog.com at 2.81 MB and
+    docs.stripe.com at 3.31 MB both answered "That address can't be fetched.", on
+    the first step of the product, with nothing for the user to act on.
+    """
+
+    def __init__(self, reason: str = "", limit: int = 0) -> None:
+        Exception.__init__(
+            self, f"That page is too large to read (over {limit // (1024 * 1024)} MB).")
+        self.reason = reason
+        self.limit = limit
+
+
 def _resolve(host: str) -> list[str]:
     """Every address `host` answers to. The seam tests monkeypatch."""
     infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
@@ -220,7 +245,7 @@ async def guarded_request(
                 # small payload that decompresses to gigabytes.
                 reason = f"body over {max_bytes} bytes from {url!r}"
                 log.warning("Blocked outbound request: %s", reason)
-                raise BlockedURL(reason)
+                raise ResponseTooLarge(reason, limit=max_bytes)
 
         safe = httpx.Headers([
             (k, v) for k, v in streamed.headers.multi_items()
