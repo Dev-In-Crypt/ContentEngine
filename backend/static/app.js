@@ -1785,7 +1785,6 @@ const ACTIONS = Object.freeze({
   'generate-library-video':              () => generateLibraryVideo(),
   'generate-post':                       () => generatePost(),
   'go-home':                             () => goHome(),
-  'go-step':                             (el) => goStep(Number(el.dataset.arg)),
   'goto-need-key':                       () => gotoNeedKey(),
   'invite-teammate':                     () => inviteTeammate(),
   'library-upload-image':                (el, ev) => uploadToLibrary(ev, 'image'),
@@ -1942,47 +1941,22 @@ function safeUrl(u) {
 }
 
 // ===== STEP LOGIC =====
-const STEP_LABELS = ['Topic', 'Settings', 'Generating', 'Preview'];
-
-function renderSteps() {
-  const el = document.getElementById('steps');
-  el.innerHTML = '';
-  STEP_LABELS.forEach((label, i) => {
-    const n = i + 1;
-    const active = n === S.step;
-    const done = n < S.step;
-    const div = document.createElement('div');
-    div.className = 'flex items-center gap-1';
-    div.innerHTML = `
-      <div class="step-dot w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2
-        ${active ? 'bg-purple-600 border-purple-400 text-white' : done ? 'bg-green-700 border-green-500 text-white' : 'bg-gray-800 border-gray-600 text-gray-400'}">
-        ${done ? '✓' : n}
-      </div>
-      <span class="text-xs hidden sm:inline ${active ? 'text-purple-300' : 'text-gray-500'}">${label}</span>
-    `;
-    el.appendChild(div);
-    if (i < STEP_LABELS.length - 1) {
-      const sep = document.createElement('div');
-      sep.className = 'w-6 h-0.5 ' + (done ? 'bg-green-700' : 'bg-gray-700');
-      el.appendChild(sep);
-    }
-  });
-}
+//
+// There is no step indicator any more, and no `goStep`. Composing is one screen
+// (10.2); what is left is a section switcher between the form, the spinner and
+// the result. "Generating" was never a step a person takes — it is a state they
+// wait through — and a numbered rail whose middle dot is a spinner draws a
+// process instead of being one.
+//
+// The section ids stay `step-1`…`step-4`. They are addressed from the action
+// registry, from nine call sites here and from dozens of selectors in the
+// browser suite; renaming them would be a hundred edits to say the same thing.
 
 function showStep(n) {
   document.querySelectorAll('.step-section').forEach(s => s.classList.add('hidden'));
   const el = document.getElementById(`step-${n}`);
   if (el) { el.classList.remove('hidden'); el.scrollIntoView({behavior:'smooth', block:'start'}); }
   S.step = n;
-  renderSteps();
-}
-
-function goStep(n) {
-  if (n === 2) {
-    const topic = document.getElementById('topic').value.trim();
-    if (topic.length < 3) { toast('⚠️ Please enter a topic (at least 3 characters).', 'warn'); return; }
-  }
-  showStep(n);
 }
 
 // Header logo → back to the Create section (works from Account/keys/Calendar/etc.).
@@ -2168,7 +2142,15 @@ function addProgress(msg, step, total) {
 
 async function generatePost() {
   const topic = document.getElementById('topic').value.trim();
-  if (!topic) { goStep(1); return; }
+  // The three-character floor used to live on the "Next →" click, which no
+  // longer exists. Here it is the only thing between a two-letter topic and a
+  // paid generation — this function had never checked for more than emptiness
+  // because something else always had.
+  if (topic.length < 3) {
+    toast('⚠️ Please enter a topic (at least 3 characters).', 'warn');
+    document.getElementById('topic').focus();
+    return;
+  }
   if (S.generating) return;          // ignore a second click while one is in flight
   // Claimed before the first await, not after it. guardGenerateKeys() fetches the
   // AI settings, and two clicks inside that round-trip both found the flag still
@@ -2207,12 +2189,12 @@ async function generatePost() {
     };
     if (S.source === 'upload') {
       // Files can't ride the SSE JSON body, so they are parked first and the
-      // generation refers to them by id — in the order shown in step 2.
+      // generation refers to them by id — in the order shown on the form.
       try {
         document.getElementById('loading-msg').textContent = 'Uploading your photos…';
         body.upload_ids = await stageOwnPhotos();
       } catch (e) {
-        showStep(2);
+        showStep(1);
         toast('❌ ' + e.message, 'error');
         return;
       }

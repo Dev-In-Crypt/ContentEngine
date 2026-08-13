@@ -690,18 +690,19 @@
 
   <div id="create-post-panel" data-create-panel="post" class="space-y-8">
 
-  <!-- ===== STEP INDICATOR ===== -->
-  <div class="flex items-center justify-center gap-2 select-none">
-    <template id="step-tpl">
-      <div class="flex items-center gap-1">
-        <div class="step-dot w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2"></div>
-        <span class="text-xs hidden sm:inline"></span>
-      </div>
-    </template>
-    <div id="steps" class="flex items-center gap-1"></div>
-  </div>
+  <!-- ===== COMPOSE =====
+       One screen. There is no step indicator because there are no steps left:
+       generating is a state and the preview is a result, and a three-dot rail
+       with a spinner in the middle is a picture of a process rather than one.
 
-  <!-- ===== STEP 1: TOPIC ===== -->
+       What stays in the open is what changes the SHAPE of the result — the
+       format, and where the pictures come from. Tone, length, niche, audience,
+       extra instructions and the X post type change its STYLE, and style folds
+       into the Configure row below.
+
+       The section keeps the id `step-1`. `showStep` addresses it, so do dozens
+       of selectors across the browser suite; renaming it would be a hundred
+       edits to say the same thing. -->
   <section id="step-1" class="step-section bg-gray-900 rounded-2xl p-6 space-y-5">
     <h2 class="text-lg font-semibold text-purple-300">What should the post be about?</h2>
 
@@ -709,6 +710,51 @@
       <label class="block text-sm text-gray-400 mb-1">Topic</label>
       <input id="topic" type="text" placeholder="e.g. 5 AI tools every marketer needs in 2026"
         class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+    </div>
+
+    <!-- Instagram formats. Hidden on X, which has no carousels. -->
+    <div id="format-group">
+      <label class="block text-sm text-gray-400 mb-2">Post format</label>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="format-btns">
+        <button data-val="single"       class="fmt-btn">Single image</button>
+        <button data-val="carousel_3"   class="fmt-btn">Carousel 3</button>
+        <button data-val="carousel_5"   class="fmt-btn">Carousel 5</button>
+        <button data-val="carousel_10"  class="fmt-btn">Carousel 10</button>
+        <button data-val="infographic"  class="fmt-btn">Infographic</button>
+      </div>
+    </div>
+
+    <!-- Not folded away with the rest, on purpose: "use my own photos" is a
+         different intention rather than a setting, and an intention two clicks
+         deep is one nobody discovers. -->
+    <div>
+      <label class="block text-sm text-gray-400 mb-2">Image source</label>
+      <div class="flex flex-wrap gap-2" id="source-btns">
+        <button data-val="stock"  class="src-btn">Stock photos</button>
+        <button data-val="ai_gen" class="src-btn">AI generated</button>
+        <button data-val="upload" class="src-btn">My photos</button>
+        <button data-val="canva"  class="src-btn">Canva template</button>
+        <!-- Text-only is a pure-text post (no image). X only — shown/hidden in setNetwork. -->
+        <button data-val="text_only" id="src-text-only" class="src-btn hidden">Text only</button>
+      </div>
+
+      <!-- Own photos: shown only while "My photos" is the source (see onSourceChange). -->
+      <div id="own-photos" class="hidden mt-3 space-y-2">
+        <div class="flex flex-wrap items-center gap-3">
+          <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
+            Choose photos
+            <input id="own-photos-input" type="file" multiple
+              accept="image/jpeg,image/png,image/webp" class="hidden"
+              data-change="add-own-photos" />
+          </label>
+          <span id="own-photos-count" class="text-xs text-gray-400"></span>
+        </div>
+        <div id="own-photos-grid" class="flex flex-wrap gap-2"></div>
+        <p class="text-xs text-gray-500">
+          One photo per slide, in this order — drag to reorder. Each is cropped to the post
+          format from the centre, so portrait shots fit best. Nothing is sent to a stock or AI provider.
+        </p>
+      </div>
     </div>
 
     <!-- Everything else the composer could ask, folded into one row that says
@@ -821,111 +867,58 @@
       </div>
     </div>
 
+    <!-- Look and feel used to be a second <details> on the second step. Nested
+         disclosure is a bad deal — two clicks to reach a colour — and now that
+         the Configure row is where style lives, this is style. Flattened in. -->
+    <div id="template-group">
+      <label class="block text-sm text-gray-400 mb-2">How should the image look?</label>
+      <div class="flex flex-wrap gap-2" id="template-btns">
+        <button data-val="branded_card" class="tpl-btn">Branded card (portrait)</button>
+        <button data-val="square"       class="tpl-btn">Square (legacy)</button>
+        <!-- Plain photo = no branding: the clean photo, caption goes to the caption field. -->
+        <button data-val="plain"        class="tpl-btn">Plain photo (no text)</button>
+      </div>
+    </div>
+
+    <div id="niche-group">
+      <label class="block text-sm text-gray-400 mb-2">Highlight colour</label>
+      <div class="flex flex-wrap gap-2" id="niche-color-swatches"></div>
+    </div>
+
+    <!-- Hidden: driven by the Template style choice (Plain photo → off). -->
+    <div id="apply-brand-row" class="hidden items-center gap-3">
+      <input type="checkbox" id="apply-brand" checked class="w-4 h-4 accent-purple-500" />
+      <label for="apply-brand" class="text-sm text-gray-300">Put your text and colours on the image</label>
+    </div>
+
+    <div id="show-logo-row" class="flex items-center gap-3">
+      <input type="checkbox" id="show-logo" checked class="w-4 h-4 accent-purple-500" />
+      <label for="show-logo" class="text-sm text-gray-300">Show my logo on the image</label>
+    </div>
+
+    <!-- Presets: apply a saved bundle of everything in this row (cloud only).
+         `hidden` sits alone on the outer element and `flex` on the row inside:
+         on one element Tailwind emits .flex after .hidden at equal specificity,
+         so display:flex won and renderPresetSelect's toggle did nothing — the
+         desktop build showed a presets bar it has no presets for. Same trap the
+         comment on #hero-result describes. -->
+    <div id="preset-row" class="hidden bg-gray-800/60 rounded-xl px-3 py-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs text-gray-400">Preset</span>
+        <select id="preset-select" class="ce-input px-2 py-1 text-sm min-w-[10rem]"></select>
+        <button data-action="apply-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
+        <button data-action="save-current-preset" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
+        <button data-action="delete-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
+        <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
+      </div>
+    </div>
+
       </div>
     </details>
 
-    <button data-action="go-step" data-arg="2" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
-      Next →
+    <button id="generate-btn" data-action="generate-post" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
+      Generate
     </button>
-  </section>
-
-  <!-- ===== STEP 2: FORMAT + SOURCE ===== -->
-  <section id="step-2" class="step-section hidden bg-gray-900 rounded-2xl p-6 space-y-5">
-    <h2 class="text-lg font-semibold text-purple-300">Format & images</h2>
-
-    <!-- Presets: apply a saved bundle of the settings below (cloud accounts only) -->
-    <div id="preset-row" class="hidden flex flex-wrap items-center gap-2 bg-gray-800/60 rounded-xl px-3 py-2">
-      <span class="text-xs text-gray-400">Preset</span>
-      <select id="preset-select" class="ce-input px-2 py-1 text-sm min-w-[10rem]"></select>
-      <button data-action="apply-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
-      <button data-action="save-current-preset" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
-      <button data-action="delete-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
-      <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
-    </div>
-
-    <!-- Instagram formats. Hidden on X, which has no carousels. -->
-    <div id="format-group">
-      <label class="block text-sm text-gray-400 mb-2">Post format</label>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="format-btns">
-        <button data-val="single"       class="fmt-btn">Single image</button>
-        <button data-val="carousel_3"   class="fmt-btn">Carousel 3</button>
-        <button data-val="carousel_5"   class="fmt-btn">Carousel 5</button>
-        <button data-val="carousel_10"  class="fmt-btn">Carousel 10</button>
-        <button data-val="infographic"  class="fmt-btn">Infographic</button>
-      </div>
-    </div>
-
-    <div>
-      <label class="block text-sm text-gray-400 mb-2">Image source</label>
-      <div class="flex flex-wrap gap-2" id="source-btns">
-        <button data-val="stock"  class="src-btn">Stock photos</button>
-        <button data-val="ai_gen" class="src-btn">AI generated</button>
-        <button data-val="upload" class="src-btn">My photos</button>
-        <button data-val="canva"  class="src-btn">Canva template</button>
-        <!-- Text-only is a pure-text post (no image). X only — shown/hidden in setNetwork. -->
-        <button data-val="text_only" id="src-text-only" class="src-btn hidden">Text only</button>
-      </div>
-
-      <!-- Own photos: shown only while "My photos" is the source (see onSourceChange). -->
-      <div id="own-photos" class="hidden mt-3 space-y-2">
-        <div class="flex flex-wrap items-center gap-3">
-          <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
-            Choose photos
-            <input id="own-photos-input" type="file" multiple
-              accept="image/jpeg,image/png,image/webp" class="hidden"
-              data-change="add-own-photos" />
-          </label>
-          <span id="own-photos-count" class="text-xs text-gray-400"></span>
-        </div>
-        <div id="own-photos-grid" class="flex flex-wrap gap-2"></div>
-        <p class="text-xs text-gray-500">
-          One photo per slide, in this order — drag to reorder. Each is cropped to the post
-          format from the centre, so portrait shots fit best. Nothing is sent to a stock or AI provider.
-        </p>
-      </div>
-    </div>
-
-    <details id="look-details" class="border border-gray-800 rounded-xl">
-      <summary class="cursor-pointer select-none px-4 py-2.5 text-sm text-gray-300">
-        Look and feel <span class="text-gray-500">— image style, colours, logo</span>
-      </summary>
-      <div class="px-4 pb-4 pt-1 space-y-4">
-      <div id="template-group">
-        <label class="block text-sm text-gray-400 mb-2">How should the image look?</label>
-        <div class="flex flex-wrap gap-2" id="template-btns">
-          <button data-val="branded_card" class="tpl-btn">Branded card (portrait)</button>
-          <button data-val="square"       class="tpl-btn">Square (legacy)</button>
-          <!-- Plain photo = no branding: the clean photo, caption goes to the caption field. -->
-          <button data-val="plain"        class="tpl-btn">Plain photo (no text)</button>
-        </div>
-      </div>
-
-      <div id="niche-group">
-        <label class="block text-sm text-gray-400 mb-2">Highlight colour</label>
-        <div class="flex flex-wrap gap-2" id="niche-color-swatches"></div>
-      </div>
-
-      <!-- Hidden: driven by the Template style choice (Plain photo → off). -->
-      <div id="apply-brand-row" class="hidden items-center gap-3">
-        <input type="checkbox" id="apply-brand" checked class="w-4 h-4 accent-purple-500" />
-        <label for="apply-brand" class="text-sm text-gray-300">Put your text and colours on the image</label>
-      </div>
-
-      <div id="show-logo-row" class="flex items-center gap-3">
-        <input type="checkbox" id="show-logo" checked class="w-4 h-4 accent-purple-500" />
-        <label for="show-logo" class="text-sm text-gray-300">Show my logo on the image</label>
-      </div>
-      </div>
-    </details>
-
-    <div class="flex gap-3">
-      <button data-action="go-step" data-arg="1" class="flex-1 bg-gray-700 hover:bg-gray-600 transition rounded-xl py-3 font-semibold">
-        ← Back
-      </button>
-      <button id="generate-btn" data-action="generate-post" class="flex-1 bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
-        Generate
-      </button>
-    </div>
     <!-- Free posts left. Hidden for anyone the allowance does not apply to —
          the desktop owner, an account paying with its own key, a deployment
          with no application key — because for them it is not a smaller number,
@@ -943,7 +936,7 @@
     <ul id="progress-list" class="w-full max-w-xs space-y-1 text-sm text-gray-300"></ul>
     <div id="gen-error" class="hidden w-full bg-red-950 border border-red-700 rounded-xl p-4 text-sm text-red-300 text-center space-y-3">
       <p id="gen-error-msg"></p>
-      <button data-action="go-step" data-arg="2" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-white text-xs">← Back to settings</button>
+      <button data-action="show-step" data-arg="1" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-white text-xs">← Back to the form</button>
     </div>
   </section>
 
@@ -956,7 +949,7 @@
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-semibold text-purple-300">Preview & Edit</h2>
       <div class="flex items-center gap-2">
-        <button data-action="show-step" data-arg="2" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">← Back</button>
+        <button data-action="show-step" data-arg="1" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">← Back</button>
         <button data-action="generate-post" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">Regenerate</button>
       </div>
     </div>

@@ -67,14 +67,48 @@ def test_the_summary_follows_an_edit(page, signed_in):
     expect(page.locator("#configure-summary")).to_contain_text("Casual")
 
 
-def test_a_topic_is_still_required(page, signed_in):
-    """The only validation the wizard has ever had, and folding the rest away
-    must not lose it."""
+# ── one screen, not two (UX phase 10.2) ─────────────────────────────────────
+#
+# Format and image source used to live on a second step behind a "Next →". Every
+# tool that does this for a living has converged on the same shape: one field,
+# one button, and on the way there only the choices that change the SHAPE of the
+# result. Tone, length, niche and the rest change its style, and style is what
+# the collapsed row is for.
+
+def test_the_composer_is_one_screen(page, signed_in):
+    """Generate is reachable without pressing anything first."""
     signed_in()
+
+    expect(page.locator("#generate-btn")).to_be_visible()
+    assert page.get_by_role("button", name="Next →").count() == 0
+
+
+def test_the_shape_of_the_post_is_on_the_screen(page, signed_in):
+    """Format and image source stay out in the open while everything textual
+    folds away. Choosing to upload your own photos is not a setting — it is a
+    different intention, and two clicks deep is where intentions go to die."""
+    signed_in()
+
+    expect(page.locator("#format-group")).to_be_visible()
+    expect(page.locator("#source-btns")).to_be_visible()
+    expect(page.locator("#tone")).to_be_hidden()
+
+
+def test_a_topic_that_is_too_short_never_reaches_the_server(page, signed_in):
+    """The three-character floor used to sit on the "Next →" click. That button
+    is gone, and `generatePost` only ever checked for emptiness — so without
+    moving the rule, "ab" would have become a paid generation.
+    """
+    signed_in()
+    calls = []
+    page.route("**/api/posts/generate", lambda r: (calls.append(1), r.abort()))
+
     page.locator("#topic").fill("ab")
-    page.locator("#step-1").get_by_text("Next").click()
+    page.locator("#generate-btn").click()
+
+    expect(page.locator("#toast")).to_contain_text("at least 3 characters")
     expect(page.locator("#step-1")).to_be_visible()
-    expect(page.locator("#step-2")).to_be_hidden()
+    assert calls == []
 
 
 def test_the_row_stays_open_once_opened(page, signed_in):

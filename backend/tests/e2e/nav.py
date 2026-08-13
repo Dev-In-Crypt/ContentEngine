@@ -121,18 +121,15 @@ def open_configure(page) -> None:
 def compose(page, topic: str = "Sourdough starters") -> None:
     """Put a topic in and stand where Generate is.
 
-    Today that is two moves — fill, then press "Next →" onto a second step.
-    Phase 10 merges those steps into one screen, at which point this is the fill
-    alone. That is exactly why it lives here: four test files carried their own
-    copy of these three lines, so a change none of them are about would
-    otherwise be a seventy-one-test sweep.
+    Until 10.2 this was two moves — fill, then press "Next →" onto a second
+    step. The steps are now one screen and this is the fill alone, which cost
+    the two lines below and nothing at any of the seventy-one call sites. That
+    is the whole argument for the module: four files had carried their own copy.
 
-    The wait is on the Generate button rather than on `#step-2`, for the reason
-    this module exists: a test says where it wants to be, and where it wants to
-    be is "able to generate", not "on the second of two steps".
+    The wait is on the Generate button rather than on a section id, for the same
+    reason: where a test wants to be is "able to generate".
     """
     page.locator("#topic").fill(topic)
-    page.get_by_role("button", name="Next →").click()
     expect(page.locator("#generate-btn")).to_be_visible()
 
 

@@ -102,36 +102,16 @@ def _reach_step4(page, **post_overrides):
     reach_preview(page)
 
 
-# ── Step navigation ──────────────────────────────────────────────────────────
-
-def test_a_topic_too_short_to_generate_from_does_not_advance(page, signed_in):
-    signed_in()
-    page.locator("#topic").fill("ai")          # under the 3-character floor
-    page.get_by_role("button", name="Next →").click()
-    expect(page.locator("#toast")).to_contain_text("at least 3 characters")
-    expect(page.locator("#step-2")).to_be_hidden()
-    expect(page.locator("#step-1")).to_be_visible()
-
-
-def test_a_real_topic_opens_the_format_step(page, signed_in):
-    signed_in()
-    _compose(page)
-    expect(page.locator("#step-1")).to_be_hidden()
-    expect(page.locator("#generate-btn")).to_be_visible()
-
-
-def test_back_from_the_format_step_keeps_the_topic(page, signed_in):
-    signed_in()
-    _compose(page)
-    page.get_by_role("button", name="← Back").click()
-    expect(page.locator("#step-1")).to_be_visible()
-    expect(page.locator("#topic")).to_have_value("Sourdough starters")
-
-
 # ── The network switch ───────────────────────────────────────────────────────
 #
-# setNetwork touches a dozen elements across two steps. Each assertion below is
-# a field that means nothing on the other network and used to show anyway.
+# setNetwork touches a dozen elements. Each assertion below is a field that
+# means nothing on the other network and used to show anyway.
+#
+# The three step-navigation tests that stood here went with the step: two steps
+# with a "Next →" and a "← Back" between them is not a thing to assert about any
+# more. What they were really guarding — that a two-letter topic is refused —
+# now lives in test_compose_start_e2e.py, where it also proves the refusal
+# happens before the request rather than merely before the second screen.
 
 def test_switching_to_x_drops_the_instagram_only_fields(page, signed_in):
     signed_in()
@@ -170,8 +150,8 @@ def test_a_text_only_post_falls_back_to_stock_when_the_network_becomes_instagram
     page.locator("#src-text-only").click()
     assert page.evaluate("S.source") == "text_only"
 
-    # The network toggle lives on step 1, so this is the real route back to it.
-    page.get_by_role("button", name="← Back").click()
+    # No trip back to another step: the network toggle and the image source are
+    # on the same screen since 10.2.
     page.locator("#net-toggle-ig").click()
     assert page.evaluate("S.source") == "stock"
 
@@ -295,8 +275,8 @@ def test_an_error_frame_offers_the_way_back_instead_of_a_dead_spinner(
     expect(page.locator("#gen-error-msg")).to_contain_text("provider rejected the key")
     expect(page.locator("#loading-spinner")).to_be_hidden()
 
-    page.get_by_role("button", name="← Back to settings").click()
-    expect(page.locator("#step-2")).to_be_visible()
+    page.get_by_role("button", name="← Back to the form").click()
+    expect(page.locator("#step-1")).to_be_visible()
 
 
 def test_a_stream_that_stops_early_is_an_error_not_a_silent_success(
@@ -414,10 +394,8 @@ def test_switching_to_x_drops_a_carousel_format(page, signed_in, keyed):
     page.locator('#format-group [data-val="carousel_10"]').click()
     assert page.evaluate("S.format") == "carousel_10"
 
-    page.get_by_role("button", name="← Back").click()
     open_configure(page)
     page.locator("#net-toggle-x").click()
-    _compose(page)
     page.locator("#generate-btn").click()
     expect(page.locator("#step-4")).to_be_visible()
 
