@@ -546,3 +546,24 @@ async def test_a_list_reply_is_not_mistaken_for_an_answer():
     guess = await guess_niche(StubProvider('["industrial tooling"]', '["still a list"]'),
                               name="Acme", description="Anvils.")
     assert guess.niche == ""
+
+
+async def test_the_page_is_asked_for_in_a_language_the_product_speaks(httpx_mock: HTTPXMock):
+    """Without Accept-Language a site negotiates on the server's IP address.
+
+    Found by running onboarding against stripe.com from prod: the description
+    came back as "Stripe ist eine Finanzdienstleistungsplattform…" because the
+    box is in a German datacentre. The product is in English and so, presumably,
+    is the person reading it — and the description does not just sit there, it
+    seeds the niche field, which goes into the brand voice and from there into
+    the language of generated posts.
+
+    Invisible to every other test in this file, which serves its own English
+    HTML and never negotiates anything.
+    """
+    _page(httpx_mock, "<title>Acme</title>")
+
+    await extract_brand(URL)
+
+    sent = httpx_mock.get_requests()[0].headers
+    assert sent.get("accept-language", "").lower().startswith("en")

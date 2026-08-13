@@ -202,7 +202,12 @@ async def extract_brand(url: str, *, ssl_verify: bool = True) -> BrandInfo:
     try:
         resp = await guarded_get(
             url, ssl_verify=ssl_verify, timeout=20.0, max_bytes=_MAX_BYTES,
-            headers={"User-Agent": "ContentEngine"},
+            # Ask in English, or the site negotiates on the server's IP. Running
+            # this from prod against stripe.com returned a German description,
+            # because the box sits in a German datacentre — and the description
+            # is not decoration: it seeds the niche field, which reaches the
+            # brand voice and from there the language of generated posts.
+            headers={"User-Agent": "ContentEngine", "Accept-Language": "en"},
         )
         resp.raise_for_status()
     except BlockedURL as e:
