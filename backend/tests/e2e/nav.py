@@ -118,6 +118,35 @@ def open_configure(page) -> None:
     expect(page.locator("#tone")).to_be_visible()
 
 
+def compose(page, topic: str = "Sourdough starters") -> None:
+    """Put a topic in and stand where Generate is.
+
+    Today that is two moves — fill, then press "Next →" onto a second step.
+    Phase 10 merges those steps into one screen, at which point this is the fill
+    alone. That is exactly why it lives here: four test files carried their own
+    copy of these three lines, so a change none of them are about would
+    otherwise be a seventy-one-test sweep.
+
+    The wait is on the Generate button rather than on `#step-2`, for the reason
+    this module exists: a test says where it wants to be, and where it wants to
+    be is "able to generate", not "on the second of two steps".
+    """
+    page.locator("#topic").fill(topic)
+    page.get_by_role("button", name="Next →").click()
+    expect(page.locator("#generate-btn")).to_be_visible()
+
+
+def reach_preview(page) -> None:
+    """Compose, generate, and land on the result screen.
+
+    The caller routes `**/api/posts/generate` before calling this — what comes
+    back is the test's subject, and this module has no business inventing it.
+    """
+    compose(page)
+    page.locator("#generate-btn").click()
+    expect(page.locator("#step-4")).to_be_visible()
+
+
 def dismiss_onboarding(page) -> None:
     """Get first-run setup out of the way, then carry on.
 

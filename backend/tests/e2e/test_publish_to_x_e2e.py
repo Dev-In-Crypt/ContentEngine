@@ -10,7 +10,7 @@ from playwright.sync_api import expect
 
 from models.schemas import MediaAssetDetail, VideoPublishJobStatus
 
-from tests.e2e.nav import open_configure, open_create
+from tests.e2e.nav import open_configure, open_create, reach_preview
 
 pytestmark = pytest.mark.e2e
 
@@ -197,10 +197,7 @@ def _reach_step4(page, post: dict) -> None:
         status=200, content_type="text/event-stream",
         body="data: " + json.dumps({"type": "complete", "post": post}) + "\n\n"))
 
-    page.locator("#topic").fill("Sourdough starters")
-    page.get_by_role("button", name="Next →").click()
-    page.locator("#generate-btn").click()
-    expect(page.locator("#step-4")).to_be_visible()
+    reach_preview(page)
 
 
 def _record_publish_routes(page) -> list:

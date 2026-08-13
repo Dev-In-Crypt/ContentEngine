@@ -23,7 +23,8 @@ from playwright.sync_api import expect
 
 from models.schemas import AISettingsResponse, PostPreview, SlidePreview
 
-from tests.e2e.nav import open_calendar, open_configure
+from tests.e2e.nav import compose as _compose
+from tests.e2e.nav import open_calendar, open_configure, reach_preview
 
 pytestmark = pytest.mark.e2e
 
@@ -88,22 +89,17 @@ def keyed(page):
                lambda r: r.fulfill(status=200, content_type="image/png", body=_PIXEL))
 
 
-def _compose(page, topic: str = "Sourdough starters"):
-    """Fill the topic and land on step 2, where Generate lives."""
-    page.locator("#topic").fill(topic)
-    page.get_by_role("button", name="Next →").click()
-    expect(page.locator("#step-2")).to_be_visible()
-
-
 def _reach_step4(page, **post_overrides):
     """Compose and generate, landing on the preview step with a real post id
-    to address — the precondition every library-picker test needs."""
+    to address — the precondition every library-picker test needs.
+
+    Only the routing is local: what comes back is this file's subject, how the
+    screen is reached is `nav`'s.
+    """
     page.route("**/api/posts/generate", lambda r: r.fulfill(
         status=200, content_type="text/event-stream",
         body=_sse({"type": "complete", "post": _generated_post(**post_overrides)})))
-    _compose(page)
-    page.locator("#generate-btn").click()
-    expect(page.locator("#step-4")).to_be_visible()
+    reach_preview(page)
 
 
 # ── Step navigation ──────────────────────────────────────────────────────────

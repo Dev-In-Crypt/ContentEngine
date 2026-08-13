@@ -20,6 +20,7 @@ import json
 import pytest
 from playwright.sync_api import expect
 
+from tests.e2e.nav import compose as _compose
 from tests.e2e.nav import open_configure  # noqa: F401  (kept for parity with the composer file)
 
 pytestmark = pytest.mark.e2e
@@ -35,12 +36,6 @@ def _usage(free) -> dict:
 def _serve_usage(page, free) -> None:
     page.route("**/api/usage", lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps(_usage(free))))
-
-
-def _compose(page, topic: str = "Sourdough starters") -> None:
-    page.locator("#topic").fill(topic)
-    page.get_by_role("button", name="Next →").click()
-    expect(page.locator("#step-2")).to_be_visible()
 
 
 # ── the counter ─────────────────────────────────────────────────────────────
