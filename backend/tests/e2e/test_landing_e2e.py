@@ -601,3 +601,50 @@ def test_enter_in_the_topic_field_runs_it(page, live_server):
 
     expect(page.locator("#hero-result")).to_be_visible()
     assert calls, "Enter did not start a generation"
+
+
+# ── the preview shows what the download contains ────────────────────────────
+
+#: A 40×50 PNG — the 4:5 the brand engine actually renders (1080×1350), small.
+PORTRAIT = ("data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAACgAAAAyCAIAAACh0Q7HAAAAXklEQVR4nO3QQREDQQCEwA26"
+            "TkRkR1a+NwbYDxjoKj6/73NuxBX1BIthYu+CtfCoLVgLj9qCtfCoLVgLj9qCtfCoLVgLj9qC"
+            "tfCoLVgLj9qCtfCoLVgLj9qCta6t/gMYbgG45JfkRgAAAABJRU5ErkJggg==")
+
+#: Taller than the picture beside it once rendered — which is the condition that
+#: stretched the picture, so a shorter caption makes this test prove nothing.
+#: Paragraphs, because the caption renders with `whitespace-pre-line` and a real
+#: one from the model comes back in three or four of them.
+_WORDY = "\n\n".join(
+    ["A starter is flour, water and patience, and the jar does most of the work."] * 8)
+
+
+def test_the_preview_is_not_a_cropped_version_of_the_download(page, live_server):
+    """What the landing shows has to be what "Download the picture" saves.
+
+    The image sat in a flex row with `object-cover` and no ratio of its own, so
+    its height came from the text column next to it. A caption of ordinary
+    length made that column taller than 4:5, the picture was stretched to match
+    and then cropped to fit — about a fifth of the width, taken off the sides,
+    which is exactly where the brand engine puts the headline. Live on prod the
+    first screen of the product read "hy do B2B SaaS demos fail?".
+
+    Asserted as a ratio rather than as a class name: the defect is what the
+    visitor sees, and a class list can be rearranged without changing it.
+    """
+    _serve(page, {"type": "complete",
+                  "post": _post(image_data_url=PORTRAIT, caption=_WORDY)})
+    _land(page, live_server)
+    _run(page)
+
+    expect(page.locator("#hero-image")).to_be_visible()
+    shown, natural = page.evaluate(
+        """() => {
+            const i = document.getElementById('hero-image');
+            const r = i.getBoundingClientRect();
+            return [r.width / r.height, i.naturalWidth / i.naturalHeight];
+        }"""
+    )
+    assert abs(shown - natural) < 0.02, (
+        f"preview is {shown:.3f} against the picture's own {natural:.3f} — "
+        "the visitor is being shown a crop of what they would download")

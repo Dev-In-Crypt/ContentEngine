@@ -215,7 +215,14 @@
          empty card sat on the landing from first paint. The row lives inside. -->
     <div id="hero-result" class="hidden mt-6 text-left ce-card p-5">
       <div class="sm:flex sm:gap-5">
-      <img id="hero-image" alt="Generated post" class="hidden w-full sm:w-56 rounded-xl object-cover" />
+      <!-- No object-cover, and self-start rather than the row's default stretch.
+           This picture is the product's whole argument on its first screen, and
+           "Download the picture" hands over the file itself — so the preview has
+           to be the file, not a crop of it. Stretched to a tall caption's height
+           and then cropped to fit, it lost about a fifth of its width off the
+           sides, which is exactly where the brand engine puts the headline: live
+           on prod the landing read "hy do B2B SaaS demos fail?". -->
+      <img id="hero-image" alt="Generated post" class="hidden w-full sm:w-56 self-start rounded-xl" />
       <div class="mt-4 sm:mt-0 flex-1">
         <div id="hero-hook" class="font-semibold"></div>
         <div id="hero-caption" class="mt-2 text-sm whitespace-pre-line text-gray-300"></div>

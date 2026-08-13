@@ -60,6 +60,19 @@ class OpenAIProvider:
                             max_tokens: int = 2000,
                             web_grounded: bool = False) -> tuple[str, list[dict]]:
         model_id = require_model(model, "text")
+        # No reasoning effort is sent, on purpose. The GPT-5.6 family takes
+        # `reasoning.effort` — but on the Responses API, which is a different
+        # request shape, a different reply shape and a different usage block,
+        # and that usage block feeds estimate_cost and the daily spend cap. So
+        # adopting it is a change to the money path, not a new field.
+        #
+        # And the reason to want it is weak here: reasoning tokens bill as
+        # OUTPUT, which on Luna is $1.20 against $0.20 in, while writing a
+        # caption is not a multi-step reasoning task. Running the models at
+        # their own defaults was measured on prod first — the captions came back
+        # coherent and on-topic at $0.0012 a post.
+        #
+        # Revisit when there is a reason from the output, not from the menu.
         payload = await self._post("/chat/completions", {
             "model": model_id,
             "messages": [
