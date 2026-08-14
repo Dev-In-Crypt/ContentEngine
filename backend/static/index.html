@@ -1756,8 +1756,15 @@
 
     <div id="results-posts" data-results-tab="posts">
       <div class="ce-card p-5">
-        <h2 class="text-lg font-semibold" style="color:var(--accent)">Published posts</h2>
-        <p class="text-xs text-gray-400 mt-1">Everything you've published, on every network — open each to view it where it lives. (In-app metrics are Instagram-only.)</p>
+        <h2 class="text-lg font-semibold" style="color:var(--accent)">Feed</h2>
+        <p class="text-xs text-gray-400 mt-1">What went out, what didn't, and what is still waiting. Numbers come from Instagram; X does not report any.</p>
+        <!-- Failures used to be invisible here, which is how a post that never
+             went out gets counted as one that did. -->
+        <div id="feed-tabs" class="flex gap-1 mt-3">
+          <button data-feed-tab="published" data-action="set-feed-tab" data-arg="published" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Published</button>
+          <button data-feed-tab="failed" data-action="set-feed-tab" data-arg="failed" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Failed<span id="feed-failed-count" class="hidden ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style="background:var(--danger-bg);color:var(--danger)"></span></button>
+          <button data-feed-tab="drafts" data-action="set-feed-tab" data-arg="drafts" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Drafts</button>
+        </div>
         <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
       </div>
     </div>

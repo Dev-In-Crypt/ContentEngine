@@ -347,6 +347,19 @@ class PostPreview(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PostMetrics(BaseModel):
+    """The newest snapshot of how a post did, small enough to ride on a list row.
+
+    Instagram only, because that is the only network with an insights API here —
+    an X row simply has none, and a screen that showed it zeros would be making
+    a claim nobody measured.
+    """
+    snapshot_at: datetime
+    reach: Optional[int] = None
+    likes: Optional[int] = None
+    saved: Optional[int] = None
+
+
 class PostSummary(BaseModel):
     id: str
     topic: str
@@ -371,6 +384,10 @@ class PostSummary(BaseModel):
     # Why the last publish failed. Carried in the LIST so a failures view can show
     # the reason without fetching every post individually.
     schedule_error: Optional[str] = None
+    #: How it did, newest snapshot only. None means nobody has fetched metrics
+    #: for this post — deliberately not zeros, which would read as "nobody saw
+    #: it" rather than "nobody asked".
+    metrics: Optional[PostMetrics] = None
 
     model_config = {"from_attributes": True}
 

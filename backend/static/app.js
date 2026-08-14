@@ -1954,6 +1954,7 @@ const ACTIONS = Object.freeze({
   'set-grid-mode':                       (el) => setGridMode(el.dataset.arg),
   'set-hero-mode':                       (el) => setHeroMode(el.dataset.arg),
   'set-landing-tab':                     (el) => setLandingTab(el.dataset.arg),
+  'set-feed-tab':                        (el) => setFeedTab(el.dataset.arg),
   'set-network':                         (el) => setNetwork(el.dataset.arg),
   'set-section':                         (el) => setSection(el.dataset.arg),
   'set-signup-account-type':             (el) => setSignupAccountType(el.dataset.arg),
@@ -4409,16 +4410,69 @@ function loadResults() {
   return loadAnalytics();
 }
 
+//: Which slice of the feed is on screen. Published by default, because that is
+//: the question people arrive with; Failed exists because a failure hidden on
+//: the Published tab is a post that never went out being counted as one that did.
+S.feedTab = 'published';
+
+const FEED_FILTERS = {
+  published: p => p.status === 'published',
+  failed: p => p.status === 'failed',
+  drafts: p => p.status === 'draft' || p.status === 'preview',
+};
+
+function setFeedTab(tab) {
+  S.feedTab = FEED_FILTERS[tab] ? tab : 'published';
+  loadAnalytics();
+}
+
+/** How a post did, or an honest sentence about why there is no number.
+ *
+ *  Three states, and they are not the same: measured, not measured yet, and a
+ *  network that reports nothing at all. Rendering the last two as zeros would
+ *  say "nobody saw it" about posts nobody has asked about. */
+function feedMetrics(p) {
+  if ((p.platform || 'instagram') !== 'instagram') {
+    return `<span class="text-xs" style="color:var(--faint)">X reports no metrics</span>`;
+  }
+  const m = p.metrics;
+  if (!m) return `<span class="text-xs" style="color:var(--faint)">Not measured yet</span>`;
+  const cell = (n, label) => n === null || n === undefined ? ''
+    : `<span class="text-xs"><b>${Number(n).toLocaleString()}</b> <span style="color:var(--muted)">${label}</span></span>`;
+  return `<div class="flex flex-wrap gap-3">${cell(m.reach, 'reach')}${cell(m.likes, 'likes')}${cell(m.saved, 'saves')}</div>`;
+}
+
 async function loadAnalytics() {
   const box = document.getElementById('analytics-list');
   box.innerHTML = 'Loading…';
+  document.querySelectorAll('#feed-tabs [data-feed-tab]').forEach(b =>
+    b.classList.toggle('tab-active', b.dataset.feedTab === S.feedTab));
   try {
     const res = await apiFetch(`${API}/api/posts`);
-    const posts = (await res.json()).filter(p => p.status === 'published');
-    if (!posts.length) { box.innerHTML = '<span class="text-gray-500">Nothing published yet.</span>'; return; }
-    box.innerHTML = posts.map(p => `<div class="ce-card p-3 flex items-center gap-3">
-      <div class="flex-1 min-w-0"><div class="text-sm text-gray-200 truncate">${netBadge(p)} ${esc(p.topic || 'post')}</div>
-      <div class="text-xs text-gray-500">${p.published_at ? new Date(p.published_at).toLocaleString() : ''}</div></div>
+    const all = await res.json();
+
+    const failed = all.filter(FEED_FILTERS.failed).length;
+    const badge = document.getElementById('feed-failed-count');
+    if (badge) { badge.textContent = failed || ''; badge.classList.toggle('hidden', !failed); }
+
+    const posts = all.filter(FEED_FILTERS[S.feedTab] || FEED_FILTERS.published);
+    if (!posts.length) {
+      box.innerHTML = `<span class="text-gray-500">${
+        S.feedTab === 'failed' ? 'Nothing has failed. Good.'
+        : S.feedTab === 'drafts' ? 'No drafts waiting.'
+        : 'Nothing published yet.'}</span>`;
+      return;
+    }
+    box.innerHTML = posts.map(p => `<div class="ce-card p-3 flex flex-wrap items-center gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="text-sm text-gray-200 truncate">${netBadge(p)} ${esc(p.topic || 'post')}</div>
+        <div class="text-xs text-gray-500">${p.published_at ? new Date(p.published_at).toLocaleString() : ''}${
+          p.schedule_error ? ' · ' + esc(p.schedule_error) : ''}</div>
+        ${p.status === 'published' ? `<div class="mt-1">${feedMetrics(p)}</div>` : ''}
+      </div>
+      ${p.status === 'failed' ? `
+        <button data-action="open-settings-tab" data-arg="connections" class="ce-btn-ghost px-3 py-1 text-xs">Reconnect</button>
+        <button data-action="open-post" data-arg="${esc(p.id)}" class="ce-btn-ghost px-3 py-1 text-xs">Requeue</button>` : ''}
       ${p.published_url ? `<a href="${esc(safeUrl(p.published_url))}" target="_blank" class="ce-btn-ghost px-3 py-1 text-xs">View post ↗</a>` : ''}
     </div>`).join('');
   } catch (e) { box.innerHTML = '<span class="text-red-400">' + esc(e.message) + '</span>'; }

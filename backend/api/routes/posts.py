@@ -16,7 +16,7 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Reques
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 from PIL import Image
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -41,7 +41,7 @@ from models.database import (
 )
 from models.schemas import (
     CarriedDraft, CaptionUpdate, GenerateRequest, ImageSource, OverlayUpdateRequest, Platform,
-    PostInsightSchema, PostPreview, PostStatus, PostSummary, PostVariant,
+    PostInsightSchema, PostMetrics, PostPreview, PostStatus, PostSummary, PostVariant,
     RegenFieldRequest,
     RegenFieldResponse, ReelRequest, ReplaceSlideRequest, ScheduleRequest, SlidePreview,
     PlanItem, PlanRequest, PlanResponse, PublishResult, StagedUpload, UseAssetRequest,
@@ -601,6 +601,39 @@ async def generate_post(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+async def _latest_metrics(db: AsyncSession, post_ids: list[str]) -> dict:
+    """The newest snapshot per post, in one round trip.
+
+    Newest matters more than it looks: snapshots accumulate, and the oldest is
+    the one taken minutes after publishing, when the number is nearly zero. A
+    join that forgets to pick would show that one.
+
+    Two statements rather than a window function — SQLite has them, but the
+    grouped max is portable and this is the query every list on the product
+    runs. Posts with no snapshot are simply absent from the result, which is
+    what lets the row carry None rather than zeros.
+
+    The join matches on post_id AND time. The time alone would still key each
+    row under its own post, so the result would usually be right — and would
+    depend on the order the database happened to return overlapping rows in,
+    which is exactly the kind of correctness that holds until it doesn't. No
+    test covers this half; the two conditions are the guard.
+    """
+    if not post_ids:
+        return {}
+    newest = (select(PostInsightModel.post_id,
+                     func.max(PostInsightModel.snapshot_at).label("at"))
+              .where(PostInsightModel.post_id.in_(post_ids))
+              .group_by(PostInsightModel.post_id)).subquery()
+    rows = (await db.execute(
+        select(PostInsightModel)
+        .join(newest, and_(PostInsightModel.post_id == newest.c.post_id,
+                           PostInsightModel.snapshot_at == newest.c.at))
+    )).scalars().all()
+    return {r.post_id: PostMetrics(snapshot_at=r.snapshot_at, reach=r.reach,
+                                   likes=r.likes, saved=r.saved) for r in rows}
+
+
 @router.get("", response_model=list[PostSummary])
 async def list_posts(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -654,6 +687,7 @@ async def list_posts(
                           else PostModel.managed_account_id.is_(None))
     result = await db.execute(stmt)
     posts = result.scalars().all()
+    latest = await _latest_metrics(db, [p.id for p in posts])
     out = []
     for p in posts:
         first = min(p.slides, key=lambda s: s.slide_number) if p.slides else None
@@ -674,6 +708,7 @@ async def list_posts(
             published_url=p.published_url,
             created_at=p.created_at or datetime.now(timezone.utc),
             schedule_error=p.schedule_error,
+            metrics=latest.get(p.id),
         ))
     return out
 
