@@ -8,9 +8,12 @@ the tests that matter most here are the ones about what is and isn't clickable
 not a style choice.
 
 Where a screen can be exercised for real, it is: brand rules and publishing
-limits round-trip through the API and the database, and a source is genuinely
-added — pointed at the test server's own `/terms` page, so the hourly poller
-has something to fetch without this suite reaching the internet. Leads and
+limits round-trip through the API and the database, and a source row is
+genuinely created. It is NOT genuinely fetched — the URL points at the test
+server itself and the SSRF guard refuses 127.0.0.1, so the priming poll always
+fails. Nothing in this suite, or in any other, has ever run source → fetch →
+selection → lead as one chain; that gap is why a first screen asking for a
+source it did not offer went unnoticed for a whole phase. Leads and
 drafts are the exception: nothing can produce either without a model, so their
 two list endpoints are faked. `LeadOut` fakes are built from the server's
 schema; the drafts endpoint returns a hand-assembled dict with no model of its
@@ -67,6 +70,24 @@ def _draft(**over) -> dict:
 def _serve(page, pattern: str, payload):
     page.route(pattern, lambda r: r.fulfill(
         status=200, content_type="application/json", body=json.dumps(payload)))
+
+
+def _added(status: str = "ok", leads_found: int = 0, sample=None) -> dict:
+    """What POST /api/business/sources answers. The status is the whole point:
+    a source that could not be read still comes back 200 — the failure is
+    recorded on the row, not in the status code."""
+    return {"source": {"id": "src-1", "url": "https://example.com/changelog",
+                       "kind": "generic_page", "status": status,
+                       "last_checked_at": None, "created_at": "2026-07-20T00:00:00+00:00"},
+            "leads_found": leads_found, "sample": sample}
+
+
+def _serve_sources(page, add_result: dict, listed=()):
+    """One pattern, two methods. The add form and the list share a URL."""
+    def handler(route, request):
+        body = add_result if request.method == "POST" else list(listed)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    page.route("**/api/business/sources", handler)
 
 
 # ── The Business shell ───────────────────────────────────────────────────────
@@ -178,8 +199,17 @@ def test_a_url_without_a_scheme_never_reaches_the_server(page, signed_in):
 def test_an_added_source_is_listed(page, signed_in, live_server):
     """A real add: the row lands in the database and the list re-reads it.
 
-    The URL points at the test server's own /terms page — a source the poller
-    can actually fetch without this suite touching the internet.
+    The docstring here used to say the URL points at the test server's own
+    /terms page so "the poller can actually fetch it". It cannot, and never
+    could: the SSRF guard refuses 127.0.0.1, so the priming poll fails and the
+    row is saved with status "unreachable". The endpoint still answers 200 —
+    the failure lives on the row — and the screen used to render that as
+    "Added. Found 0 leads in the last 90 days.", which is how this test came to
+    assert a false success for a source that had never worked once.
+
+    So the assertion follows the truth: the row is created and listed, and the
+    screen says the source could not be read. What this file does NOT have is a
+    source that fetches; see the note at the top.
     """
     signed_in(account_type="business")
     open_settings(page, "sources")
@@ -188,7 +218,7 @@ def test_an_added_source_is_listed(page, signed_in, live_server):
     page.locator("#biz-source-url").fill(f"{live_server}/terms")
     page.locator("#biz-source-add").click()
 
-    expect(page.locator("#biz-source-status")).to_contain_text("Added.")
+    expect(page.locator("#biz-source-status")).to_contain_text("couldn't read")
     expect(page.locator("#biz-sources-list")).to_contain_text(f"{live_server}/terms")
     expect(page.locator("#biz-source-url")).to_have_value("")   # cleared for the next one
 
@@ -510,3 +540,90 @@ def test_a_day_with_nothing_worth_posting_says_so_and_still_offers_the_rest(
     expect(page.locator("#biz-show-weak")).to_contain_text("Nothing looked worth posting")
     page.locator("#biz-show-weak").click()
     expect(page.locator("#biz-leads-list")).to_contain_text("Bumped a dependency")
+
+
+# ── the dead end a real owner walked into ───────────────────────────────────
+#
+# Signed in as a business, the first screen said "No leads yet. Add a source and
+# we'll collect what's worth posting" — and offered no way to add a source. The
+# only such control in the product lives in Settings, and nothing on this screen
+# names it, let alone links to it. Everything below is that walk, in order.
+
+def test_the_leads_screen_offers_the_source_it_asks_for(page, signed_in):
+    """The empty state names an action; the action has to be on the screen that
+    names it. This is the whole reported failure: a first screen that describes
+    a next step it does not provide."""
+    signed_in(account_type="business")
+    _serve(page, "**/api/business/leads*", [])
+    _serve(page, "**/api/business/sources", [])
+    open_section(page, "create")
+
+    expect(page.locator("#biz-leads-list")).to_contain_text("No leads yet")
+    page.locator("#biz-add-source").click()
+
+    expect(page.locator("#biz-source-url")).to_be_visible()
+
+
+def test_a_source_we_could_not_read_does_not_report_success(page, signed_in):
+    """"Added. Found 0 leads in the last 90 days." was the answer whether the
+    fetch worked and the site was quiet, or the site refused us entirely. The
+    server has always sent the difference — status "unreachable" on the row —
+    and the screen has always thrown it away."""
+    signed_in(account_type="business")
+    _serve_sources(page, _added(status="unreachable"))
+    open_settings(page, "sources")
+
+    page.locator("#biz-source-url").fill("https://example.com/changelog")
+    page.locator("#biz-source-add").click()
+
+    status = page.locator("#biz-source-status")
+    expect(status).to_contain_text("couldn't read")
+    expect(status).not_to_contain_text("Found 0 leads")
+
+
+def test_a_source_over_its_quota_is_not_called_broken(page, signed_in):
+    """Rate-limited is temporary. Telling somebody their working source is
+    unreachable invites them to delete it and add it again, which makes it
+    worse. The same distinction the Refresh button has always drawn."""
+    signed_in(account_type="business")
+    _serve_sources(page, _added(status="rate_limited"))
+    open_settings(page, "sources")
+
+    page.locator("#biz-source-url").fill("https://github.com/an-org/a-repo")
+    page.locator("#biz-source-add").click()
+
+    expect(page.locator("#biz-source-status")).to_contain_text("too many requests")
+
+
+def test_a_source_that_worked_still_says_what_it_found(page, signed_in):
+    """The half that already worked, kept honest while the failures are added
+    around it — the first headline is what tells a JS-rendered page apart from
+    a real changelog with one short entry."""
+    signed_in(account_type="business")
+    _serve_sources(page, _added(leads_found=2, sample="v4.2 ships incremental builds"))
+    open_settings(page, "sources")
+
+    page.locator("#biz-source-url").fill("https://example.com/changelog")
+    page.locator("#biz-source-add").click()
+
+    status = page.locator("#biz-source-status")
+    expect(status).to_contain_text("Found 2 leads")
+    expect(status).to_contain_text("v4.2 ships incremental builds")
+
+
+def test_the_reason_generation_failed_reaches_the_person(page, signed_in):
+    """A business account needs its own AI key from its first draft, and the
+    server says exactly that. The screen replaced it with "Check your AI key in
+    Account" — a different place, and no help to somebody who has a key but has
+    not chosen a model."""
+    signed_in(account_type="business")
+    _serve(page, "**/api/business/leads*", [_lead()])
+    page.route("**/api/business/leads/*/draft*", lambda r: r.fulfill(
+        status=400, content_type="application/json",
+        body=json.dumps({"detail": "No text model selected. "
+                                   "Choose one in Account → AI models."})))
+    open_section(page, "create")
+
+    page.locator('#biz-leads-list [data-act="post"]').first.click()
+
+    expect(page.locator("#toast")).to_contain_text("No text model selected")

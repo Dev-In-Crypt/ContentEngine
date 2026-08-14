@@ -516,6 +516,19 @@ function renderSourceRow(s) {
   return row;
 }
 
+/** From the screen that asks for a source to the one that adds it.
+ *
+ *  One control, not two. Copying the form onto the Leads screen would mean a
+ *  second input id, a second status line and a second place for the wording to
+ *  drift — the mistake this file has already paid for elsewhere. The tab is
+ *  where sources are listed, refreshed and deleted; it is where they are added.
+ */
+function goAddSource() {
+  openSettings('sources');
+  const el = document.getElementById('biz-source-url');
+  if (el) el.focus();
+}
+
 async function addSource() {
   const input = document.getElementById('biz-source-url');
   const btn = document.getElementById('biz-source-add');
@@ -532,13 +545,27 @@ async function addSource() {
     if (!res.ok) { setStatus('Couldn\'t add that source.'); return; }
     const d = await res.json();
     input.value = '';
-    // The first headline, not just the count. A page that builds itself with
-    // JavaScript answers, gets added, looks healthy and never produces anything —
-    // its one "entry" reads like a page subtitle. Nothing tells them apart from
-    // a real short changelog, so we show what came out and let the person who
-    // chose the URL see it while they are still looking at the field.
-    const found = `Added. Found ${d.leads_found} lead${d.leads_found === 1 ? '' : 's'} in the last 90 days.`;
-    setStatus(d.sample ? `${found} First one: “${d.sample}”` : found);
+    // A source that could not be read still comes back 200 — the failure is
+    // recorded on the row, not in the status code — and this line used to throw
+    // that away. "Added. Found 0 leads in the last 90 days." was the answer both
+    // when the site was reachable and quiet and when it refused us outright,
+    // which is the difference between "wait" and "fix your link".
+    const st = (d.source && d.source.status) || 'ok';
+    if (st === 'unreachable') {
+      setStatus("Added, but we couldn't read it. Check the link opens in a browser — "
+                + 'some pages build themselves with JavaScript and leave us nothing to read.');
+    } else if (st === 'rate_limited') {
+      setStatus('Added, but the site answered with too many requests. '
+                + "We'll try again on the next check — nothing to fix.");
+    } else {
+      // The first headline, not just the count. A page that builds itself with
+      // JavaScript answers, gets added, looks healthy and never produces anything —
+      // its one "entry" reads like a page subtitle. Nothing tells them apart from
+      // a real short changelog, so we show what came out and let the person who
+      // chose the URL see it while they are still looking at the field.
+      const found = `Added. Found ${d.leads_found} lead${d.leads_found === 1 ? '' : 's'} in the last 90 days.`;
+      setStatus(d.sample ? `${found} First one: “${d.sample}”` : found);
+    }
     await loadSources();
   } catch { setStatus('Something went wrong. Please try again.'); }
   finally { btn.disabled = false; }
@@ -578,7 +605,7 @@ async function loadLeads() {
   try {
     const res = await apiFetch(`${API}/api/business/leads?status=new`);
     const list = res.ok ? await res.json() : [];
-    if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No leads yet. Add a source and we\'ll collect what\'s worth posting.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No leads yet. Add a source above and we\'ll collect what\'s worth posting.</div>'; return; }
     box.innerHTML = '';
     // The product's promise is that it decides what is worth writing about, and
     // a list that shows everything with a label on it has not decided anything.
@@ -736,7 +763,7 @@ async function loadDrafts() {
   try {
     const res = await apiFetch(`${API}/api/business/drafts`);
     const list = res.ok ? await res.json() : [];
-    if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No drafts yet. Turn a lead into a post from the Leads tab.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No drafts yet. Pick a lead in Create and turn it into a post.</div>'; return; }
     box.innerHTML = '';
     list.forEach(p => box.appendChild(renderDraftRow(p)));
   } catch { box.innerHTML = '<div class="text-sm text-gray-400">No drafts yet.</div>'; }
@@ -937,7 +964,7 @@ async function loadSourceAnalytics() {
       ${_saStat('Reach', t.reach || 0)}${_saStat('Engagement', t.engagement || 0)}
     </div>${(t.measured_posts ? '' : '<div class="text-xs text-gray-500 mt-2">Reach/engagement fill in once published Instagram posts have their insights refreshed (X has no in-app metrics).</div>')}${data.digests ? `<div class="text-xs text-gray-500 mt-2">+ ${esc(String(data.digests))} digest post(s) span multiple leads — not attributed to a single source.</div>` : ''}`;
     const list = data.sources || [];
-    if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No sources yet — add some in Sources.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="text-sm text-gray-400">No sources yet — add one in Settings, under Sources.</div>'; return; }
     box.innerHTML = '';
     list.forEach((s, i) => box.appendChild(renderSourceAnalyticsRow(s, i)));
   } catch { box.innerHTML = '<div class="text-sm text-gray-400">Couldn\'t load analytics.</div>'; }
@@ -995,7 +1022,16 @@ async function _streamBiz(url, body, onDone) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}),
     });
-    if (!res.ok) { toast('Generation failed. Check your AI key in Account.', 'error'); return; }
+    if (!res.ok) {
+      // Say what the server said, like refreshSource already does. The old line
+      // sent people to "Account" for a key when the actual answer was that no
+      // model had been chosen — a different screen, and no help at all to
+      // somebody whose key was fine.
+      const e = await res.json().catch(() => ({}));
+      toast(typeof e.detail === 'string' ? e.detail
+                                         : 'Generation failed. Please try again.', 'error');
+      return;
+    }
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '', ok = false;
@@ -1778,6 +1814,7 @@ const ACTIONS = Object.freeze({
   'load-journal':                        () => loadJournal(),
   'load-more-grid':                      () => loadMoreGrid(),
   'logout':                              () => logout(),
+  'biz-add-source':                      () => goAddSource(),
   'make-digest':                         () => makeDigest(),
   'make-reel':                           () => makeReel(),
   'menu-brands':                         () => { closeAvatarMenu(); openBrandsModal(); },

@@ -691,7 +691,12 @@
       <div class="flex items-center gap-2 flex-wrap">
         <h2 class="text-lg font-semibold" style="color:var(--accent)">Leads</h2>
         <span class="text-xs text-gray-400">Newsworthy updates from your sources. Pick one to draft a post.</span>
-        <button id="biz-digest-btn" data-action="make-digest" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto hidden">Make digest from selected</button>
+        <!-- The screen that asks for a source now offers one. Until this button
+             existed, the empty state below said "Add a source" and the only
+             control that could lived in a Settings tab nothing here named — a
+             first screen describing a next step it did not provide. -->
+        <button id="biz-add-source" data-action="biz-add-source" class="ce-btn-ghost px-3 py-1.5 text-xs ml-auto">＋ Add a source</button>
+        <button id="biz-digest-btn" data-action="make-digest" class="ce-btn-ghost px-3 py-1.5 text-xs hidden">Make digest from selected</button>
       </div>
       <div id="biz-leads-list" class="mt-4 space-y-3">Loading…</div>
     </div>
