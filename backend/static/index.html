@@ -1335,63 +1335,6 @@
     </div>
 
     <div id="calendar-panel" data-calendar-panel="calendar" class="space-y-4">
-    <!-- Content pillars mix -->
-    <section class="bg-gray-900 rounded-2xl p-6 space-y-3">
-      <h2 class="text-lg font-semibold text-purple-300">Content pillars</h2>
-      <div id="pillar-suggestion" class="text-sm bg-purple-950/40 border border-purple-900 rounded-lg px-3 py-2"></div>
-      <div id="pillar-bars" class="space-y-2"></div>
-    </section>
-
-    <!-- Plan a week: propose topics (cheap), review, then generate as drafts -->
-    <section class="bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">Plan a week</h2>
-      <p class="text-xs text-gray-500">Get a balanced set of topics first — edit or drop any before you spend on full generation. Posts land as drafts on the calendar for you to review; nothing is published automatically.</p>
-
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="col-span-2">
-          <label class="block text-xs text-gray-400 mb-1">Theme (optional)</label>
-          <input id="plan-theme" type="text" placeholder="e.g. New Year fitness reset"
-            class="ce-input w-full px-2 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">How many</label>
-          <input id="plan-count" type="number" min="2" max="14" value="7" class="ce-input w-full px-2 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Cadence</label>
-          <select id="plan-cadence" class="ce-input w-full px-2 py-1.5 text-sm">
-            <option value="1">Daily</option>
-            <option value="2">Every 2 days</option>
-            <option value="3">Every 3 days</option>
-            <option value="7">Weekly</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Start date</label>
-          <input id="plan-start" type="date" class="ce-input w-full px-2 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label class="block text-xs text-gray-400 mb-1">Format</label>
-          <select id="plan-format" class="ce-input w-full px-2 py-1.5 text-sm">
-            <option value="single">Single image</option>
-            <option value="carousel_3">Carousel 3</option>
-            <option value="carousel_5">Carousel 5</option>
-          </select>
-        </div>
-      </div>
-
-      <button id="plan-suggest-btn" data-action="suggest-plan" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Suggest topics</button>
-
-      <div id="plan-list" class="hidden space-y-2"></div>
-
-      <div id="plan-actions" class="hidden flex flex-wrap items-center gap-3 border-t border-gray-800 pt-3">
-        <button id="plan-add-btn" data-action="add-plan-row" class="ce-btn-ghost px-3 py-1.5 text-sm">+ Add topic</button>
-        <span id="plan-estimate" class="text-xs text-gray-500"></span>
-        <button id="plan-generate-btn" data-action="run-batch" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold ml-auto">Generate posts</button>
-      </div>
-      <div id="plan-progress" class="hidden text-sm text-gray-300"></div>
-    </section>
-
     <section class="bg-gray-900 rounded-2xl p-6 space-y-4">
       <div class="flex items-center justify-between">
         <button data-action="cal-shift" data-arg="-1" class="bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">← Prev</button>
@@ -1712,11 +1655,84 @@
       </div>
     </div>
     <div class="ce-card p-5">
-      <h2 id="queue-title" class="text-lg font-semibold" style="color:var(--accent)">Queue</h2>
+      <div class="flex flex-wrap items-baseline gap-3">
+        <h2 id="queue-title" class="text-lg font-semibold" style="color:var(--accent)">Queue</h2>
+        <span id="queue-week-label" class="text-xs" style="color:var(--muted)"></span>
+      </div>
       <p id="queue-sub" class="text-xs text-gray-400 mt-1">Everything you've made that hasn't gone out yet — drafts, previews and anything scheduled.</p>
-      <div id="queue-list" class="mt-4 space-y-2 text-sm"></div>
+
+      <!-- The week, because that is the unit people plan in. Seven columns and
+           no "＋ Slot": nothing in the product can create an empty scheduled
+           slot, and a button that cannot is worse than an empty day. -->
+      <div id="queue-week" class="hidden mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2"></div>
+
+      <!-- Everything the grid cannot show: an idea with a sibling still
+           undated, and anything scheduled beyond this week. A week grid that
+           quietly dropped those would be a Queue that lies about how much work
+           is waiting. -->
+      <div id="queue-rest-label" class="hidden mt-5 text-xs font-semibold" style="color:var(--muted)">Still needs a hand</div>
+      <div id="queue-list" class="mt-2 space-y-2 text-sm"></div>
       <div id="biz-drafts-list" class="hidden mt-4 space-y-3">Loading…</div>
     </div>
+
+    <!-- Content pillars mix -->
+    <section class="bg-gray-900 rounded-2xl p-6 space-y-3">
+      <h2 class="text-lg font-semibold text-purple-300">Content pillars</h2>
+      <div id="pillar-suggestion" class="text-sm bg-purple-950/40 border border-purple-900 rounded-lg px-3 py-2"></div>
+      <div id="pillar-bars" class="space-y-2"></div>
+    </section>
+
+    <!-- Plan a week: propose topics (cheap), review, then generate as drafts -->
+    <section id="plan-card" class="bg-gray-900 rounded-2xl p-6 space-y-4">
+      <h2 class="text-lg font-semibold text-purple-300">Plan a week</h2>
+      <p class="text-xs text-gray-500">Get a balanced set of topics first — edit or drop any before you spend on full generation. Posts land as drafts on the calendar for you to review; nothing is published automatically.</p>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="col-span-2">
+          <label class="block text-xs text-gray-400 mb-1">Theme (optional)</label>
+          <input id="plan-theme" type="text" placeholder="e.g. New Year fitness reset"
+            class="ce-input w-full px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">How many</label>
+          <input id="plan-count" type="number" min="2" max="14" value="7" class="ce-input w-full px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Cadence</label>
+          <select id="plan-cadence" class="ce-input w-full px-2 py-1.5 text-sm">
+            <option value="1">Daily</option>
+            <option value="2">Every 2 days</option>
+            <option value="3">Every 3 days</option>
+            <option value="7">Weekly</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Start date</label>
+          <input id="plan-start" type="date" class="ce-input w-full px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Format</label>
+          <select id="plan-format" class="ce-input w-full px-2 py-1.5 text-sm">
+            <option value="single">Single image</option>
+            <option value="carousel_3">Carousel 3</option>
+            <option value="carousel_5">Carousel 5</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="plan-suggest-btn" data-action="suggest-plan" class="bg-gray-700 hover:bg-gray-600 transition rounded-lg px-4 py-2 text-sm font-semibold">Suggest topics</button>
+
+      <div id="plan-list" class="hidden space-y-2"></div>
+
+      <div id="plan-actions" class="hidden flex flex-wrap items-center gap-3 border-t border-gray-800 pt-3">
+        <button id="plan-add-btn" data-action="add-plan-row" class="ce-btn-ghost px-3 py-1.5 text-sm">+ Add topic</button>
+        <span id="plan-estimate" class="text-xs text-gray-500"></span>
+        <button id="plan-generate-btn" data-action="run-batch" class="bg-purple-600 hover:bg-purple-500 transition rounded-lg px-4 py-2 text-sm font-semibold ml-auto">Generate posts</button>
+      </div>
+      <div id="plan-progress" class="hidden text-sm text-gray-300"></div>
+    </section>
+
+
   </div>
 
   <!-- ===== RESULTS ===== -->

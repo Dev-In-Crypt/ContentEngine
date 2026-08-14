@@ -341,13 +341,17 @@ def test_opening_a_post_from_the_calendar_returns_to_the_wizard(page, signed_in)
 # controls that do nothing, or hiding from Business the thing the screen is for.
 
 def test_the_queue_lists_unpublished_work(page, signed_in):
+    """Asserted on the screen rather than on a container. Since 11.5 the Queue
+    has two of them — a week grid for what is fully scheduled, a list for what
+    still needs a hand — and which one a post lands in depends on its date and
+    on what day it is today. The claim is that neither is lost."""
     signed_in()
     _serve_posts(page,
                  _post(id="q1", topic="A draft", status="draft"),
                  _on(id="q2", topic="Scheduled one"))
     open_section(page, "queue")
-    expect(page.locator("#queue-list")).to_contain_text("A draft")
-    expect(page.locator("#queue-list")).to_contain_text("Scheduled one")
+    expect(page.locator("#view-queue")).to_contain_text("A draft")
+    expect(page.locator("#view-queue")).to_contain_text("Scheduled one")
 
 
 def test_the_queue_leaves_out_what_is_already_published(page, signed_in):

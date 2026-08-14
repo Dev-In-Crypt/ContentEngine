@@ -713,19 +713,44 @@ async function loadQueue() {
   maybeOfferSources();      // not awaited: the queue itself must not wait on an offer
   if (business) return loadDrafts();
 
+  // The mix describes the week whether or not the week has anything in it —
+  // "you are thin on community" is most useful when the answer is "nothing yet".
+  renderPillars();
+
   // The Queue is bounded by how much work is waiting, not by how much history
   // exists — so it asks for its four statuses rather than filtering everything.
   const rows = await fetchPosts({ status: QUEUE_STATUSES });
   setQueueCount(rows.length);
-  if (!rows.length) {
-    own.innerHTML = '<div class="text-gray-500">Nothing waiting. Anything you make lands here until it goes out.</div>';
-    return;
-  }
-  // One idea is one card, however many networks it went to. Collapsed by
-  // default because the common case is one thought going out; expandable
-  // because the siblings are separate posts with separate schedules and each
-  // has to be reachable.
-  own.innerHTML = groupPosts(rows).map(g => {
+
+  // Split by IDEA, not by post. A group with one sibling still undated is not
+  // scheduled — it is half scheduled, which is the state most worth seeing —
+  // so the whole group stays below rather than appearing in a day it is only
+  // partly ready for. That also keeps phase 4.7's promise intact: one card per
+  // idea, wearing the status of its unhappiest sibling.
+  const groups = groupPosts(rows);
+  const week = groups.filter(g => g.posts.every(p => inThisWeek(p.scheduled_at)));
+  const rest = groups.filter(g => !week.includes(g));
+  renderQueueWeek(week);
+
+  document.getElementById('queue-rest-label').classList.toggle('hidden', !rest.length);
+  own.innerHTML = rest.length ? queueCards(rest)
+    : (rows.length ? ''
+       : '<div class="text-gray-500">Nothing waiting. Anything you make lands here until it goes out.</div>');
+}
+
+function inThisWeek(when) {
+  if (!when) return false;
+  const start = weekStart();
+  const end = new Date(start); end.setDate(end.getDate() + 7);
+  const t = new Date(when);
+  return t >= start && t < end;
+}
+
+/** One idea is one card, however many networks it went to. Collapsed by
+ *  default because the common case is one thought going out; expandable because
+ *  the siblings are separate posts with separate schedules. */
+function queueCards(groups) {
+  return groups.map(g => {
     const st = groupStatus(g.posts);
     const many = g.posts.length > 1;
     const inner = many ? g.posts.map(p =>
@@ -744,6 +769,54 @@ async function loadQueue() {
         ${many ? `<button data-expand-group data-action="expand-group" class="ce-btn-ghost px-2 py-1 text-xs">${g.posts.length} networks</button>` : ''}
       </div>
       ${inner}
+    </div>`;
+  }).join('');
+}
+
+//: Monday-first, because a posting week is a working week.
+const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+function weekStart(d = new Date()) {
+  const s = new Date(d);
+  s.setHours(0, 0, 0, 0);
+  s.setDate(s.getDate() - ((s.getDay() + 6) % 7));   // getDay(): 0 is Sunday
+  return s;
+}
+
+/** Seven columns of what is already dated.
+ *
+ *  Anything scheduled outside this week stays out of it: the Calendar's month
+ *  is where a schedule further than seven days is readable, and repeating it
+ *  here would give two screens that disagree about what "this week" means. */
+function renderQueueWeek(groups) {
+  const grid = document.getElementById('queue-week');
+  const label = document.getElementById('queue-week-label');
+  if (!grid) return;
+  const start = weekStart();
+  grid.classList.remove('hidden');
+  if (label) {
+    label.textContent = 'Week of ' + start.toLocaleDateString(
+      undefined, { day: 'numeric', month: 'short' });
+  }
+  grid.innerHTML = WEEKDAYS.map((name, i) => {
+    const day = new Date(start); day.setDate(day.getDate() + i);
+    // A group sits on the day of its earliest sibling; siblings scheduled for
+    // other days are reachable from the post itself, as they always were.
+    const mine = groups.filter(g => {
+      const t = new Date(Math.min(...g.posts.map(p => +new Date(p.scheduled_at))));
+      return t.getDate() === day.getDate() && t.getMonth() === day.getMonth();
+    });
+    const items = mine.map(g => {
+      const t = new Date(Math.min(...g.posts.map(p => +new Date(p.scheduled_at))))
+        .toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      return `<div class="ce-card px-2 py-1.5 cursor-pointer" data-action="open-post" data-arg="${esc(g.primary.id)}">
+        <div class="text-[10px]" style="color:var(--muted)">${queueDot(groupStatus(g.posts))} ${esc(t)} ${netBadges(g.posts)}</div>
+        <div class="text-xs truncate">${esc(g.primary.topic || 'post')}</div>
+      </div>`;
+    }).join('');
+    return `<div data-weekday="${i}" class="rounded-xl p-2 space-y-1.5" style="background:var(--panel2)">
+      <div class="text-[10px] font-semibold" style="color:var(--muted)">${name} ${day.getDate()}</div>
+      ${items}
     </div>`;
   }).join('');
 }
