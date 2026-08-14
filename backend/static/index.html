@@ -32,6 +32,14 @@
          a monochrome palette cannot, so they are the only hues in the product —
          and each is a set, because text and its background have to move
          together when the theme flips. */
+      /* The brand. Not the accent: look at where the mockups spend it — the
+         mark, links, counts, the meter fill, hashtags, chart bars — and where
+         they don't: the primary button and the active nav item are still ink.
+         So this is a SECOND accent, for identity and for data, and the
+         monochrome decision stands. A pair, because one violet cannot serve
+         both themes. #9184D9 is not new: the favicon has been drawing it on
+         every browser tab since it was written. */
+      --brand:#6C5CD3; --brand-dim:rgba(108,92,211,.10); --on-brand:#ffffff;
       --warn:#7a5300;   --warn-bg:#fdf3d8;   --warn-border:#e6cb82;   --warn-solid:#8a6000;
       --ok:#1c6b45;     --ok-bg:#e3f3ea;     --ok-border:#a0cfb5;     --ok-solid:#2c7a52;
       --danger:#991b1b; --danger-bg:#fce7e7; --danger-border:#e4a3a3; --danger-solid:#a52020;
@@ -40,6 +48,7 @@
       --bg:#141416; --panel:#1d1d20; --panel2:#26262a; --panel3:#303036;
       --border:#34343a; --text:#f2f2f3; --muted:#a2a2aa; --faint:#6c6c74;
       --accent:#f2f2f3; --accent-strong:#ffffff; --accent-dim:rgba(255,255,255,.09); --on-accent:#141416;
+      --brand:#9184D9; --brand-dim:rgba(145,132,217,.14); --on-brand:#141416;
       --warn:#f0cf72;   --warn-bg:#2a2413;   --warn-border:#5c4a1d;   --warn-solid:#6b5210;
       --ok:#86d3a6;     --ok-bg:#16261e;     --ok-border:#2f5f46;     --ok-solid:#2c7a52;
       --danger:#f0a3a3; --danger-bg:#2b1717; --danger-border:#6e3131; --danger-solid:#8f2626;
@@ -132,6 +141,11 @@
        and were drawn instead by swapping six Tailwind utilities each, in JS, per
        button. Six chances to disagree with the theme, in a file whose whole
        point is that colour lives in one place. */
+    /* The mark carries the brand everywhere it appears — app header, landing
+       header, footer — from one rule rather than three inline styles. */
+    .brand-mark{ color:var(--brand); }
+    a{ color:var(--brand); }
+    a:hover{ color:var(--text); }
     .lt-btn{ background:var(--panel2); border:2px solid var(--border); color:var(--muted); border-radius:10px; font-weight:600; transition:background .15s,color .15s,border-color .15s; }
     .lt-btn:hover{ color:var(--text); }
     .lt-btn.lt-active{ background:var(--accent-dim); border-color:var(--accent); color:var(--text); }
@@ -163,7 +177,7 @@
 <header class="border-b sticky top-0 z-30" style="border-color:var(--border);background:var(--bg)">
   <div class="max-w-7xl mx-auto px-5 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
     <div class="flex items-center gap-2 cursor-pointer" data-action="go-home" title="Home — new post">
-      <span class="text-lg" style="color:var(--accent)">✦</span>
+      <span class="brand-mark text-lg">✦</span>
       <span class="font-bold tracking-tight">Content Engine</span>
     </div>
     <div class="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -206,7 +220,7 @@
 <!-- ===== LANDING (guests, cloud mode) ===== -->
 <div id="landing-screen" class="hidden fixed inset-0 z-40 overflow-y-auto" style="background:var(--bg)">
   <header class="max-w-6xl mx-auto px-6 py-5 flex items-center gap-2">
-    <span class="text-xl" style="color:var(--accent)">✦</span>
+    <span class="brand-mark text-xl">✦</span>
     <span class="font-bold tracking-tight text-lg">Content Engine</span>
     <div class="ml-auto flex gap-2">
       <button data-action="show-auth-screen" data-arg="login" class="px-4 py-2 rounded-lg text-sm font-semibold text-gray-200 hover:bg-white/5 transition">Log in</button>
@@ -426,7 +440,7 @@
 <div id="auth-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:var(--bg)">
   <div class="ce-card p-8 max-w-sm w-full space-y-4 shadow-2xl">
     <div class="flex items-center gap-2">
-      <span class="text-xl" style="color:var(--accent)">✦</span>
+      <span class="brand-mark text-xl">✦</span>
       <h2 class="text-lg font-bold">Content Engine</h2>
     </div>
     <div>

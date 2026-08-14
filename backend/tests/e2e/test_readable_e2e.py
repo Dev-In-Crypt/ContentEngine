@@ -29,6 +29,32 @@ def _sse(*frames: dict) -> str:
     return "".join(f"data: {json.dumps(f)}\n\n" for f in frames)
 
 
+# ── the brand colour (UX phase 11.0) ────────────────────────────────────────
+#
+# The product has been monochrome ink since the light theme landed, and the mark
+# next to its own name was drawn in the same ink as the words around it. The
+# favicon, meanwhile, has been painting #9184D9 on every browser tab since the
+# day it was written — the brand colour was chosen long ago and never reached
+# the application.
+
+def test_the_mark_is_the_brand_colour_not_the_body_ink(page, signed_in):
+    """A mark the same colour as the sentence beside it is not a mark."""
+    signed_in()
+    mark = page.locator(".brand-mark").first
+
+    ink = page.evaluate("getComputedStyle(document.body).color")
+    assert mark.evaluate("e => getComputedStyle(e).color") != ink
+
+
+def test_the_brand_colour_is_readable_in_both_themes(page, signed_in):
+    """One violet cannot serve both themes — #6C5CD3 disappears on #141416 and
+    #9184D9 is thin on #f2f2f3 — so the token is a pair, and this is what says
+    so. Measured, because "looks fine" is how the yellow survived."""
+    signed_in()
+
+    assert_readable(page, page.locator(".brand-mark").first, "the brand mark")
+
+
 # ── a warning with nothing behind it ────────────────────────────────────────
 
 def test_the_niche_we_could_not_guess_is_readable(page, signup):
