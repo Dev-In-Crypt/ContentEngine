@@ -1946,6 +1946,7 @@ const ACTIONS = Object.freeze({
   'save-current-preset':                 () => saveCurrentPreset(),
   'save-limits':                         () => saveLimits(),
   'save-profile':                        () => saveProfile(),
+  'save-spend-alert':                    () => saveSpendAlert(),
   'save-slide-style':                    () => saveSlideStyle(),
   'save-x-settings':                     () => saveXSettings(),
   'schedule-post':                       () => schedulePost(),
@@ -5564,6 +5565,52 @@ function openSettings(tab) {
  *  and forgotten in a hand-written hide list is a panel that stays on screen
  *  under every tab. A section may name more than one tab — the credentials
  *  block is on two, with only its scope differing. */
+/** Today, this month, and which model it went to.
+ *
+ *  The breakdown existed already — as a run of text in a popover hanging off
+ *  the header badge, which is the one place nobody is standing when they are
+ *  thinking about cost. Same data, on the tab where the question is asked. */
+function renderSpend(d) {
+  const box = document.getElementById('admin-usage');
+  if (!box) return;
+  const rows = (d.by_model || []).filter(m => (m.cost || 0) > 0);
+  const total = rows.reduce((s, m) => s + (m.cost || 0), 0);
+  const head = `<div class="flex flex-wrap gap-5">
+      <div><div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">Today</div>
+        <div class="text-lg font-semibold">$${(d.today?.cost || 0).toFixed(2)}</div></div>
+      <div><div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">This month</div>
+        <div class="text-lg font-semibold">$${(d.month?.cost || 0).toFixed(2)}</div>
+        <div class="text-[10px]" style="color:var(--faint)">${d.month?.calls || 0} calls</div></div>
+    </div>`;
+  if (!rows.length) {
+    box.innerHTML = head + '<div class="text-xs mt-3" style="color:var(--faint)">'
+      + 'Nothing spent this month yet.</div>';
+    return;
+  }
+  const max = Math.max(...rows.map(m => m.cost));
+  box.innerHTML = head + '<div class="mt-3 space-y-1.5">' + rows.map(m => `
+    <div class="flex items-center gap-2">
+      <div class="text-xs w-48 truncate" title="${esc(m.model)}">${esc(m.model)}</div>
+      <div class="flex-1 h-2 rounded-full overflow-hidden" style="background:var(--panel3)">
+        <div class="h-full" style="background:var(--brand);width:${Math.max(2, (m.cost / max) * 100)}%"></div>
+      </div>
+      <div class="text-xs font-mono">$${m.cost.toFixed(2)}</div>
+    </div>`).join('') + '</div>'
+    + `<div class="text-[10px] mt-2" style="color:var(--faint)">Totals $${total.toFixed(2)} across ${rows.length} model(s). Costs for providers other than OpenRouter are estimates, not vendor invoices.</div>`;
+
+  const alert = document.getElementById('spend-alert');
+  if (alert && !alert.value) alert.value = localStorage.getItem('cost_limit') || '5';
+}
+
+/** The number that colours the badge. Not a cap — see the note in the markup. */
+function saveSpendAlert() {
+  const el = document.getElementById('spend-alert');
+  if (!el) return;
+  const v = String(Math.max(0, Number(el.value) || 0));
+  try { localStorage.setItem('cost_limit', v); } catch (e) { /* private mode */ }
+  refreshCost();
+}
+
 /** Redraw the brand preview.
  *
  *  Cache-busted by hand: the URL is constant and the picture is not, so without
@@ -5610,8 +5657,7 @@ async function loadAdmin() {
   if (account) {
     await refreshCost();
     const d = S.usage || {today:{},month:{}};
-    document.getElementById('admin-usage').innerHTML =
-      `LLM spend — today <b>$${(d.today?.cost||0).toFixed(4)}</b>, this month <b>$${(d.month?.cost||0).toFixed(4)}</b> (${d.month?.calls||0} calls)`;
+    renderSpend(d);
   }
   const keysSec = document.getElementById('keys-section');
   if (S.user && !S.user.is_local) {

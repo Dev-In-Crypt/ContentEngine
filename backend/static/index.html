@@ -1595,8 +1595,22 @@
     </section>
 
     <section id="usage-section" data-settings-tab="keys" class="bg-gray-900 rounded-2xl p-6 space-y-4">
-      <h2 class="text-lg font-semibold text-purple-300">Usage</h2>
-      <div id="admin-usage" class="text-sm text-gray-300 bg-gray-800 rounded-lg p-3">Loading usage…</div>
+      <h2 class="text-lg font-semibold text-purple-300">Spend</h2>
+      <p class="text-xs text-gray-500">Billed by each vendor directly, on your own key. This is what we watched go past.</p>
+      <div id="admin-usage" class="text-sm text-gray-300">Loading usage…</div>
+
+      <!-- The mockup calls this a spending cap that stops generating above a
+           number. There is no such thing here: the only cap in the product is
+           platform-wide, applies to OUR key and is not user-editable. What this
+           number does is turn the header badge red — so that is what it says. A
+           cap that does not cap is a promise broken the first time it counts. -->
+      <div id="spend-alert-row" class="flex flex-wrap items-center gap-2 text-xs pt-2 border-t" style="border-color:var(--border);color:var(--muted)">
+        <label for="spend-alert">Warn me when today goes over</label>
+        <span>$</span>
+        <input id="spend-alert" type="number" min="0" step="1" data-change="save-spend-alert"
+               class="ce-input w-20 px-2 py-1 text-xs" />
+        <span class="w-full text-[10px]" style="color:var(--faint)">Colours the badge in the header. Nothing is blocked — your key, your call.</span>
+      </div>
     </section>
 
     <!-- Whole-DB backup/restore — admin / local desktop only -->
