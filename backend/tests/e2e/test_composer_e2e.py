@@ -813,3 +813,42 @@ def test_a_missing_connection_says_it_covers_every_profile(page, signed_in, keye
 
     expect(page.locator("#need-key-modal")).to_be_visible()
     expect(page.locator("#need-key-modal")).to_contain_text("profile")
+
+
+# ── rewriting along an axis (UX phase 11.3) ─────────────────────────────────
+
+def test_a_rewrite_chip_names_its_axis_to_the_server(page, signed_in, keyed):
+    """"Variations" asks for four more of the same. The chips ask for four in a
+    named direction — and the direction is a key from a closed table, not a
+    sentence, because it lands in a prompt that on the free tier runs on our
+    key."""
+    signed_in()
+    sent = {}
+    page.route("**/regenerate-field", lambda r: (
+        sent.update(r.request.post_data_json),
+        r.fulfill(status=200, content_type="application/json",
+                  body=json.dumps({"field": "caption", "variants": ["Short."]}))))
+    _reach_step4(page)
+
+    page.locator('#rewrite-axes [data-arg="less_salesy"]').click()
+
+    expect(page.locator("#variations-modal")).to_be_visible()
+    assert sent["field"] == "caption"
+    assert sent["instruction"] == "less_salesy"
+
+
+def test_plain_variations_still_ask_for_nothing_in_particular(page, signed_in, keyed):
+    """The old button is the old button. Sending an axis on every call would
+    quietly change a result people already rely on."""
+    signed_in()
+    sent = {}
+    page.route("**/regenerate-field", lambda r: (
+        sent.update(r.request.post_data_json),
+        r.fulfill(status=200, content_type="application/json",
+                  body=json.dumps({"field": "caption", "variants": ["A."]}))))
+    _reach_step4(page)
+
+    page.locator('[data-action="show-variations"][data-arg="caption"]').click()
+
+    expect(page.locator("#variations-modal")).to_be_visible()
+    assert "instruction" not in sent

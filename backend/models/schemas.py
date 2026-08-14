@@ -225,6 +225,13 @@ class OverlayUpdateRequest(BaseModel):
 class RegenFieldRequest(BaseModel):
     field: str = Field(..., pattern="^(caption|hook|cta|hashtags|seo_keywords)$")
     count: int = Field(4, ge=1, le=8)
+    #: Which way to rewrite, if any. A key from services.caption_generator's
+    #: REWRITE_AXES, matched by pattern for the same reason `field` is: this
+    #: value reaches our prompt, and on the free tier that prompt runs on our
+    #: key. Absent means "more of the same", which is what this route did before
+    #: the axis existed and still does.
+    instruction: Optional[str] = Field(
+        None, pattern="^(shorter|warmer|less_salesy|add_hook)$")
 
 
 class RegenFieldResponse(BaseModel):

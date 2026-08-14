@@ -1825,6 +1825,7 @@ const ACTIONS = Object.freeze({
   'make-digest':                         () => makeDigest(),
   'make-reel':                           () => makeReel(),
   'menu-brands':                         () => { closeAvatarMenu(); openBrandsModal(); },
+  'rewrite-caption':                     (el) => showVariations('caption', el.dataset.arg),
   'start-from-plan':                     () => startFromPlan(),
   'start-from-photos':                   () => startFromPhotos(),
   'toggle-grounding':                    () => toggleGrounding(),
@@ -3571,18 +3572,27 @@ function renderInsights(ins) {
 }
 
 // ===== VARIATIONS =====
-async function showVariations(field) {
+//: What each chip is called on screen, so the modal can say which way it went.
+const REWRITE_LABELS = {
+  shorter: 'Shorter', warmer: 'Warmer',
+  less_salesy: 'Less salesy', add_hook: 'With a hook',
+};
+
+async function showVariations(field, instruction) {
   if (!S.postId) return;
   const modal = document.getElementById('variations-modal');
   const list = document.getElementById('variations-list');
-  document.getElementById('variations-title').textContent = 'Variations — ' + field;
+  document.getElementById('variations-title').textContent = instruction
+    ? `${REWRITE_LABELS[instruction] || instruction} — ${field}`
+    : 'Variations — ' + field;
   list.innerHTML = '<p class="text-sm text-gray-500">⏳ Generating…</p>';
   modal.classList.remove('hidden');
   onModalOpen('variations-modal');
   try {
     const res = await apiFetch(`${API}/api/posts/${S.postId}/regenerate-field`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ field, count: 4 }),
+      body: JSON.stringify(instruction ? { field, count: 4, instruction }
+                                         : { field, count: 4 }),
     });
     if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'Failed'); }
     const data = await res.json();

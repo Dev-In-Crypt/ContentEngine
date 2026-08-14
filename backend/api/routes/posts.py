@@ -1392,6 +1392,7 @@ async def regenerate_field(
             text_model=post.text_model or resolve_ai_choice(user, settings, "text")[1],
             count=body.count,
             brand_voice=resolve_user_brand_voice(await brand_for_post(db, post, user)),
+            instruction=body.instruction,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Regeneration failed: {e}") from e

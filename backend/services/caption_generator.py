@@ -379,6 +379,21 @@ class CaptionParseError(Exception):
     pass
 
 
+#: The axes a caption can be rewritten along, and the sentence each one adds.
+#: A closed table because the value arrives from a browser: the caller picks a
+#: key, we supply the words. Four, matching the chips beside the caption box.
+REWRITE_AXES = {
+    "shorter": "Make each alternative noticeably shorter than the current text "
+               "while keeping every fact in it.",
+    "warmer": "Make each alternative warmer and more personal, as if speaking to "
+              "one reader rather than to an audience.",
+    "less_salesy": "Strip the promotional language out of each alternative. No "
+                   "superlatives, no urgency, no asking anybody to buy.",
+    "add_hook": "Open each alternative with a first line strong enough to earn "
+                "the second one.",
+}
+
+
 class CaptionGenerator:
     def __init__(self, text_provider):
         """`text_provider` is any services.ai TextProvider (or the raw
@@ -558,15 +573,25 @@ class CaptionGenerator:
         text_model: str = "",
         count: int = 4,
         brand_voice: Optional[str] = None,
+        instruction: Optional[str] = None,
     ) -> list:
         """Generate `count` alternatives for a single field via a cheap mini-prompt.
 
         For text fields (caption/hook/cta) returns list[str].
         For list fields (hashtags/seo_keywords) returns list[list[str]].
+
+        `instruction` names an axis to rewrite along, from REWRITE_AXES. A key
+        rather than a sentence, on purpose: free text here is a field through
+        which a caller writes into our prompt, and on the free tier that prompt
+        runs on OUR key. Naming the axes costs the same and does not open that
+        door. An unknown one is refused rather than dropped — an axis that
+        silently does nothing looks exactly like one that worked.
         """
         field = field.strip()
         if field not in self._TEXT_FIELDS and field not in self._LIST_FIELDS:
             raise CaptionParseError(f"Unsupported field for regeneration: {field!r}")
+        if instruction is not None and instruction not in REWRITE_AXES:
+            raise CaptionParseError(f"Unknown rewrite axis: {instruction!r}")
 
         is_list = field in self._LIST_FIELDS
         shape = (
@@ -586,7 +611,8 @@ class CaptionGenerator:
             f"Current {field}: {cur}\n\n"
             f"Generate {count} distinct, high-quality alternatives for the \"{field}\" "
             f"in the same brand voice. Keep the format valid for {platform.value}.\n"
-            f'Respond with ONLY this JSON (no code fences): {{"variants": {shape}}}'
+            + (f"{REWRITE_AXES[instruction]}\n" if instruction else "")
+            + f'Respond with ONLY this JSON (no code fences): {{"variants": {shape}}}'
         )
         raw, _citations = await self.text_provider.generate_text(
             model=text_model, system_prompt=system, user_prompt=user, max_tokens=1200,

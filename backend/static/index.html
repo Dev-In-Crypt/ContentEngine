@@ -1115,6 +1115,16 @@
       </div>
       <textarea id="caption-edit" rows="5"
         class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm"></textarea>
+      <!-- Rewriting along an axis, rather than asking for four more of the
+           same. Named axes, not a text box: the value reaches our prompt, and
+           on the free tier that prompt runs on our key. -->
+      <div id="rewrite-axes" class="flex flex-wrap gap-2 mt-2">
+        <span class="text-xs self-center" style="color:var(--muted)">Rewrite:</span>
+        <button data-action="rewrite-caption" data-arg="shorter" class="ce-btn-ghost px-3 py-1 text-xs">Shorter</button>
+        <button data-action="rewrite-caption" data-arg="warmer" class="ce-btn-ghost px-3 py-1 text-xs">Warmer</button>
+        <button data-action="rewrite-caption" data-arg="less_salesy" class="ce-btn-ghost px-3 py-1 text-xs">Less salesy</button>
+        <button data-action="rewrite-caption" data-arg="add_hook" class="ce-btn-ghost px-3 py-1 text-xs">Add a hook</button>
+      </div>
     </div>
 
     <!-- Hashtag editor -->
