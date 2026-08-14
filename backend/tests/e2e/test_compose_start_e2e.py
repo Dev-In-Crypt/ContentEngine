@@ -16,6 +16,8 @@ The collapsed row is also why `nav.open_configure` exists: Playwright cannot
 fill an input inside a closed <details>, and an assertion about a hidden field
 would otherwise pass for the wrong reason.
 """
+import json
+
 import pytest
 from playwright.sync_api import expect
 
@@ -156,3 +158,84 @@ def test_changing_the_tone_updates_it_too(page, signed_in):
     page.locator("#tone").select_option("casual")
 
     expect(page.locator("#configure-summary")).to_contain_text("Casual")
+
+
+# ── the Generate screen (UX phase 11.2) ─────────────────────────────────────
+
+def _usage(page, free):
+    page.route("**/api/usage", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(
+            {"today": {"cost": 0, "tokens": 0, "calls": 0},
+             "month": {"cost": 0, "tokens": 0, "calls": 0},
+             "by_model": [], "free": free})))
+
+
+def test_grounding_is_not_offered_to_somebody_spending_our_money(page, signed_in):
+    """The mockup drew "Web-grounded ✓" as a chip among the other choices. It
+    was never a choice: the route derives it from whose key is paying, because
+    live search is a surcharge per call. On our key the answer is no whatever
+    the request says — so the chip says so rather than pretending."""
+    _usage(page, {"remaining": 2, "limit": 2})
+    signed_in()
+
+    chip = page.locator("#grounding-chip")
+    expect(chip).to_be_visible()
+    expect(chip).to_be_disabled()
+    expect(chip).to_contain_text("own key")
+
+
+def test_grounding_is_a_real_choice_on_your_own_key(page, signed_in):
+    """Their bill, their call — worth it for a post about this week, wasted on
+    one about sourdough."""
+    _usage(page, None)          # null free allowance == paying for themselves
+    # ...and the key wall reads a different endpoint, so it needs telling too.
+    page.route("**/api/settings/ai", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(
+            {"text_provider": "openrouter", "text_model": "m",
+             "image_provider": "openrouter", "image_model": "m",
+             "keys": {"openrouter": {"set": True, "masked": "sk-…1"}}})))
+    signed_in()
+
+    chip = page.locator("#grounding-chip")
+    expect(chip).to_be_enabled()
+
+    sent = {}
+    page.route("**/api/posts/generate", lambda r: (
+        sent.update(r.request.post_data_json),
+        r.fulfill(status=200, content_type="text/event-stream",
+                  body='data: {"type": "error", "message": "stop here"}\n\n')))
+
+    chip.click()                      # on by default → this turns it off
+    page.locator("#topic").fill("Sourdough starters")
+    page.locator("#generate-btn").click()
+
+    expect(page.locator("#gen-error")).to_be_visible()
+    assert sent["web_grounded"] is False
+
+
+# ── the shortcuts, and what has been written lately ─────────────────────────
+
+def test_starting_from_your_own_photos_selects_that_source(page, signed_in):
+    """A shortcut that only scrolls somewhere is decoration. This one makes the
+    choice."""
+    signed_in()
+
+    page.locator("#start-from-photos").click()
+
+    assert page.evaluate("S.source") == "upload"
+    expect(page.locator("#own-photos")).to_be_visible()
+
+
+def test_recent_drafts_are_listed_and_open(page, signed_in):
+    """The mockup puts the last few drafts under the field, because the thing
+    people do second-most often on this screen is pick up where they left off.
+    Until now that meant going to the Queue and finding it."""
+    page.route("**/api/posts?*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([
+            {"id": "p1", "topic": "Cold brew ratios, settled", "platform": "instagram",
+             "status": "draft", "format": "carousel_3", "created_at": "2026-08-13T09:00:00+00:00",
+             "variant_group_id": "g1"},
+        ])))
+    signed_in()
+
+    expect(page.locator("#recent-drafts")).to_contain_text("Cold brew ratios")

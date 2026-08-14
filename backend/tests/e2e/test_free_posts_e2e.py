@@ -40,13 +40,19 @@ def _serve_usage(page, free) -> None:
 
 # ── the counter ─────────────────────────────────────────────────────────────
 
-def test_the_free_posts_left_are_shown_next_to_the_button(page, signed_in):
+def test_the_free_posts_left_are_shown_in_the_rail(page, signed_in):
+    """It used to be a line under the Generate button, which meant the answer to
+    "how much have I got left" was only available while standing on the
+    composer. 11.1 put it in the rail, and left the line behind — the same fact
+    in two places, one of which would eventually be wrong. The line is gone."""
     _serve_usage(page, {"remaining": 3, "limit": 5})
     signed_in()
     _compose(page)
 
-    expect(page.locator("#free-left")).to_be_visible()
-    expect(page.locator("#free-left")).to_contain_text("3 of 5 free posts left")
+    assert page.locator("#free-left").count() == 0
+    meter = page.locator("#shell-meter")
+    expect(meter).to_be_visible()
+    expect(meter).to_contain_text("3 / 5")
 
 
 def test_an_account_with_its_own_key_is_told_nothing_about_free_posts(page, signed_in):
@@ -56,7 +62,7 @@ def test_an_account_with_its_own_key_is_told_nothing_about_free_posts(page, sign
     signed_in()
     _compose(page)
 
-    expect(page.locator("#free-left")).to_be_hidden()
+    expect(page.locator("#shell-meter")).to_be_hidden()
 
 
 def test_running_out_says_so_where_the_count_used_to_be(page, signed_in):
@@ -64,8 +70,10 @@ def test_running_out_says_so_where_the_count_used_to_be(page, signed_in):
     signed_in()
     _compose(page)
 
-    expect(page.locator("#free-left")).to_be_visible()
-    expect(page.locator("#free-left")).to_contain_text("Free posts used up")
+    meter = page.locator("#shell-meter")
+    expect(meter).to_be_visible()
+    expect(meter).to_contain_text("0 / 5")
+    expect(meter).to_contain_text("your own AI key")
 
 
 # ── the wall ────────────────────────────────────────────────────────────────
@@ -132,7 +140,7 @@ def test_the_count_is_read_fresh_at_the_click(page, signed_in):
     _serve_usage(page, {"remaining": 1, "limit": 5})
     signed_in()
     _compose(page)
-    expect(page.locator("#free-left")).to_contain_text("1 of 5")
+    expect(page.locator("#shell-meter")).to_contain_text("1 / 5")
 
     _serve_usage(page, {"remaining": 0, "limit": 5})     # spent elsewhere
     page.locator("#generate-btn").click()

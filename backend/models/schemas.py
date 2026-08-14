@@ -133,6 +133,11 @@ class GenerateRequest(BaseModel):
     additional_instructions: Optional[str] = None
     platform: Platform = Platform.INSTAGRAM
     length_tier: LengthTier = LengthTier.SWEET_SPOT
+    #: Live web search while writing. Costs extra per call, so it is only ever a
+    #: choice for somebody spending their own money — on the application's key
+    #: the route answers no whatever arrives here. None means "unset", which on
+    #: their own key is on, exactly as it has always been.
+    web_grounded: Optional[bool] = None
     template_style: TemplateStyle = TemplateStyle.BRANDED_CARD
     niche_box_color: Optional[str] = None   # None → brand default; else must be in palette
     show_logo: bool = True

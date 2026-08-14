@@ -824,7 +824,10 @@
        of selectors across the browser suite; renaming it would be a hundred
        edits to say the same thing. -->
   <section id="step-1" class="step-section bg-gray-900 rounded-2xl p-6 space-y-5">
-    <h2 class="text-lg font-semibold text-purple-300">What should the post be about?</h2>
+    <div>
+      <h2 class="text-lg font-semibold text-purple-300">What should the post be about?</h2>
+      <p class="text-sm mt-1" style="color:var(--muted)">One line is enough — voice, hashtags and slides come from your brand kit.</p>
+    </div>
 
     <div>
       <label class="block text-sm text-gray-400 mb-1">Topic</label>
@@ -875,6 +878,15 @@
           format from the centre, so portrait shots fit best. Nothing is sent to a stock or AI provider.
         </p>
       </div>
+    </div>
+
+    <!-- Live web search. The one control here whose answer is not always the
+         user's: it is a surcharge per call, so on the application's key the
+         route refuses it whatever the request says, and the chip says that
+         instead of pretending to be a choice. -->
+    <div>
+      <button id="grounding-chip" data-action="toggle-grounding" type="button"
+              class="src-btn" title="Let the model check the live web while it writes"></button>
     </div>
 
     <!-- Everything else the composer could ask, folded into one row that says
@@ -1032,11 +1044,19 @@
     <button id="generate-btn" data-action="generate-post" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
       Generate
     </button>
-    <!-- Free posts left. Hidden for anyone the allowance does not apply to —
-         the desktop owner, an account paying with its own key, a deployment
-         with no application key — because for them it is not a smaller number,
-         it is not a subject. -->
-    <p id="free-left" class="hidden mt-2 text-center text-xs" style="color:var(--muted)"></p>
+
+    <!-- Two ways in that already exist and nothing pointed at: the weekly plan
+         lives on the Calendar, and choosing your own photos is a click people
+         only find if they read the source row. "Repost a winner" from the
+         mockup is not here — nothing in the product can do it. -->
+    <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--muted)">
+      <span>Or start from:</span>
+      <button id="start-from-plan" data-action="start-from-plan" class="ce-btn-ghost px-3 py-1.5 text-xs">This week's plan</button>
+      <button id="start-from-photos" data-action="start-from-photos" class="ce-btn-ghost px-3 py-1.5 text-xs">Your own photos</button>
+    </div>
+    <!-- The allowance used to be a line here. It is in the rail since 11.1,
+         where it can be read from every screen instead of only this one — and
+         one fact in two places is one fact that will eventually disagree. -->
   </section>
 
   <!-- ===== STEP 3: GENERATING (loading) ===== -->
@@ -1270,6 +1290,13 @@
       </button>
     </div>
   </section>
+
+  <!-- What was being written lately. Picking up an unfinished draft used to
+       mean going to the Queue and finding it. -->
+  <div id="recent-drafts-card" class="hidden ce-card p-5">
+    <div class="text-sm font-semibold">Recent drafts</div>
+    <div id="recent-drafts" class="mt-3 space-y-2"></div>
+  </div>
 
   </div><!-- /#create-post-panel -->
   </div><!-- /#view-create -->

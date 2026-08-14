@@ -1825,6 +1825,9 @@ const ACTIONS = Object.freeze({
   'make-digest':                         () => makeDigest(),
   'make-reel':                           () => makeReel(),
   'menu-brands':                         () => { closeAvatarMenu(); openBrandsModal(); },
+  'start-from-plan':                     () => startFromPlan(),
+  'start-from-photos':                   () => startFromPhotos(),
+  'toggle-grounding':                    () => toggleGrounding(),
   'open-settings-tab':                    (el) => openSettings(el.dataset.arg),
   'menu-settings':                       () => { closeAvatarMenu(); openSettings('profiles'); },
   'menu-setup-guide':                    () => { closeAvatarMenu(); startOnboarding({restart: true}); },
@@ -2232,6 +2235,9 @@ async function generatePost() {
         return;
       }
     }
+    // Only when it is a choice. On our key the server refuses it anyway, and
+    // sending a field we are not allowed to set invites somebody to believe it.
+    if (!onOurKey()) body.web_grounded = S.grounding;
     if (S.platform === 'x') {
       body.x_mode = S.xMode || 'short';
       body.x_style = S.xStyle || 'standard';
@@ -4217,6 +4223,8 @@ async function applyCreateMode() {
     b.classList.toggle('mode-active', b.dataset.createMode === mode));
   document.querySelectorAll('#view-create [data-create-panel]').forEach(el =>
     el.classList.toggle('hidden', el.dataset.createPanel !== mode));
+  // Not awaited: three rows under the field must never delay the field.
+  if (mode === 'post') loadRecentDrafts();
   if (mode === 'leads') await loadLeads();
   if (mode === 'photo') await loadLibrary('image');
   if (mode === 'video') {
@@ -4948,24 +4956,77 @@ async function refreshFreeLeft() {
   return (S.usage && S.usage.free) || null;
 }
 
-/** The allowance, in the composer line and in the rail's meter.
+//: Live web search while writing. Only ever a real choice for somebody paying
+//: with their own key — the route refuses it on ours whatever we send, because
+//: it is a surcharge per call. `S.usage.free` being present IS "on our key":
+//: the allowance only exists for accounts we are paying for.
+S.grounding = true;
+
+function onOurKey() {
+  return !!(S.usage && S.usage.free);
+}
+
+function renderGroundingChip() {
+  const chip = document.getElementById('grounding-chip');
+  if (!chip) return;
+  const ours = onOurKey();
+  chip.disabled = ours;
+  chip.classList.toggle('src-active', !ours && S.grounding);
+  chip.textContent = ours
+    ? 'Web search — on your own key'
+    : (S.grounding ? 'Web search on' : 'Web search off');
+}
+
+function toggleGrounding() {
+  if (onOurKey()) return;
+  S.grounding = !S.grounding;
+  renderGroundingChip();
+}
+
+/** Two ways in that already existed and nothing pointed at. */
+function startFromPlan() {
+  setSection('calendar');
+  const card = document.getElementById('plan-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function startFromPhotos() {
+  const btn = document.querySelector('#source-btns [data-val="upload"]');
+  if (btn) btn.click();
+  const own = document.getElementById('own-photos');
+  if (own) own.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/** The last few drafts, under the field.
  *
- *  One function, two outputs, one source: the numbers are the server's. The
- *  mockup drew "2 / 5" and the limit is 2 — the landing shipped exactly that
- *  mistake for weeks, and a second place to type a number is how it happens. */
+ *  Its own fetch and its own small limit, like every other caller of
+ *  fetchPosts: nothing is shared across screens here, on purpose. */
+async function loadRecentDrafts() {
+  const box = document.getElementById('recent-drafts');
+  const card = document.getElementById('recent-drafts-card');
+  if (!box || !card) return;
+  const rows = (await fetchPosts({ status: ['draft', 'preview'], limit: 3 })).slice(0, 3);
+  card.classList.toggle('hidden', !rows.length);
+  if (!rows.length) return;
+  box.innerHTML = '';
+  rows.forEach(p => {
+    const row = document.createElement('button');
+    row.className = 'ce-card w-full text-left px-3 py-2 hover:opacity-90';
+    row.innerHTML = `<div class="text-sm font-medium">${esc(p.topic || 'Untitled')}</div>`
+      + `<div class="text-xs mt-0.5" style="color:var(--muted)">${netBadge(p)} · ${esc(p.status || 'draft')}</div>`;
+    row.onclick = () => openPost(p.id);
+    box.appendChild(row);
+  });
+}
+
+/** The allowance, in the rail.
+ *
+ *  One place, and the numbers are the server's. The mockup drew "2 / 5" and the
+ *  limit is 2 — the landing shipped exactly that mistake for weeks, and a
+ *  second place to write a number is how it happens. */
 function renderFreeLeft() {
   const free = S.usage && S.usage.free;
-  const el = document.getElementById('free-left');
-  if (el) {
-    if (!free) el.classList.add('hidden');
-    else {
-      el.textContent = free.remaining > 0
-        ? `${free.remaining} of ${free.limit} free posts left — no API key needed yet`
-        : 'Free posts used up — add your own AI key to keep going';
-      el.classList.remove('hidden');
-    }
-  }
-
+  renderGroundingChip();
   const card = document.getElementById('shell-meter');
   if (!card) return;
   card.classList.toggle('hidden', !free);
@@ -4976,7 +5037,7 @@ function renderFreeLeft() {
     Math.max(0, Math.min(100, (free.remaining / limit) * 100)) + '%';
   document.getElementById('shell-meter-note').textContent = free.remaining > 0
     ? 'No key needed yet.'
-    : 'Add your own AI key to keep going.';
+    : 'Used up — add your own AI key to keep going.';
 }
 
 /** What the rail shows about the rest of the app: which entry is lit, and how

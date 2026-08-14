@@ -146,9 +146,9 @@ def _register(client, email="nokey@example.com") -> dict:
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-def _generate(client, headers) -> list[dict]:
+def _generate(client, headers, **body) -> list[dict]:
     res = client.post("/api/posts/generate",
-                      json={"topic": "Sourdough starters", "format": "single"},
+                      json={"topic": "Sourdough starters", "format": "single", **body},
                       headers=headers)
     assert res.status_code == 200, res.text
     events = _sse_events(res)
@@ -204,6 +204,16 @@ def test_a_free_generation_does_not_buy_web_search(env):
     exactly what our key is. A trial post is not worth buying search for."""
     headers = _register(env)
     _generate(env, headers)
+
+    assert env.ours.calls[0]["web_grounded"] is False
+
+
+def test_the_request_cannot_buy_web_search_on_our_key(env):
+    """11.2 made grounding a control, and a control is a field in the request
+    body. On our key the answer is no whatever the body says — otherwise the
+    chip is a button that spends our money."""
+    headers = _register(env)
+    _generate(env, headers, web_grounded=True)
 
     assert env.ours.calls[0]["web_grounded"] is False
 
@@ -269,6 +279,21 @@ def test_an_account_with_a_key_is_untouched_by_any_of_this(env, sm):
     assert env.theirs.calls[0]["web_grounded"] is True
     assert _used(sm, "nokey@example.com") == 0
     assert env.built == []
+
+
+def test_their_own_key_can_turn_web_search_off(env, sm):
+    """Their bill, their choice. Grounding costs extra per call and is worth it
+    for a post about this week and worthless for one about sourdough."""
+    headers = _register(env, "haskey2@example.com")
+    env.put("/api/settings/credentials",
+            json={"openrouter_api_key": "their-own-key"}, headers=headers)
+    env.put("/api/settings/ai",
+            json={"text_provider": "openrouter", "text_model": "their/model"},
+            headers=headers)
+
+    _generate(env, headers, web_grounded=False)
+
+    assert env.theirs.calls[0]["web_grounded"] is False
 
 
 # ── what /api/usage carries ─────────────────────────────────────────────────

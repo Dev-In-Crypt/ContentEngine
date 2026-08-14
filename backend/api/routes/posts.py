@@ -544,9 +544,13 @@ async def generate_post(
                     x_style=body.x_style,
                     thread_min=body.thread_min,
                     thread_max=body.thread_max,
-                    # Live web search is a surcharge per call, and a free trial
-                    # post is not worth buying it. On their own key it stays on.
-                    web_grounded=not creds.on_our_key,
+                    # Live web search is a surcharge per call. On OUR key the
+                    # answer is no whatever the request says — a chip that can
+                    # spend our money is a button, not a preference. On their
+                    # own key it is their bill, so the request decides, and an
+                    # unset field still means on.
+                    web_grounded=(not creds.on_our_key
+                                  and body.web_grounded is not False),
                     progress=progress,
                 )
                 await progress("Saving to database...")
