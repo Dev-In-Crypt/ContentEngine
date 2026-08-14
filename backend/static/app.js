@@ -1954,6 +1954,7 @@ const ACTIONS = Object.freeze({
   'set-grid-mode':                       (el) => setGridMode(el.dataset.arg),
   'set-hero-mode':                       (el) => setHeroMode(el.dataset.arg),
   'set-landing-tab':                     (el) => setLandingTab(el.dataset.arg),
+  'load-insights':                       () => loadInsights(),
   'set-feed-tab':                        (el) => setFeedTab(el.dataset.arg),
   'set-network':                         (el) => setNetwork(el.dataset.arg),
   'set-section':                         (el) => setSection(el.dataset.arg),
@@ -4407,7 +4408,69 @@ function loadResults() {
     el.classList.toggle('hidden', el.dataset.resultsTab !== tab));
   if (tab === 'sources') return loadSourceAnalytics();
   if (tab === 'journal') return loadJournal();
+  if (tab === 'insights') return loadInsights();
   return loadAnalytics();
+}
+
+/** The rollup, and the sentence that says what it does not cover.
+ *
+ *  Four numbers over a month whose posts were mostly never refreshed is not a
+ *  month's reach — it is a few posts' reach wearing a month's label. The route
+ *  reports how many it measured; printing that is this screen's whole honesty. */
+async function loadInsights() {
+  const tiles = document.getElementById('insights-tiles');
+  const days = Number((document.getElementById('insights-days') || {}).value || 30);
+  tiles.innerHTML = '<span class="text-xs" style="color:var(--muted)">Loading…</span>';
+  try {
+    const res = await apiFetch(`${API}/api/insights?days=${days}`);
+    if (!res.ok) throw new Error('Could not load insights');
+    const d = await res.json();
+
+    const tile = (label, value, note) => `<div class="ce-card p-3">
+      <div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">${esc(label)}</div>
+      <div class="text-xl font-semibold mt-0.5">${esc(value)}</div>
+      <div class="text-[10px] mt-0.5" style="color:var(--faint)">${note || ''}</div>
+    </div>`;
+    const trend = t => t.delta_pct === null || t.delta_pct === undefined
+      ? 'no earlier period to compare with'
+      : `${t.delta_pct > 0 ? '+' : ''}${t.delta_pct}% vs the ${d.days} days before`;
+
+    tiles.innerHTML =
+      tile('Reach', (d.reach.value || 0).toLocaleString(), trend(d.reach))
+      + tile('Saves', (d.saves.value || 0).toLocaleString(), trend(d.saves))
+      + tile('Posts out', d.posts_out, `${d.on_time} on time`)
+      + tile('Model spend', '$' + (d.spend_usd || 0).toFixed(2), 'your own key');
+
+    const cover = document.getElementById('insights-coverage');
+    const gaps = [];
+    if (d.posts_out && d.measured_posts < d.posts_out) {
+      gaps.push(`Numbers cover ${d.measured_posts} of ${d.posts_out} posts — `
+                + 'the rest have not been refreshed yet.');
+    }
+    (d.networks_without_metrics || []).forEach(n => {
+      gaps.push(`${n === 'x' ? 'X' : n} reports no metrics, so its posts are not in these totals.`);
+    });
+    cover.textContent = gaps.join(' ');
+
+    const chart = document.getElementById('insights-chart');
+    const top = (d.by_post || []).slice(0, 12);
+    const max = Math.max(1, ...top.map(p => p.reach));
+    chart.innerHTML = top.length
+      ? top.map(p => `<div class="flex-1 rounded-t" title="${esc(p.topic)} — ${p.reach}"
+           style="background:var(--brand);height:${Math.max(4, (p.reach / max) * 100)}%"></div>`).join('')
+      : '<span class="text-xs self-center" style="color:var(--faint)">Nothing measured in this period yet.</span>';
+
+    const best = document.getElementById('insights-best');
+    best.classList.toggle('hidden', !d.best);
+    if (d.best) {
+      best.innerHTML = `<div class="text-xs" style="color:var(--muted)">Best post</div>
+        <div class="text-sm font-semibold mt-0.5">${esc(d.best.topic)}</div>
+        <div class="text-xs mt-0.5" style="color:var(--muted)">${d.best.reach.toLocaleString()} reach</div>
+        <button data-action="open-post" data-arg="${esc(d.best.id)}" class="ce-btn-ghost px-3 py-1 text-xs mt-2">Open it</button>`;
+    }
+  } catch (e) {
+    tiles.innerHTML = '<span class="text-xs" style="color:var(--danger)">' + esc(e.message) + '</span>';
+  }
 }
 
 //: Which slice of the feed is on screen. Published by default, because that is

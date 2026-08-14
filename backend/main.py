@@ -26,7 +26,7 @@ from services.http_utils import setup_logging, setup_tls
 from api.deps import LOCAL_USER_EMAIL
 from api.ratelimit import limiter
 from api.routes import (
-    accounts, brand, business, demo, media, onboarding, posts, models, publish_jobs,
+    accounts, brand, insights, business, demo, media, onboarding, posts, models, publish_jobs,
     stock, team, admin,
     auth, settings as settings_routes,
 )
@@ -419,6 +419,7 @@ app.include_router(accounts.router)
 app.include_router(media.router)
 app.include_router(publish_jobs.router)
 app.include_router(brand.router)
+app.include_router(insights.router)
 app.include_router(team.router)
 app.include_router(onboarding.router)
 

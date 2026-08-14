@@ -81,6 +81,7 @@ def open_create(page, mode: str = "post") -> None:
 #: honest way to reach them.
 _RESULTS_VIEW = {
     "posts": "#results-posts",
+    "insights": "#results-insights",
     "sources": "#results-sources",
     "journal": "#results-journal",
 }

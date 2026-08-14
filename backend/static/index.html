@@ -1744,6 +1744,7 @@
   <div id="view-results" class="hidden space-y-4">
     <div id="results-tabs" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
       <button data-results-tab="posts" data-action="open-results" data-arg="posts" class="set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Posts</button>
+      <button data-results-tab="insights" data-action="open-results" data-arg="insights" class="creator-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Insights</button>
       <button data-results-tab="sources" data-action="open-results" data-arg="sources" class="business-only set-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Sources</button>
       <!-- Starts hidden inline rather than by class: `business-only` is
            switched by a body-attribute rule that outranks any single class, so
@@ -1766,6 +1767,34 @@
           <button data-feed-tab="drafts" data-action="set-feed-tab" data-arg="drafts" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Drafts</button>
         </div>
         <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
+      </div>
+    </div>
+
+    <div id="results-insights" data-results-tab="insights" class="hidden">
+      <div class="ce-card p-5 space-y-5">
+        <div class="flex flex-wrap items-baseline gap-3">
+          <h2 class="text-lg font-semibold" style="color:var(--accent)">Insights</h2>
+          <select id="insights-days" data-change="load-insights" class="ce-input px-2 py-1 text-xs">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </div>
+
+        <div id="insights-tiles" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+
+        <!-- What the numbers above do NOT cover. Metrics arrive one post at a
+             time, when somebody presses Refresh on that post, and X has no
+             insights API here at all — so a month can be measured in part, or
+             not at all, and the totals would look the same either way. -->
+        <div id="insights-coverage" class="text-xs" style="color:var(--muted)"></div>
+
+        <div>
+          <div class="text-xs font-semibold" style="color:var(--muted)">Reach by post</div>
+          <div id="insights-chart" class="mt-2 flex items-end gap-1.5 h-28"></div>
+        </div>
+
+        <div id="insights-best" class="hidden ce-card p-4"></div>
       </div>
     </div>
 
