@@ -28,11 +28,21 @@
       --bg:#f2f2f3; --panel:#ffffff; --panel2:#ececee; --panel3:#e2e2e5;
       --border:#dcdce0; --text:#18181a; --muted:#5f5f66; --faint:#9a9aa2;
       --accent:#18181a; --accent-strong:#000000; --accent-dim:rgba(0,0,0,.06); --on-accent:#ffffff;
+      /* Semantic colours. Everything else here is ink; these three carry meaning
+         a monochrome palette cannot, so they are the only hues in the product —
+         and each is a set, because text and its background have to move
+         together when the theme flips. */
+      --warn:#7a5300;   --warn-bg:#fdf3d8;   --warn-border:#e6cb82;   --warn-solid:#8a6000;
+      --ok:#1c6b45;     --ok-bg:#e3f3ea;     --ok-border:#a0cfb5;     --ok-solid:#2c7a52;
+      --danger:#991b1b; --danger-bg:#fce7e7; --danger-border:#e4a3a3; --danger-solid:#a52020;
     }
     :root[data-theme="dark"]{
       --bg:#141416; --panel:#1d1d20; --panel2:#26262a; --panel3:#303036;
       --border:#34343a; --text:#f2f2f3; --muted:#a2a2aa; --faint:#6c6c74;
       --accent:#f2f2f3; --accent-strong:#ffffff; --accent-dim:rgba(255,255,255,.09); --on-accent:#141416;
+      --warn:#f0cf72;   --warn-bg:#2a2413;   --warn-border:#5c4a1d;   --warn-solid:#6b5210;
+      --ok:#86d3a6;     --ok-bg:#16261e;     --ok-border:#2f5f46;     --ok-solid:#2c7a52;
+      --danger:#f0a3a3; --danger-bg:#2b1717; --danger-border:#6e3131; --danger-solid:#8f2626;
     }
     html,body,.font-sans{ font-family:'Barlow',system-ui,-apple-system,sans-serif !important; }
     body{ background:var(--bg) !important; color:var(--text); }
@@ -56,6 +66,32 @@
     .ring-purple-500,.focus\:ring-purple-500:focus{ --tw-ring-color:var(--accent) !important; }
     .from-purple-900{ --tw-gradient-from:var(--panel) var(--tw-gradient-from-position) !important; --tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important; }
     .to-pink-900{ --tw-gradient-to:var(--panel) var(--tw-gradient-to-position) !important; }
+
+    /* Semantic classes → the sets above. The greys and accents have been driven
+       by variables since the light theme landed; these were not, because they
+       were written when the only theme was dark and nothing looked wrong. What
+       shipped was a warning at 1.18:1 on the light theme — measured, not judged
+       — and a brown banner on the dark one. Both were the same omission.
+
+       Deliberately by shade rather than by element: the stock class IS the
+       marker of intent here, and covering the family means the next
+       `text-red-400` somebody writes is themed on the day it is written. */
+    .text-yellow-100,.text-yellow-200,.text-yellow-300,.text-yellow-400,
+    .text-yellow-100\/90,.text-yellow-200\/70,.text-yellow-200\/50,.text-yellow-300\/80{ color:var(--warn) !important; }
+    .text-green-300,.text-green-400{ color:var(--ok) !important; }
+    .text-red-100,.text-red-300,.text-red-400{ color:var(--danger) !important; }
+    .text-blue-300{ color:var(--muted) !important; }
+    .bg-yellow-900\/90,.bg-yellow-950\/50,.bg-yellow-950\/40{ background-color:var(--warn-bg) !important; }
+    .bg-red-900\/90,.bg-red-950{ background-color:var(--danger-bg) !important; }
+    .border-yellow-400,.border-yellow-700,.border-yellow-800,
+    .border-yellow-800\/60,.border-yellow-800\/40{ border-color:var(--warn-border) !important; }
+    .border-red-700{ border-color:var(--danger-border) !important; }
+    .border-green-700{ border-color:var(--ok-border) !important; }
+    /* Solid buttons: the surface carries the meaning, so the label is white in
+       both themes rather than following --text, which would vanish on it. */
+    .bg-yellow-800,.hover\:bg-yellow-700:hover{ background-color:var(--warn-solid) !important; color:#fff !important; }
+    .bg-red-700,.bg-red-800,.hover\:bg-red-700:hover{ background-color:var(--danger-solid) !important; color:#fff !important; }
+    .bg-green-600{ background-color:var(--ok-solid) !important; }
 
     /* reusable component bits.
        The padding is part of the component. Without it every call site invented
