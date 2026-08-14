@@ -118,6 +118,17 @@ def open_configure(page) -> None:
     expect(page.locator("#tone")).to_be_visible()
 
 
+def open_brands(page) -> None:
+    """Open the manage-brands dialog.
+
+    It sits beside the brand switcher, which is the point — and which is why
+    this is here: the pair lived in the header, then in the avatar menu, and
+    since 11.1 in the rail. Three tests used to name the route themselves.
+    """
+    page.locator("#shell-brand").get_by_text("Manage brands").click()
+    expect(page.locator("#brands-modal")).to_be_visible()
+
+
 def compose(page, topic: str = "Sourdough starters") -> None:
     """Put a topic in and stand where Generate is.
 

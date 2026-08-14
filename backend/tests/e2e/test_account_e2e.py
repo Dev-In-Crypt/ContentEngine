@@ -6,7 +6,8 @@ data, so its guards are worth exercising for real rather than in a stub.
 import pytest
 from playwright.sync_api import expect
 
-from tests.e2e.nav import dismiss_onboarding, open_onboarding, open_settings
+from tests.e2e.nav import (dismiss_onboarding, open_brands, open_onboarding,
+                           open_settings)
 
 pytestmark = pytest.mark.e2e
 
@@ -102,8 +103,7 @@ def test_the_brand_switcher_starts_with_the_users_own_profile(page, signup):
     not be empty, which is what a stale hardcoded option was hiding."""
     signup()
     dismiss_onboarding(page)
-    page.locator("#avatar-btn").click()
-    switcher = page.locator("#menu-acct-switcher")
+    switcher = page.locator("#brand-switcher")
     expect(switcher).to_be_visible()
     expect(switcher.locator("option")).to_have_count(1)
     assert switcher.input_value()          # a real id, not ""
@@ -112,15 +112,13 @@ def test_the_brand_switcher_starts_with_the_users_own_profile(page, signup):
 def test_a_new_brand_joins_the_switcher_below_the_main_one(page, signup):
     signup()
     dismiss_onboarding(page)
-    page.locator("#avatar-btn").click()
-    page.locator("#avatar-menu").get_by_text("Manage brands").click()
+    open_brands(page)
     page.fill("#brand-new-name", "Client A")
     page.locator("#brands-modal").get_by_role("button", name="Add").click()
     expect(page.locator("#brand-editor")).to_be_visible()
     page.locator("#brands-modal").get_by_text("✕").click()
 
-    page.locator("#avatar-btn").click()
-    options = page.locator("#menu-acct-switcher option")
+    options = page.locator("#brand-switcher option")
     expect(options).to_have_count(2)
     expect(options.nth(1)).to_have_text("Client A")   # primary stays first
 
@@ -130,8 +128,7 @@ def test_the_main_profile_offers_no_delete_button(page, signup):
     not offering it."""
     signup()
     dismiss_onboarding(page)
-    page.locator("#avatar-btn").click()
-    page.locator("#avatar-menu").get_by_text("Manage brands").click()
+    open_brands(page)
     page.locator("#brands-list button", has_text="Edit").first.click()
     expect(page.locator("#brand-editor")).to_be_visible()
     expect(page.locator("#brand-delete")).to_be_hidden()
@@ -140,8 +137,7 @@ def test_the_main_profile_offers_no_delete_button(page, signup):
 def test_a_client_brand_does_offer_delete(page, signup):
     signup()
     dismiss_onboarding(page)
-    page.locator("#avatar-btn").click()
-    page.locator("#avatar-menu").get_by_text("Manage brands").click()
+    open_brands(page)
     page.fill("#brand-new-name", "Client A")
     page.locator("#brands-modal").get_by_role("button", name="Add").click()
     expect(page.locator("#brand-delete")).to_be_visible()
@@ -204,10 +200,19 @@ def test_the_setup_guide_moved_to_the_avatar_menu(page, signed_in):
     open_onboarding(page)
 
 
-def test_the_brand_switcher_moved_into_the_menu(page, signed_in):
-    """Three separate dropdowns in the header is the thing the UX document
-    names as the problem. They are one menu now."""
+def test_there_is_one_brand_switcher_and_it_is_in_the_rail(page, signed_in):
+    """Three separate dropdowns in the header was the thing the UX document
+    named as the problem; phase 3 folded them into the avatar menu, and 11.1
+    moved this one out again — into the rail, where the answer to "which brand
+    am I in" is visible without opening anything.
+
+    Both older ids are asserted gone. The first, `#acct-switcher`, is the header
+    control phase 3 removed — and the change handler went on reading it for
+    eight months afterwards, so choosing a brand threw and did nothing. An id
+    that no longer exists anywhere is the only version of that which cannot
+    happen again.
+    """
     signed_in()
-    expect(page.locator("#acct-switcher")).to_have_count(0)   # the old header one
-    page.locator("#avatar-btn").click()
-    expect(page.locator("#avatar-menu #menu-acct-switcher")).to_be_visible()
+    expect(page.locator("#acct-switcher")).to_have_count(0)        # the header one
+    expect(page.locator("#menu-acct-switcher")).to_have_count(0)   # the avatar-menu one
+    expect(page.locator("#brand-switcher")).to_be_visible()

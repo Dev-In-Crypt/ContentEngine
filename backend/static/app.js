@@ -716,6 +716,7 @@ async function loadQueue() {
   // The Queue is bounded by how much work is waiting, not by how much history
   // exists — so it asks for its four statuses rather than filtering everything.
   const rows = await fetchPosts({ status: QUEUE_STATUSES });
+  setQueueCount(rows.length);
   if (!rows.length) {
     own.innerHTML = '<div class="text-gray-500">Nothing waiting. Anything you make lands here until it goes out.</div>';
     return;
@@ -1095,6 +1096,7 @@ async function startApp() {
     maybeStartOnboarding();   // an empty workspace needs a key and a source, same as a creator
     return;
   }
+  refreshQueueCount();       // not awaited: the rail's badge is not a gate on anything
   setNetwork('instagram');   // default network tab → drives sections + platform
   // Cloud accounts: load the brand profile (pre-fills the composer) and, on first
   // login with no profile yet, offer the skippable onboarding step.
@@ -1150,8 +1152,8 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAvatarMenu(); });
 
 function renderAcctSwitcher() {
-  const sel = document.getElementById('menu-acct-switcher');
-  const row = document.getElementById('menu-brand-row');
+  const sel = document.getElementById('brand-switcher');
+  const row = document.getElementById('shell-brand');
   if (!sel) return;
   const show = S.user && !S.user.is_local && S.user.account_type !== 'business';
   if (row) row.classList.toggle('hidden', !show);
@@ -1166,7 +1168,12 @@ function renderAcctSwitcher() {
 }
 
 async function onAcctSwitch() {
-  const sel = document.getElementById('acct-switcher');
+  // `acct-switcher` until 11.1 — an id that has not existed in the markup since
+  // the control moved into the avatar menu, so this function threw on its first
+  // line and the request was never sent. Brand switching was dead for every
+  // agency account, silently, behind a control that looked like it worked.
+  const sel = document.getElementById('brand-switcher');
+  if (!sel) return;
   const id = sel.value || null;
   try {
     const res = await apiFetch(`${API}/api/accounts/switch`, {
@@ -1818,6 +1825,7 @@ const ACTIONS = Object.freeze({
   'make-digest':                         () => makeDigest(),
   'make-reel':                           () => makeReel(),
   'menu-brands':                         () => { closeAvatarMenu(); openBrandsModal(); },
+  'open-settings-tab':                    (el) => openSettings(el.dataset.arg),
   'menu-settings':                       () => { closeAvatarMenu(); openSettings('profiles'); },
   'menu-setup-guide':                    () => { closeAvatarMenu(); startOnboarding({restart: true}); },
   'menu-theme':                          () => { closeAvatarMenu(); toggleTheme(); },
@@ -4248,7 +4256,7 @@ function setSection(sec) {
   for (const v of new Set(Object.values(map))) {
     const el = document.getElementById(v); if (el) el.classList.toggle('hidden', map[sec] !== v);
   }
-  document.querySelectorAll('#section-nav .sec-btn').forEach(b => b.classList.toggle('sec-active', b.dataset.section === sec));
+  renderShell();
   if (sec === 'calendar') applyCalendarMode();
   else if (sec === 'results') loadResults();
   else if (sec === 'create') applyCreateMode();
@@ -4940,15 +4948,68 @@ async function refreshFreeLeft() {
   return (S.usage && S.usage.free) || null;
 }
 
+/** The allowance, in the composer line and in the rail's meter.
+ *
+ *  One function, two outputs, one source: the numbers are the server's. The
+ *  mockup drew "2 / 5" and the limit is 2 — the landing shipped exactly that
+ *  mistake for weeks, and a second place to type a number is how it happens. */
 function renderFreeLeft() {
-  const el = document.getElementById('free-left');
-  if (!el) return;
   const free = S.usage && S.usage.free;
-  if (!free) { el.classList.add('hidden'); return; }
-  el.textContent = free.remaining > 0
-    ? `${free.remaining} of ${free.limit} free posts left — no API key needed yet`
-    : 'Free posts used up — add your own AI key to keep going';
-  el.classList.remove('hidden');
+  const el = document.getElementById('free-left');
+  if (el) {
+    if (!free) el.classList.add('hidden');
+    else {
+      el.textContent = free.remaining > 0
+        ? `${free.remaining} of ${free.limit} free posts left — no API key needed yet`
+        : 'Free posts used up — add your own AI key to keep going';
+      el.classList.remove('hidden');
+    }
+  }
+
+  const card = document.getElementById('shell-meter');
+  if (!card) return;
+  card.classList.toggle('hidden', !free);
+  if (!free) return;
+  const limit = Math.max(1, free.limit || 0);
+  document.getElementById('shell-meter-count').textContent = `${free.remaining} / ${free.limit}`;
+  document.getElementById('shell-meter-fill').style.width =
+    Math.max(0, Math.min(100, (free.remaining / limit) * 100)) + '%';
+  document.getElementById('shell-meter-note').textContent = free.remaining > 0
+    ? 'No key needed yet.'
+    : 'Add your own AI key to keep going.';
+}
+
+/** What the rail shows about the rest of the app: which entry is lit, and how
+ *  much is waiting in the queue. */
+function renderShell() {
+  const on = (el, yes) => el && el.classList.toggle('sec-active', !!yes);
+  document.querySelectorAll('#shell-nav [data-section]').forEach(
+    b => on(b, S.section === b.dataset.section));
+  document.querySelectorAll('#shell-nav [data-settings-tab]').forEach(
+    b => on(b, S.section === 'settings' && S.settingsTab === b.dataset.settingsTab));
+
+}
+
+/** How much is waiting, on the rail.
+ *
+ *  Its own fetch rather than a shared cache: `fetchPosts`'s note is explicit
+ *  that nothing is cached across screens, because the Queue once rendered
+ *  whatever the Calendar had fetched first. So the badge asks for what it
+ *  needs, once at boot, and the Queue sets it from its own rows afterwards
+ *  rather than asking again.
+ *
+ *  Hidden at zero, and hidden until counted. Those two look the same from the
+ *  outside, which is the honest reading: an absent badge claims nothing. */
+function setQueueCount(n) {
+  const badge = document.getElementById('queue-count');
+  if (!badge) return;
+  badge.textContent = n || '';
+  badge.classList.toggle('hidden', !n);
+}
+
+async function refreshQueueCount() {
+  if (S.user && S.user.account_type === 'business') return;   // drafts, not a queue
+  setQueueCount((await fetchPosts({ status: QUEUE_STATUSES })).length);
 }
 // ===== MILESTONES (UX phase 8) =====
 //
@@ -5244,6 +5305,7 @@ function openSettings(tab) {
  *  block is on two, with only its scope differing. */
 function renderSettingsTabs() {
   const tab = S.settingsTab || 'profiles';
+  renderShell();
   document.querySelectorAll('#settings-tabs .set-btn').forEach(b =>
     b.classList.toggle('set-active', b.dataset.settingsTab === tab));
   document.querySelectorAll('#view-settings section[data-settings-tab]').forEach(el =>

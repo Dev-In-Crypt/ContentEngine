@@ -192,11 +192,8 @@
           <span id="user-chip" class="hidden sm:inline text-gray-300"></span>
         </button>
         <div id="avatar-menu" class="hidden absolute right-0 mt-2 w-64 ce-card p-2 space-y-1 z-40 shadow-2xl">
-          <div id="menu-brand-row" class="hidden px-2 pt-1 pb-2 space-y-1 border-b" style="border-color:var(--border)">
-            <div class="text-[10px] uppercase tracking-wide text-gray-500">Active brand</div>
-            <select id="menu-acct-switcher" data-change="on-acct-switch" class="ce-input w-full px-2 py-1 text-xs" title="Active brand"></select>
-            <button data-action="menu-brands" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs">Manage brands…</button>
-          </div>
+          <!-- The brand switcher used to live here. It is in the rail now: one
+               control for one choice, which is what the note above asks for. -->
           <div id="menu-product-row" class="hidden px-2 py-2 space-y-1 border-b" style="border-color:var(--border)">
             <div class="text-[10px] uppercase tracking-wide text-gray-500">Product</div>
             <select id="product-switcher" data-change="on-product-switch" class="ce-input w-full px-2 py-1 text-xs" title="Switch product">
@@ -668,21 +665,59 @@
 </div>
 
 <main class="max-w-7xl mx-auto px-3 py-5">
- <div class="flex gap-5">
+ <div class="flex flex-col md:flex-row gap-5">
+
+  <!-- ===== SHELL RAIL (UX phase 11.1) =====
+       The horizontal strip of four became a rail, and two things that were not
+       in the chrome at all moved into it: which brand you are working in, and
+       how much free generation is left. The switcher used to be a <select>
+       inside the avatar dropdown; the allowance was one line under the Generate
+       button, which meant it was invisible from every other screen.
+
+       Brand kit and Account & keys are promoted out of that dropdown too — they
+       are destinations, and a destination reachable only by opening a menu and
+       guessing is one people do not find.
+
+       On a narrow screen the rail lays itself out as a scrolling row above the
+       content. One navigation either way: two was the state phase 3 spent nine
+       commits leaving. -->
+  <aside class="md:w-56 md:flex-none space-y-3">
+
+    <div id="shell-brand" class="hidden ce-card p-2">
+      <div class="text-[10px] uppercase tracking-wide px-1 pb-1" style="color:var(--faint)">Brand</div>
+      <select id="brand-switcher" data-change="on-acct-switch" class="ce-input w-full px-2 py-1.5 text-xs" title="Active brand"></select>
+      <button data-action="menu-brands" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs mt-1">Manage brands…</button>
+    </div>
+
+    <nav id="shell-nav" class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
+      <button data-section="create" data-action="set-section" data-arg="create" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Generate</button>
+      <button data-section="calendar" data-action="set-section" data-arg="calendar" class="creator-only sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Calendar</button>
+      <button data-section="queue" data-action="set-section" data-arg="queue" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left flex items-center gap-2">Queue<span id="queue-count" class="hidden ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style="background:var(--brand-dim);color:var(--brand)"></span></button>
+      <button data-section="results" data-action="set-section" data-arg="results" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Results</button>
+      <div class="hidden md:block h-px my-1.5 mx-3" style="background:var(--border)"></div>
+      <button data-settings-tab="profiles" data-action="open-settings-tab" data-arg="profiles" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Brand kit</button>
+      <button data-settings-tab="keys" data-action="open-settings-tab" data-arg="keys" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Account &amp; keys</button>
+    </nav>
+
+    <!-- The allowance. Hidden for anyone it does not apply to — the desktop
+         owner, an account paying with its own key, a deployment with no
+         application key — because for them it is not a smaller number, it is
+         not a subject. The numbers come from the server; the mockup drew "2 / 5"
+         and the limit is 2. -->
+    <div id="shell-meter" class="hidden ce-card p-3">
+      <div class="flex items-center justify-between text-[10px]" style="color:var(--muted)">
+        <span>Free posts left</span>
+        <span id="shell-meter-count" class="font-semibold" style="color:var(--text)"></span>
+      </div>
+      <div class="h-1 rounded-full my-2 overflow-hidden" style="background:var(--border)">
+        <div id="shell-meter-fill" class="h-full" style="background:var(--brand);width:0%"></div>
+      </div>
+      <div id="shell-meter-note" class="text-[10px] leading-snug" style="color:var(--faint)"></div>
+    </div>
+  </aside>
 
   <!-- ===== CONTENT ===== -->
   <div id="app-content" class="flex-1 min-w-0 space-y-5">
-
-  <!-- top section nav (scoped to the active network) -->
-  <!-- Four sections. Fourteen buttons, a network rail and a product switcher
-       became this: the two account types share the shell and differ in what is
-       inside it, which is the whole of UX phase 3. -->
-  <div id="section-nav" class="flex gap-1 overflow-x-auto pb-1 border-b" style="border-color:var(--border)">
-    <button data-section="create" data-action="set-section" data-arg="create" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Create</button>
-    <button data-section="calendar" data-action="set-section" data-arg="calendar" class="creator-only sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Calendar</button>
-    <button data-section="queue" data-action="set-section" data-arg="queue" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Queue</button>
-    <button data-section="results" data-action="set-section" data-arg="results" class="sec-btn px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">Results</button>
-  </div>
 
   <!-- ===== CREATE VIEW (wizard) ===== -->
   <div id="view-create" class="space-y-8">

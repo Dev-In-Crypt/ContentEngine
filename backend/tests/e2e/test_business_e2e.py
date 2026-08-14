@@ -93,13 +93,14 @@ def _serve_sources(page, add_result: dict, listed=()):
 # ── The Business shell ───────────────────────────────────────────────────────
 
 def test_the_navigation_is_four_buttons(page, signed_in):
-    """The point of phase 3, stated as a test. Fourteen top-level buttons became
-    four; everything else is a tab, a mode or a view inside one of them. A
-    fifth button appearing here is the regression this guards."""
+    """Fourteen top-level buttons became four in phase 3; 11.1 turned the strip
+    into a rail and promoted Brand kit and Account & keys out of the avatar
+    menu, where they were two clicks and a guess. Six entries, and a seventh
+    appearing here is the regression this guards."""
     signed_in()
     for section in ("create", "calendar", "queue", "results"):
         expect(page.locator(f'[data-section="{section}"]')).to_be_visible()
-    expect(page.locator("#section-nav .sec-btn:visible")).to_have_count(4)
+    expect(page.locator("#shell-nav .sec-btn:visible")).to_have_count(6)
 
 
 def test_a_business_account_gets_the_same_shell(page, signed_in):
