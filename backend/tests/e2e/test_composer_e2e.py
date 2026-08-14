@@ -852,3 +852,43 @@ def test_plain_variations_still_ask_for_nothing_in_particular(page, signed_in, k
 
     expect(page.locator("#variations-modal")).to_be_visible()
     assert "instruction" not in sent
+
+
+# ── two columns (UX phase 11.4) ─────────────────────────────────────────────
+
+def test_the_words_and_the_picture_are_side_by_side(page, signed_in, keyed):
+    """The editor was one column, so reading the caption and looking at the
+    slide it belongs to was a scroll. Asserted by geometry rather than by class
+    name: what matters is that they are beside each other, not how."""
+    signed_in()
+    page.set_viewport_size({"width": 1280, "height": 900})
+    _reach_step4(page)
+
+    caption = page.locator("#caption-edit").bounding_box()
+    slides = page.locator("#slides-container").bounding_box()
+
+    assert caption["x"] + caption["width"] <= slides["x"] + 1, "caption is not left of the slides"
+    # Overlapping vertically is the whole point — one above the other is the
+    # single column this replaced.
+    assert caption["y"] < slides["y"] + slides["height"]
+
+
+def test_recent_drafts_do_not_follow_you_into_the_preview(page, signed_in, keyed):
+    """Found by looking at the screen after 11.2 added the card: it sat beside
+    the step sections rather than inside the form, so it stayed on display over
+    the preview — a list of drafts under the draft you are editing."""
+    signed_in()
+    page.route("**/api/posts?*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([
+            {"id": "p1", "topic": "Cold brew ratios", "platform": "instagram",
+             "status": "draft", "format": "single",
+             "created_at": "2026-08-13T09:00:00+00:00", "variant_group_id": "g1"}])))
+    # Reload so the boot fetch sees the stub. Without this the card never
+    # appears at all, and "hidden on the preview" passes for the wrong reason —
+    # which is how the first version of this test went green against the bug.
+    page.reload()
+    expect(page.locator("#recent-drafts-card")).to_be_visible()
+
+    _reach_step4(page)
+
+    expect(page.locator("#recent-drafts-card")).to_be_hidden()
