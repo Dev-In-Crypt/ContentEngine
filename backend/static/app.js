@@ -5564,9 +5564,21 @@ function openSettings(tab) {
  *  and forgotten in a hand-written hide list is a panel that stays on screen
  *  under every tab. A section may name more than one tab — the credentials
  *  block is on two, with only its scope differing. */
+/** Redraw the brand preview.
+ *
+ *  Cache-busted by hand: the URL is constant and the picture is not, so without
+ *  this the browser shows the previous brand's slide — plausibly, which is the
+ *  dangerous kind of wrong for an agency switching clients all day. The route
+ *  says no-store too; belt and braces, because this one is worth both. */
+function refreshBrandPreview() {
+  const img = document.getElementById('brand-preview');
+  if (img) img.src = `${API}/api/settings/slide-preview?t=${Date.now()}`;
+}
+
 function renderSettingsTabs() {
   const tab = S.settingsTab || 'profiles';
   renderShell();
+  if (tab === 'profiles') refreshBrandPreview();
   document.querySelectorAll('#settings-tabs .set-btn').forEach(b =>
     b.classList.toggle('set-active', b.dataset.settingsTab === tab));
   document.querySelectorAll('#view-settings section[data-settings-tab]').forEach(el =>
@@ -6227,6 +6239,7 @@ async function _putSlideStyle(accent, textBox, btn) {
     });
     if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || 'Save failed'); }
     await loadSlideStyle();
+    refreshBrandPreview();          // the point of the preview is that it follows
     toast('✅ Slide colours saved', 'success');
   } catch (e) { toast('❌ ' + e.message, 'error'); }
   finally { if (btn) { btn.disabled = false; btn.textContent = prev; } }

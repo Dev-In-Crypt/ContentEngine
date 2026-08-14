@@ -115,3 +115,30 @@ def test_an_account_with_no_allowance_is_not_shown_one(page, signed_in):
     open_section(page, "create")
 
     expect(page.locator("#shell-meter")).to_be_hidden()
+
+
+# ── the brand preview (UX phase 11.8) ───────────────────────────────────────
+
+def test_the_brand_kit_shows_a_real_slide(page, signed_in):
+    """Seeing what a colour did used to mean generating a post — a model call,
+    and on the free tier one of two."""
+    from tests.e2e.nav import open_settings
+    signed_in()
+    open_settings(page, "profiles")
+
+    img = page.locator("#brand-preview")
+    expect(img).to_be_visible()
+    assert "/api/settings/slide-preview" in (img.get_attribute("src") or "")
+
+
+def test_the_preview_is_asked_for_again_rather_than_remembered(page, signed_in):
+    """The URL is constant and the picture is not. An agency switching brands
+    all day would otherwise be shown the previous client's slide, plausibly."""
+    from tests.e2e.nav import open_settings
+    signed_in()
+    open_settings(page, "profiles")
+    first = page.locator("#brand-preview").get_attribute("src")
+
+    page.evaluate("refreshBrandPreview()")
+
+    assert page.locator("#brand-preview").get_attribute("src") != first

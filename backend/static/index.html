@@ -1451,6 +1451,17 @@
     <section id="slide-style-section" data-settings-tab="profiles" class="hidden bg-gray-900 rounded-2xl p-6 space-y-4">
       <h2 class="text-lg font-semibold text-purple-300">Slide colours</h2>
       <p class="text-xs text-gray-500">Your brand colours for generated slides. Any colour works — text on the boxes is auto-set to black or white so it stays readable. Leave empty to use the default.</p>
+      <!-- A real slide, drawn from what is saved. Until 11.8 the only way to
+           see what a colour did was to generate a post — a model call, and on
+           the free tier one of two. -->
+      <div class="flex flex-wrap gap-6 items-start">
+        <div>
+          <div class="text-xs mb-2" style="color:var(--muted)">Live preview</div>
+          <img id="brand-preview" alt="How a slide will look" width="216" height="270"
+               class="rounded-xl border" style="border-color:var(--border);background:var(--panel2)" />
+          <div class="text-[10px] mt-1" style="color:var(--faint)">Updates when you save.</div>
+        </div>
+        <div class="flex-1 min-w-[16rem]">
       <div class="flex flex-wrap gap-6">
         <div>
           <label class="block text-xs text-gray-400 mb-1">Accent box</label>
@@ -1505,6 +1516,8 @@
           <button id="music-remove-btn" data-action="remove-music" class="hidden ce-btn-ghost px-3 py-1.5 text-sm">Remove</button>
         </div>
         <p class="text-xs text-gray-500">Your own track (mp3/m4a/wav, you must own the rights). It loops quietly under the voiceover and ducks automatically when the voice speaks.</p>
+      </div>
+      </div>
       </div>
     </section>
 

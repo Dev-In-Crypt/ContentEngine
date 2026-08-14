@@ -3,9 +3,10 @@
 Keys are encrypted before storage (services/secrets.encrypt) and NEVER returned
 in plaintext — GET reports only which keys are set, plus a short masked tail.
 """
+from io import BytesIO as _BytesIO
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -632,3 +633,62 @@ async def reach_every_milestone(
     """
     await milestones.record_all(db, user)
     return {"milestones": milestones.all_for(user)}
+
+
+# ── A slide, drawn from the brand alone (UX phase 11.8) ─────────────────────
+#
+# Every other render in the product hangs off a post: the routes take a post_id,
+# read its stored render params and overwrite its file. So the only way to see
+# what a colour did was to generate a post — a model call, and on the free tier
+# one of two. The Brand kit needs a picture beside the fields, and this draws
+# one from whatever the account has saved plus a fixed sentence.
+#
+# No caching header on purpose. An agency switches brands all day, and a preview
+# served from a browser cache keyed on the URL alone would show the brand looked
+# at before this one — entirely plausibly, which is the dangerous kind of wrong.
+
+#: The sample. Concrete rather than lorem: the point of the preview is to show
+#: how a real headline sits in the box, and "Aa Bb Cc" never overflows.
+_PREVIEW_NICHE = "Your niche"
+_PREVIEW_TEXT = ("Two lines of a real headline, so you can see where it wraps "
+                 "and how the box grows.")
+
+
+@router.get("/slide-preview")
+async def slide_preview(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[UserModel, Depends(get_current_user)],
+) -> Response:
+    """A 1080×1350 branded card for the ACTIVE brand, with no post involved."""
+    from api.deps import load_brand_config
+    from services.brand_engine import PillowBrandEngine
+    from services.managed_account import resolve_active_account
+    from services.user_settings import apply_brand_slide_style
+
+    brand = await resolve_active_account(db, user)
+    cfg = apply_brand_slide_style(await load_brand_config(db, None), brand,
+                                  is_local=bool(user.is_local))
+    engine = PillowBrandEngine(cfg)
+    png = engine.create_branded_card(
+        background_image=_preview_background(),
+        niche_text=_PREVIEW_NICHE,
+        description_text=_PREVIEW_TEXT,
+    )
+    return Response(content=png, media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+def _preview_background() -> bytes:
+    """A neutral field for the boxes to sit on.
+
+    Generated rather than shipped: a stock photo here would be one more asset to
+    licence, and the preview is about the brand's boxes, not about a picture.
+    """
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (1080, 1350), (232, 232, 234))
+    d = ImageDraw.Draw(img)
+    for y in range(0, 1350, 90):
+        d.line([(0, y), (1080, y)], fill=(220, 220, 224), width=2)
+    buf = _BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    return buf.getvalue()
