@@ -119,6 +119,46 @@ def test_the_result_says_what_it_is(page, live_server):
     expect(facts).to_contain_text("1080")       # the size the engine renders at
 
 
+def test_every_showcase_is_drawn_from_the_product(page, live_server):
+    """The showcase blocks are the product's own markup, not pictures of it.
+
+    Three ways to show a product on a home page were weighed. Captured PNGs are
+    what everyone else does, and they go stale on the first interface change —
+    phase 12 moved half of the Generate screen — need a second set for the dark
+    theme, and put binaries in a repository with no build step. Drawn mock-ups
+    are always handsome and always lying: they show an idea of the product.
+
+    So these blocks are built from the same classes and the same tokens as the
+    running interface. Both themes come free, nothing goes stale by style, and
+    the day somebody replaces one with a screenshot this fails.
+
+    It is still a facsimile — the content in it is written, not generated — and
+    that is exactly why it may only show what the product actually does.
+    """
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+
+    blocks = page.locator("[data-showcase]")
+    # Three on the creator door, one on the business one. Counted rather than
+    # left open, so a block cannot be quietly dropped when a screen changes.
+    expect(blocks).to_have_count(4)
+
+    for i in range(4):
+        block = blocks.nth(i)
+        name = block.get_attribute("data-showcase")
+        assert block.locator("img").count() == 0, \
+            f"the {name!r} showcase uses a picture instead of the product's markup"
+        # A class from the product's own families, so it cannot quietly become
+        # a hand-drawn approximation that merely looks similar.
+        assert block.locator(".ce-card, .seg-btn, .ce-input, .ce-btn, .ce-btn-ghost").count() > 0, \
+            f"the {name!r} showcase shares nothing with the interface it depicts"
+        # And nothing in it may be pressable. A facsimile carrying a live-looking
+        # control answers a press with silence, which is a worse first
+        # impression than the empty page this phase set out to fix.
+        assert block.locator("button, a, input, select, textarea").count() == 0, \
+            f"the {name!r} showcase offers a control that does nothing"
+
+
 def test_the_landing_fits_a_phone(page, live_server):
     """The signed-in shell is measured at 390px by test_narrow_e2e; the landing
     is the half of the product a stranger sees first and had no such guard. A

@@ -121,6 +121,25 @@ def test_the_settings_screen_has_no_small_print_either(page, signed_in):
     assert not small, f"text below the floor in Settings:\n{_report(small)}"
 
 
+@pytest.mark.parametrize("door", ["creator", "business"])
+def test_the_landing_has_no_small_print_either(page, live_server, door):
+    """The floor applies to the page a stranger sees first.
+
+    This file was written for the signed-in shell and stopped there, so the home
+    page kept its own rules — and phase 13 promptly put an 11.2px plate on it,
+    inside a block whose entire purpose was to cure the page looking thin. The
+    rule was measured and enforced two commits earlier; the gap was that nothing
+    measured here.
+    """
+    page.goto(live_server)
+    page.locator(f"#ltab-{door}").click()
+    page.wait_for_timeout(200)
+
+    small = [m for m in page.evaluate(_MEASURE) if m["size"] < FLOOR_PX]
+
+    assert not small, f"text below the floor on the {door} door:\n{_report(small)}"
+
+
 def test_the_screen_has_something_to_read_first(page, signed_in):
     """The other half of the complaint.
 
