@@ -68,26 +68,59 @@ _TRIVIAL = re.compile(
     re.IGNORECASE)
 
 # Bad news — a rough keyword detector for events you would NOT want to celebrate
-# (incident, breach, recall, layoffs, price hike). Deliberately over-eager: a false
-# flag ("we fixed a security bug" reads as security) is far cheaper than posting a
-# cheerful graphic during an outage. Not truth, not severity — just "check the mood".
-_BAD_NEWS = re.compile(
-    r"\b(?:incident|outage|down(?:time)?|offline|disrupt\w*|degrad\w*|"
-    r"breach\w*|hack\w*|exploit\w*|vulnerab\w*|\bcve\b|leak\w*|exposed|"
-    r"recall\w*|lawsuit|sued|settlement|fine[ds]?|penalt\w*|investigat\w*|"
-    r"layoffs?|lay off|laid off|redundan\w*|shut ?down|shutting down|"
-    r"bankrupt\w*|delay\w*|postpon\w*|discontinu\w*|deprecat\w*|sunset\w*|"
-    r"price (?:increase|hike|rise)|raising prices|more expensive|"
-    r"apolog\w*|sorry|regret|scam|fraud\w*|phishing|malware|ransom\w*|"
-    r"complaint\w*|backlash|controvers\w*|scandal|fail\w*|broke\w*|crash\w*)\b",
+# (incident, breach, recall, layoffs, price hike). Not truth, not severity — just
+# "check the mood".
+#
+# In two reaches, and the split is the whole design.
+#
+# It began as one list read over the whole body, on the stated trade that a false
+# flag is cheaper than posting a cheerful graphic during an outage. That trade is
+# real, but it only holds while the flag is occasional. On a live account every
+# lead the product had ever produced came back flagged — go-ethereum's routine
+# 5 KB maintenance notes matched twice, on "failing" and "shutdown", both past
+# character 2000 inside the list of merged pull requests. A warning that fires on
+# everything is not read, and the dialog standing in front of it is something to
+# click past. Over-firing stops being the cheap direction at exactly the point it
+# stops warning anybody.
+#
+# Which is the same thing `_SIGNAL_CHARS` below already records for the admitting
+# rules: in an aggregated changelog an ordinary word is a certainty, not a signal.
+# So the words that are ordinary changelog vocabulary — a test fails, a process
+# crashes, an option is deprecated, a database shuts down — count only where the
+# post would be about, the title and the opening of the notes. Words that cannot
+# mean anything else keep the whole body, because an incident report that buries
+# "we were breached" on page two is the case this exists for.
+_BAD_NEWS_ANYWHERE = re.compile(
+    r"\b(?:incident|outage|breach\w*|hacked|hackers?|hacking|"
+    r"ransom\w*|phishing|malware|scam|fraud\w*|"
+    r"recall(?:s|ed|ing)?|lawsuit|sued|"
+    r"layoffs?|lay off|laid off|redundan\w*|bankrupt\w*|"
+    r"backlash|controvers\w*|scandal|"
+    r"price (?:increase|hike|rise)|raising prices)\b",
+    re.IGNORECASE)
+# "hackathon" and "hackable" are not a hack, so the strong list spells out the
+# three forms that are, rather than taking every word starting "hack".
+_BAD_NEWS_UP_FRONT = re.compile(
+    r"\b(?:down(?:time)?|offline|disrupt\w*|degrad\w*|"
+    r"exploit\w*|vulnerab\w*|cve|leak\w*|exposed|"
+    r"settlement|fine[ds]?|penalt\w*|investigat\w*|"
+    r"shut ?down|shutting down|more expensive|"
+    r"delay\w*|postpon\w*|discontinu\w*|deprecat\w*|sunset\w*|"
+    r"apolog\w*|sorry|regret|complaint\w*|fail\w*|broke\w*|crash\w*)\b",
     re.IGNORECASE)
 
 
 def detect_bad_news(item: FetchedItem) -> bool:
-    """True when an item reads as negative/sensitive — worth a warning before posting.
-    Rough by design; false positives are accepted (doc §9)."""
-    text = f"{item.title or ''}\n{item.body or ''}"
-    return bool(_BAD_NEWS.search(text))
+    """True when an item reads as negative/sensitive — worth a warning before
+    posting. See the two lists above for what each reach is for.
+
+    `_SIGNAL_CHARS` is defined further down beside the rules that made the same
+    discovery first; the window is deliberately the same one.
+    """
+    title, body = item.title or "", item.body or ""
+    if _BAD_NEWS_ANYWHERE.search(f"{title}\n{body}"):
+        return True
+    return bool(_BAD_NEWS_UP_FRONT.search(f"{title}\n{body[:_SIGNAL_CHARS]}"))
 
 
 def _is_dev_prerelease(item: FetchedItem) -> bool:
@@ -114,9 +147,15 @@ def _is_dev_prerelease(item: FetchedItem) -> bool:
 #:
 #: The asymmetry is deliberate. Rules that ADMIT an item read this window,
 #: because a false "worthy" spends the reader's trust on junk and the feed stops
-#: being worth opening. Rules that REFUSE or WARN — the trivial anti-rule's
-#: escape aside — keep the whole text: `detect_bad_news` and `_SECURITY` are
-#: cheaper to over-fire than to miss.
+#: being worth opening. Rules that REFUSE or WARN are cheaper to over-fire than
+#: to miss, and keep the whole text: the trivial anti-rule's escape, `_SECURITY`,
+#: and the unambiguous half of `detect_bad_news`.
+#:
+#: The other half of `detect_bad_news` reads this window too, and the reason is
+#: written beside it: over-firing is only the cheap direction while it stays
+#: occasional. Measured on a live account it was every item, on words like
+#: "failing" deep in a commit list — the same certainty-not-signal this window
+#: was cut for.
 _SIGNAL_CHARS = 1200
 
 

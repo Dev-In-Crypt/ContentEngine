@@ -39,6 +39,55 @@ def test_good_news_not_flagged(title):
     assert detect_bad_news(_item(title)) is False
 
 
+# ── the warning has to stay rare enough to be read ──────────────────────────
+
+# A real one. go-ethereum v1.17.5: 5275 characters, an ordinary maintenance
+# release, and the whole of the old word list matched exactly twice — "failing"
+# and "shutdown", both past character 2000, both inside the list of merged
+# pull requests. Shortened here to the same shape.
+_MAINTENANCE_RELEASE = (
+    "This is a maintenance release with accumulated bug fixes and "
+    "improvements, and is recommended for all users. It continues the "
+    "implementation work for the upcoming Amsterdam hardfork.\n\n"
+    + "* core: assorted improvements to the transaction pool\n" * 40
+    + "* eth: fix a failing test\n"
+    + "* node: close the database cleanly on shutdown\n"
+)
+
+
+def test_a_changelog_is_not_bad_news_because_page_three_says_failing():
+    """Every lead the product produced on a live account came back flagged, so
+    the warning meant nothing and the dialog in front of it was something to
+    click past. The words were "failing" and "shutdown", two thousand characters
+    down a list of merged pull requests — ordinary changelog vocabulary, not
+    news about the company."""
+    assert detect_bad_news(
+        _item("Grav-Torque Pad (v1.17.5)", body=_MAINTENANCE_RELEASE)) is False
+
+
+@pytest.mark.parametrize("title", [
+    "Postponing the launch to next quarter",
+    "Deprecating the v1 API",
+    "Our database was exposed for six hours",
+])
+def test_the_same_words_still_warn_when_they_are_the_headline(title):
+    """The narrowing is about WHERE a word sits, not which words count. Said up
+    front, every one of these is the news."""
+    assert detect_bad_news(_item(title, body=_MAINTENANCE_RELEASE)) is True
+
+
+def test_a_crisis_word_still_reaches_the_bottom_of_the_page():
+    """Words that cannot mean anything else keep the whole body. An incident
+    report that buries "we were breached" on page two is exactly the case the
+    warning exists for."""
+    body = "Routine notes.\n" + ("filler line\n" * 300) + "We were breached.\n"
+    assert detect_bad_news(_item("Service update", body=body)) is True
+
+
+def test_a_hackathon_is_not_a_hack():
+    assert detect_bad_news(_item("Join our hackathon this weekend")) is False
+
+
 class _FakeFetcher:
     def __init__(self, items):
         self._items = items
