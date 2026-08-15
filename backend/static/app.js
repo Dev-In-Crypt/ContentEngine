@@ -5184,6 +5184,25 @@ function toggleGrounding() {
   renderGroundingChip();
 }
 
+/** Rewriting is the account's own key, and says so.
+ *
+ *  `regenerate-field` was never given the free allowance — phase 6 wired
+ *  `/generate` and `/adapt` and stopped there — so on our key all four chips and
+ *  the older "Variations" link answered "No API key." Found on the live site.
+ *  Drawing a button that cannot work for the person looking at it is the same
+ *  untruth the landing was fixed for, so it takes the same shape the web-search
+ *  chip already has: name whose key it needs, and do not fire. */
+function renderRewriteAxes() {
+  const ours = onOurKey();
+  const label = document.getElementById('rewrite-axes-label');
+  if (label) label.textContent = ours ? 'Rewrite — on your own key:' : 'Rewrite:';
+  document.querySelectorAll('#rewrite-axes [data-action="rewrite-caption"]')
+    .forEach(b => { b.disabled = ours; });
+  // The same route, and broken for the same people since long before the chips.
+  document.querySelectorAll('[data-action="show-variations"]')
+    .forEach(b => { b.disabled = ours; });
+}
+
 /** Two ways in that already existed and nothing pointed at. */
 function startFromPlan() {
   setSection('calendar');
@@ -5228,6 +5247,7 @@ async function loadRecentDrafts() {
 function renderFreeLeft() {
   const free = S.usage && S.usage.free;
   renderGroundingChip();
+  renderRewriteAxes();
   const card = document.getElementById('shell-meter');
   if (!card) return;
   card.classList.toggle('hidden', !free);
@@ -5575,6 +5595,11 @@ function renderSpend(d) {
   if (!box) return;
   const rows = (d.by_model || []).filter(m => (m.cost || 0) > 0);
   const total = rows.reduce((s, m) => s + (m.cost || 0), 0);
+  // Before the bars, not after: a month that spent nothing returns early below,
+  // and the field showing empty reads as "the setting was lost" while the badge
+  // goes on using the saved number.
+  const alert = document.getElementById('spend-alert');
+  if (alert && !alert.value) alert.value = localStorage.getItem('cost_limit') || '5';
   const head = `<div class="flex flex-wrap gap-5">
       <div><div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">Today</div>
         <div class="text-lg font-semibold">$${(d.today?.cost || 0).toFixed(2)}</div></div>
@@ -5597,9 +5622,6 @@ function renderSpend(d) {
       <div class="text-xs font-mono">$${m.cost.toFixed(2)}</div>
     </div>`).join('') + '</div>'
     + `<div class="text-[10px] mt-2" style="color:var(--faint)">Totals $${total.toFixed(2)} across ${rows.length} model(s). Costs for providers other than OpenRouter are estimates, not vendor invoices.</div>`;
-
-  const alert = document.getElementById('spend-alert');
-  if (alert && !alert.value) alert.value = localStorage.getItem('cost_limit') || '5';
 }
 
 /** The number that colours the badge. Not a cap — see the note in the markup. */
@@ -5613,13 +5635,33 @@ function saveSpendAlert() {
 
 /** Redraw the brand preview.
  *
- *  Cache-busted by hand: the URL is constant and the picture is not, so without
- *  this the browser shows the previous brand's slide — plausibly, which is the
- *  dangerous kind of wrong for an agency switching clients all day. The route
- *  says no-store too; belt and braces, because this one is worth both. */
-function refreshBrandPreview() {
+ *  Fetched and handed over as a blob rather than pointed at with `src`. The
+ *  route is authenticated and `<img src>` cannot carry a bearer token, so the
+ *  direct URL was a 401 and an element with no pixels behind it — which is
+ *  exactly how it shipped, because the test asserted the attribute. The post
+ *  slide routes solve the same problem the other way, by being unauthenticated
+ *  behind an unguessable id; that is not available here, since this picture is
+ *  "the brand of whoever is asking" and has no id to be unguessable.
+ *
+ *  Cache-busted by hand as well: the URL is constant and the picture is not, so
+ *  an agency switching clients all day would otherwise be shown the previous
+ *  one — plausibly, the dangerous kind of wrong. The route says no-store too.
+ *
+ *  `blob:` is already in `img-src`; see the CSP note in main.py. */
+let _brandPreviewUrl = null;
+async function refreshBrandPreview() {
   const img = document.getElementById('brand-preview');
-  if (img) img.src = `${API}/api/settings/slide-preview?t=${Date.now()}`;
+  if (!img) return;
+  try {
+    const res = await apiFetch(`${API}/api/settings/slide-preview?t=${Date.now()}`);
+    if (!res.ok) return;
+    const url = URL.createObjectURL(await res.blob());
+    // Released only once the new one exists: revoking first would blank the
+    // picture for the length of the request.
+    if (_brandPreviewUrl) URL.revokeObjectURL(_brandPreviewUrl);
+    _brandPreviewUrl = url;
+    img.src = url;
+  } catch (e) { /* decoration — a blip here must not break the tab */ }
 }
 
 function renderSettingsTabs() {

@@ -837,6 +837,35 @@ def test_a_rewrite_chip_names_its_axis_to_the_server(page, signed_in, keyed):
     assert sent["instruction"] == "less_salesy"
 
 
+def test_the_rewrite_chips_do_not_promise_what_our_key_cannot_pay_for(
+        page, signed_in, keyed):
+    """Found on the live site, not here.
+
+    `regenerate-field` runs on the account's OWN key. Phase 6 gave the free
+    allowance to `/generate` and `/adapt` and never to this route, so on the
+    free tier all four chips — and the older "Variations" link beside them —
+    answered "No API key. Add it in Account → AI models." Four buttons drawn for
+    everybody and working for nobody who has not paid is the same untruth the
+    landing was fixed for.
+
+    The honest shape already existed one screen away: the web-search chip says
+    whose key it needs and does not fire. This copies it.
+    """
+    page.route("**/api/usage", lambda r: r.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"today": {"cost": 0.0, "tokens": 0, "calls": 0},
+                         "month": {"cost": 0.0, "tokens": 0, "calls": 0},
+                         "by_model": [], "free": {"remaining": 2, "limit": 2}})))
+    signed_in()
+    _reach_step4(page)
+
+    expect(page.locator("#rewrite-axes")).to_contain_text("your own key")
+    for axis in ("shorter", "warmer", "less_salesy", "add_hook"):
+        expect(page.locator(f'#rewrite-axes [data-arg="{axis}"]')).to_be_disabled()
+    expect(page.locator('[data-action="show-variations"][data-arg="caption"]')
+           ).to_be_disabled()
+
+
 def test_plain_variations_still_ask_for_nothing_in_particular(page, signed_in, keyed):
     """The old button is the old button. Sending an axis on every call would
     quietly change a result people already rely on."""

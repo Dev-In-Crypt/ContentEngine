@@ -81,6 +81,20 @@ def test_the_threshold_is_remembered(page, signed_in):
     assert page.evaluate("localStorage.getItem('cost_limit')") == "12"
 
 
+def test_the_threshold_is_shown_on_a_month_that_spent_nothing(page, signed_in):
+    """Found on the live site. The field was filled in the same block that draws
+    the per-model bars, and a month with no calls returns before it — so an
+    account that had set a threshold was shown an empty box, which reads as "the
+    setting was lost". The badge went on using the saved number the whole time,
+    which is the worst version: the screen and the behaviour disagreed."""
+    _usage(page, by_model=[], month={"cost": 0, "tokens": 0, "calls": 0})
+    signed_in()
+    page.evaluate("localStorage.setItem('cost_limit', '7')")
+    open_settings(page, "keys")
+
+    expect(page.locator("#spend-alert")).to_have_value("7")
+
+
 def test_nothing_offers_a_plan_that_does_not_exist(page, signed_in):
     """No billing exists in any form. The mockup's "flat seat fee — see plans"
     would be selling something that cannot be bought."""

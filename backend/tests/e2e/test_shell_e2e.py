@@ -121,14 +121,22 @@ def test_an_account_with_no_allowance_is_not_shown_one(page, signed_in):
 
 def test_the_brand_kit_shows_a_real_slide(page, signed_in):
     """Seeing what a colour did used to mean generating a post — a model call,
-    and on the free tier one of two."""
+    and on the free tier one of two.
+
+    The assertion is that the picture DECODED, not that the src reads well.
+    Shipped and found on the live site: the route requires the bearer token and
+    `<img src>` cannot carry one, so the element sat there with a correct-looking
+    URL and no pixels behind it. The old test asserted the attribute and passed
+    the whole time. `naturalWidth` is the only claim a wrong src cannot satisfy.
+    """
     from tests.e2e.nav import open_settings
     signed_in()
     open_settings(page, "profiles")
 
     img = page.locator("#brand-preview")
     expect(img).to_be_visible()
-    assert "/api/settings/slide-preview" in (img.get_attribute("src") or "")
+    # Polls: the fetch, the decode and this read are three separate moments.
+    expect(img).to_have_js_property("naturalWidth", 1080)
 
 
 def test_the_preview_is_asked_for_again_rather_than_remembered(page, signed_in):
@@ -137,8 +145,9 @@ def test_the_preview_is_asked_for_again_rather_than_remembered(page, signed_in):
     from tests.e2e.nav import open_settings
     signed_in()
     open_settings(page, "profiles")
+    expect(page.locator("#brand-preview")).to_have_js_property("naturalWidth", 1080)
     first = page.locator("#brand-preview").get_attribute("src")
 
     page.evaluate("refreshBrandPreview()")
 
-    assert page.locator("#brand-preview").get_attribute("src") != first
+    expect(page.locator("#brand-preview")).not_to_have_js_property("src", first)
