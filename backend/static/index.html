@@ -558,6 +558,41 @@
     </div>
   </section>
 
+  <!-- Questions, creator door. The one device the competitors use that needs no
+       proof at all — it only answers. Native <details>, so it costs no
+       JavaScript and no handler under the content policy. Every answer here is
+       checkable in the code; where the product's behaviour is a deployment
+       setting rather than a promise, the answer says so instead of rounding up. -->
+  <section class="max-w-3xl mx-auto px-6 py-12">
+    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">QUESTIONS</div>
+    <div class="mt-8 ce-card divide-y" style="border-color:var(--border)">
+      <details class="p-4">
+        <summary class="cursor-pointer font-semibold">Do I need an API key to start?</summary>
+        <p class="mt-2 text-sm text-gray-400">No. Two posts run on our key — one before you sign up, one after. After that the app asks for your own key, because from then on the writing is billed to you and not to us.</p>
+      </details>
+      <details class="p-4">
+        <summary class="cursor-pointer font-semibold">Can I change it before anything goes out?</summary>
+        <p class="mt-2 text-sm text-gray-400">All of it. The caption, the hashtags, the call to action, the text on each slide, and the time it goes. You can also ask for alternatives to one field and keep the one you like — nothing is saved until you save it.</p>
+      </details>
+      <details class="p-4">
+        <summary class="cursor-pointer font-semibold">Where does it publish?</summary>
+        <p class="mt-2 text-sm text-gray-400">Instagram and X, from the server, on the schedule you set — your computer can be off. It also writes for LinkedIn, but it cannot publish there: the app refuses rather than pretending, and you export or copy the post instead.</p>
+      </details>
+      <details class="p-4">
+        <summary class="cursor-pointer font-semibold">What happens to my keys?</summary>
+        <p class="mt-2 text-sm text-gray-400">They are encrypted before they are stored and decrypted only in memory when a request needs them. They are never written to a log, and the app never sends one back to your browser — the settings screen shows only whether a key is set, and its last four characters.</p>
+      </details>
+      <details class="p-4">
+        <summary class="cursor-pointer font-semibold">Can I take my things and leave?</summary>
+        <p class="mt-2 text-sm text-gray-400">You can download a ZIP with your account, every post, every slide, your images and video, and your usage history. Deleting the account asks for your password and then removes all of it, files included. Keys are listed in the export as set or not set — never as usable text you might forward.</p>
+      </details>
+      <details class="p-4">
+        <summary class="cursor-pointer font-semibold">Is any of this automatic without me?</summary>
+        <p class="mt-2 text-sm text-gray-400">Only what you queued. Nothing is written, scheduled or published unless you asked for it; the scheduler's whole job is to send at the time you already chose.</p>
+      </details>
+    </div>
+  </section>
+
   <!-- CTA -->
   <section class="max-w-5xl mx-auto px-6 py-16 text-center">
     <h2 class="text-2xl sm:text-3xl font-bold">Start creating in minutes.</h2>
@@ -633,6 +668,39 @@
       </div>
     </section>
 
+    <!-- Questions, business door. Different fears from the creator's: not "what
+         does it cost me" but "what does it read, who signs it off, and what can
+         I show an auditor". Same rule — every answer checkable in the code. -->
+    <section class="max-w-3xl mx-auto px-6 py-12">
+      <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">QUESTIONS</div>
+      <div class="mt-8 ce-card divide-y" style="border-color:var(--border)">
+        <details class="p-4">
+          <summary class="cursor-pointer font-semibold">What can it read?</summary>
+          <p class="mt-2 text-sm text-gray-400">Public links only — a release page, a changelog, a blog feed, a public repository. It is given no login to anything of yours, and it refuses addresses that point back inside a private network.</p>
+        </details>
+        <details class="p-4">
+          <summary class="cursor-pointer font-semibold">Who decides what gets posted?</summary>
+          <p class="mt-2 text-sm text-gray-400">A person, every time. The app finds candidates and writes drafts; approving one is a human action, and publishing happens after that.</p>
+        </details>
+        <details class="p-4">
+          <summary class="cursor-pointer font-semibold">Why did it pick this update?</summary>
+          <p class="mt-2 text-sm text-gray-400">It shows you. Each candidate carries a verdict, the reason, and the sentence from the source the reason came from — so you can disagree with the evidence rather than with a black box.</p>
+        </details>
+        <details class="p-4">
+          <summary class="cursor-pointer font-semibold">What can I show later?</summary>
+          <p class="mt-2 text-sm text-gray-400">Every approval is written to a journal — what the AI drafted, what the person changed, who signed it and when — and the journal exports to CSV or JSON.</p>
+        </details>
+        <details class="p-4">
+          <summary class="cursor-pointer font-semibold">What happens to other people's data?</summary>
+          <p class="mt-2 text-sm text-gray-400">Only the public page is fetched and only the part that became a candidate is kept — its title, its address, and a short quote. Nothing is passed to another customer, and your workspace is not visible from anyone else's. If you delete the account, the sources, the candidates and the journal go with it.</p>
+        </details>
+        <details class="p-4">
+          <summary class="cursor-pointer font-semibold">Can it invent something?</summary>
+          <p class="mt-2 text-sm text-gray-400">The draft is written from the source text and instructed to add no numbers, names or claims that are not in it. That is an instruction to a model, not a proof — which is exactly why a person approves before anything goes out.</p>
+        </details>
+      </div>
+    </section>
+
     <!-- Business CTA -->
     <section class="max-w-5xl mx-auto px-6 py-16 text-center">
       <h2 class="text-2xl sm:text-3xl font-bold">Never miss a moment worth posting.</h2>
@@ -640,6 +708,93 @@
       <button data-action="auth-register-business" class="ce-btn text-sm mt-7">Start free →</button>
     </section>
   </div><!-- /landing-business -->
+
+  <!-- What it works with. Buffer carries nine of these in its hero; the
+       difference is that ours are marked up by role, so "publishes to" and
+       "runs on" are separately checkable against the code. Names, not logos:
+       other people's marks come with usage rules, and taking that on to
+       decorate a page is a poor trade.
+
+       LinkedIn is listed where it belongs. The product generates for it and
+       refuses to publish to it — a gate in posts.py that answers twice, at
+       publish and at schedule — so it is not in the publish row. -->
+  <section class="max-w-5xl mx-auto px-6 py-12">
+    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WORKS WITH</div>
+    <div class="mt-8 grid sm:grid-cols-3 gap-8 text-sm">
+      <div>
+        <div class="font-semibold mb-2">Publishes to</div>
+        <div class="flex flex-wrap gap-2">
+          <span data-compat="publish" class="ce-card px-3 py-1.5">instagram</span>
+          <span data-compat="publish" class="ce-card px-3 py-1.5">x</span>
+        </div>
+        <div class="text-gray-400 mt-2">LinkedIn can be written for, but not published to — export or copy it.</div>
+      </div>
+      <div>
+        <div class="font-semibold mb-2">Runs on your key from</div>
+        <div class="flex flex-wrap gap-2">
+          <span data-compat="model" class="ce-card px-3 py-1.5">OpenRouter</span>
+          <span data-compat="model" class="ce-card px-3 py-1.5">OpenAI</span>
+          <span data-compat="model" class="ce-card px-3 py-1.5">Anthropic</span>
+          <span data-compat="model" class="ce-card px-3 py-1.5">Google Gemini</span>
+        </div>
+        <div class="text-gray-400 mt-2">One of them is enough. Anthropic writes but does not draw.</div>
+      </div>
+      <div>
+        <div class="font-semibold mb-2">And, if you want them</div>
+        <div class="flex flex-wrap gap-2">
+          <span class="ce-card px-3 py-1.5">Unsplash</span>
+          <span class="ce-card px-3 py-1.5">Pexels</span>
+          <span class="ce-card px-3 py-1.5">ElevenLabs</span>
+          <span class="ce-card px-3 py-1.5">Kling</span>
+          <span class="ce-card px-3 py-1.5">Canva</span>
+          <span class="ce-card px-3 py-1.5">imgbb</span>
+        </div>
+        <div class="text-gray-400 mt-2">Stock photos, voice-over, generated video, templates, and image hosting for Instagram. All optional.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- What this costs. Shared by both doors on purpose: the figure below is a
+       copy of a table in the code, and one copy is already one more than ideal.
+
+       This is the question none of the four competitors can answer, because all
+       of them resell the models — and the one this page was silent about. What
+       may be said here is bounded by what the code knows: the text and image
+       prices are the vendors' own published rates, so they can be quoted and
+       are tied to the catalogue by a test. The per-second video prices in the
+       same file may NOT be quoted — the catalogue says beside them that they
+       are reseller figures that drift and must be re-verified "before this
+       ships anywhere a user makes a spending decision from it". A home page is
+       that place; there is a test for it. -->
+  <section class="max-w-5xl mx-auto px-6 py-14">
+    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT THIS COSTS</div>
+    <div class="mt-8 grid md:grid-cols-3 gap-8 text-sm">
+      <div>
+        <div class="text-base font-semibold mb-1">Nothing, to us</div>
+        <p class="text-gray-400">There is no plan and no checkout in this product — not hidden, not later. Two posts run on our key before you are asked for anything.</p>
+      </div>
+      <div>
+        <div class="text-base font-semibold mb-1">You pay the model vendor</div>
+        <p class="text-gray-400">On your own key, at their price, for what you actually generate. It depends on the model you pick: Claude Sonnet 5 lists at $2 per million tokens in and $10 per million out, and a caption is a few thousand.</p>
+      </div>
+      <div>
+        <div class="text-base font-semibold mb-1">The running total is on screen</div>
+        <p class="text-gray-400">Today and this month, broken down by model. On OpenRouter that is the vendor's own figure; for other providers it is our estimate from a price table, not an invoice.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- The last word, shared by both doors.
+       Each door already closes its own argument, but the two reference bands
+       above — what it works with, what it costs — sit outside the doors and so
+       land after those closings. That left whichever door you were reading
+       ending on a table rather than on an offer. This is the ask, once, at the
+       actual bottom; the door-specific ones stay where they are because each
+       makes its own promise in its own words. -->
+  <section class="max-w-5xl mx-auto px-6 pb-16 text-center">
+    <p class="text-base" style="color:var(--muted)">Two posts before you are asked for anything.</p>
+    <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-sm mt-4">Start free →</button>
+  </section>
 
   <!-- Footer -->
   <footer class="border-t" style="border-color:var(--border)">
