@@ -921,3 +921,123 @@ def test_recent_drafts_do_not_follow_you_into_the_preview(page, signed_in, keyed
     _reach_step4(page)
 
     expect(page.locator("#recent-drafts-card")).to_be_hidden()
+
+
+def test_a_hashtag_cannot_carry_markup(page, signed_in, keyed):
+    """Found while taking the colour off these pills, by reading the line.
+
+    Every neighbouring template in this file escapes what it interpolates;
+    `renderHashtags` put the tag straight into `innerHTML`. The comment on the
+    slide renderer already spells out why that matters here — an injected
+    `<img onerror>` is stored XSS, and with the session token in localStorage
+    that is token theft. A hashtag is model output, which is to say it is
+    whatever the topic talked the model into writing.
+    """
+    signed_in()
+    _reach_step4(page, hashtags=["#baking", "#<img src=x onerror=alert(1)>"])
+
+    box = page.locator("#hashtag-container")
+    assert box.locator("img").count() == 0, "a hashtag built an element"
+    expect(box).to_contain_text("onerror")     # shown as text, which is correct
+
+
+def test_the_hashtags_are_not_the_loudest_thing_on_the_screen(page, signed_in, keyed):
+    """Fourteen pills in brand violet, four rows of them, for the least
+    important content on the page — while the slide being published rendered
+    200px wide. Colour is the interface's loudest signal and it was spent here.
+    The accent stays for the mark, links, the meter and the chart.
+
+    Asserted as "the pill is drawn from the theme's own border token". The
+    previous version reached for `border-purple-700`, which is one of the few
+    stock Tailwind purples this file does NOT remap — so it was a colour of its
+    own, answering to neither theme, and the obvious test (is it `--brand`?)
+    passes against it for the wrong reason.
+    """
+    signed_in()
+    _reach_step4(page)
+
+    pill = page.locator("#hashtag-container > span").first
+    expect(pill).to_be_visible()
+    border = page.evaluate(
+        "getComputedStyle(document.documentElement).getPropertyValue('--border').trim()")
+    assert border, "no border token to compare against"
+
+    got = pill.evaluate("e => getComputedStyle(e).borderTopColor")
+
+    def _hex(rgb):
+        r, g, b = (int(float(p)) for p in rgb.replace("rgba(", "").replace("rgb(", "")
+                   .rstrip(")").split(",")[:3])
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    assert _hex(got).lower() == border.lower(), (
+        f"a hashtag pill is painted {got} rather than the theme's {border}")
+
+
+def test_the_editor_offers_its_action_without_scrolling(page, signed_in, keyed):
+    """The screen's purpose is to approve something and send it.
+
+    Neither was offered. The two buttons in the header were "← Back" and
+    "Regenerate", identical grey pills, and Publish sat 225 lines further down
+    the right column — below the fold on the laptop the mockups were drawn for.
+    Measured against the window rather than by counting elements: "reachable"
+    means visible where the reader already is.
+    """
+    page.set_viewport_size({"width": 1280, "height": 900})
+    signed_in()
+    _reach_step4(page)
+
+    box = page.locator("#publish-btn").bounding_box()
+
+    assert box is not None, "the publish button is not laid out at all"
+    assert box["y"] < 900, (
+        f"publish sits {box['y']:.0f}px down a 900px window — below the fold")
+
+
+def test_the_publish_button_is_one_element(page, signed_in, keyed):
+    """Moving it up is a move, never a copy. A second `#publish-btn` would look
+    right and break `getElementById`, which is what drives its label and its
+    disabled state — the failure would show up as a button that stops
+    responding, on whichever of the two the code did not reach."""
+    signed_in()
+    _reach_step4(page)
+
+    assert page.locator("#publish-btn").count() == 1
+    assert page.locator("#schedule-btn").count() == 1
+
+
+def test_a_draft_row_is_not_a_card_inside_a_card(page, signed_in, keyed):
+    """Three borders deep, all 1px, all the same colour: the card sat inside the
+    form panel and each row was another card inside it. A border says "this
+    group is separate from that one", and when every level has the same one the
+    statement cancels out — what is left is texture, which is what the screen
+    was being called cluttered for.
+
+    Measured as "no descendant draws a closed frame" rather than "no descendant
+    has class ce-card": the claim is about what the reader sees, and a future
+    row reaching for `border` directly would be the same mistake under another
+    name. A rule on one side is deliberately still allowed — a hairline between
+    rows separates them without boxing each one, which is the whole distinction.
+    """
+    signed_in()
+    page.route("**/api/posts?*", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps([
+            {"id": f"p{i}", "topic": f"Cold brew ratios {i}", "platform": "instagram",
+             "status": "draft", "format": "single",
+             "created_at": "2026-08-13T09:00:00+00:00", "variant_group_id": f"g{i}"}
+            for i in range(3)])))
+    page.reload()
+    expect(page.locator("#recent-drafts-card")).to_be_visible()
+    # Two rows at least, or "no bordered descendant" is satisfied by an empty
+    # list — the fixture has to be able to reproduce the nesting it forbids.
+    expect(page.locator("#recent-drafts > *")).to_have_count(3)
+
+    framed = page.locator("#recent-drafts-card").evaluate(
+        """card => [...card.querySelectorAll('*')]
+             .filter(el => {
+               const s = getComputedStyle(el);
+               return ['Top', 'Right', 'Bottom', 'Left']
+                 .every(side => parseFloat(s['border' + side + 'Width']) > 0);
+             })
+             .map(el => el.tagName.toLowerCase() + '.' + String(el.className))""")
+
+    assert not framed, f"frames nested inside the drafts card: {framed}"

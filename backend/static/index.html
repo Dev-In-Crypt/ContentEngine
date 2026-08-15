@@ -56,6 +56,37 @@
     html,body,.font-sans{ font-family:'Barlow',system-ui,-apple-system,sans-serif !important; }
     body{ background:var(--bg) !important; color:var(--text); }
 
+    /* ── the type scale ──────────────────────────────────────────────────────
+       Measured before it was changed. 369 pieces of text on the Generate
+       screen: 296 of them between 12 and 14 pixels, eighteen below 12, and
+       nothing anywhere above 18. Two sizes two pixels apart carrying eighty per
+       cent of an interface is not a hierarchy — every line arrives with the
+       same rank and the reader has to sort the screen themselves. That, and not
+       the number of things on it, is what read as cluttered.
+
+       So: the floor comes up, the ceiling goes up further, and the steps get
+       far enough apart to be read as rank rather than as noise. Line-height
+       tightens as size grows, which is what stops a 30px heading sitting in a
+       32px box.
+
+       Written as overrides on the stock utility names because that is this
+       file's mechanism — the Play CDN appends its stylesheet after this block,
+       so `!important` is the only lever (see the note further down). Sizes were
+       the one family the mechanism had never been applied to.
+
+       One consequence worth stating, because it inverts a rule written twenty
+       lines below: a call-site utility can no longer win on size. The escape
+       hatch is an arbitrary value — `text-[18px]` sets the size directly and
+       never matches a class selector, so it still wins. Deliberately louder
+       than a class: it greps, and there should be few of them. */
+    .text-xs   { font-size:13px !important; line-height:1.45 !important; }
+    .text-sm   { font-size:15px !important; line-height:1.5  !important; }
+    .text-base { font-size:17px !important; line-height:1.55 !important; }
+    .text-lg   { font-size:20px !important; line-height:1.4  !important; }
+    .text-xl   { font-size:24px !important; line-height:1.3  !important; }
+    .text-2xl  { font-size:30px !important; line-height:1.2  !important; }
+    .text-3xl  { font-size:36px !important; line-height:1.15 !important; }
+
     /* backgrounds + borders → theme vars */
     .bg-gray-950{ background-color:var(--bg) !important; }
     .bg-gray-900{ background-color:var(--panel) !important; }
@@ -149,6 +180,40 @@
     .lt-btn{ background:var(--panel2); border:2px solid var(--border); color:var(--muted); border-radius:10px; font-weight:600; transition:background .15s,color .15s,border-color .15s; }
     .lt-btn:hover{ color:var(--text); }
     .lt-btn.lt-active{ background:var(--accent-dim); border-color:var(--accent); color:var(--text); }
+
+    /* The choose-one rows — format, image source, and the four inside
+       Configure. Six groups, and until now not one of them had a rule here:
+       `initToggleGroup` appended six Tailwind utilities per button at start-up
+       and swapped six more on every click, with a regular expression over
+       `className`. That is what the note above `.lt-btn` is about, and these
+       were the last groups still doing it.
+
+       The active state is a SOLID fill, not the `--accent-dim` wash the nav
+       families use. Those mark which page you are on, where context does most
+       of the work; this marks a choice inside a row of identical siblings, and
+       a six-per-cent tint is the weakest signal available. It was measured at
+       rgba(0,0,0,.06) against a white panel — technically different, visually
+       not there. */
+    .seg-btn{ background:var(--panel2); border:1px solid var(--border); color:var(--muted);
+              border-radius:9px; font-weight:500; font-size:15px; padding:.5rem .875rem;
+              transition:background .12s,color .12s,border-color .12s; }
+    .seg-btn:hover{ color:var(--text); border-color:var(--faint); }
+    .seg-btn.seg-active{ background:var(--accent); border-color:var(--accent);
+                         color:var(--on-accent); font-weight:600; }
+    .seg-btn:disabled{ opacity:.55; cursor:not-allowed; }
+    /* The web-search chip sits under those rows and looked like one, so it wore
+       `src-btn` — which also enrolled it in the image-source group, whose click
+       handler writes `S.source = this.dataset.val`. The chip has no data-val,
+       so pressing it set the image source to undefined for every account whose
+       key makes the chip pressable. Its own class now, and it belongs to
+       nothing. */
+    .ground-chip{ background:var(--panel2); border:1px solid var(--border); color:var(--muted);
+                  border-radius:9px; font-weight:500; font-size:15px; padding:.5rem .875rem;
+                  transition:background .12s,color .12s,border-color .12s; }
+    .ground-chip:hover:not(:disabled){ color:var(--text); border-color:var(--faint); }
+    .ground-chip.ground-on{ background:var(--accent); border-color:var(--accent);
+                            color:var(--on-accent); font-weight:600; }
+    .ground-chip:disabled{ opacity:.55; cursor:not-allowed; }
     /* Business vs Creator app-shell: one engine, two experiences (gated on account_type) */
     .business-only{ display:none; }
     body[data-account-type="business"] .business-only{ display:block; }
@@ -188,14 +253,14 @@
            that as the problem. -->
       <div class="relative">
         <button id="avatar-btn" data-action="toggle-avatar-menu" class="ce-card px-3 py-1 text-xs flex items-center gap-2" title="Account" aria-haspopup="true" aria-expanded="false">
-          <span id="avatar-initial" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style="background:var(--accent);color:var(--on-accent)">?</span>
+          <span id="avatar-initial" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold" style="background:var(--accent);color:var(--on-accent)">?</span>
           <span id="user-chip" class="hidden sm:inline text-gray-300"></span>
         </button>
         <div id="avatar-menu" class="hidden absolute right-0 mt-2 w-64 ce-card p-2 space-y-1 z-40 shadow-2xl">
           <!-- The brand switcher used to live here. It is in the rail now: one
                control for one choice, which is what the note above asks for. -->
           <div id="menu-product-row" class="hidden px-2 py-2 space-y-1 border-b" style="border-color:var(--border)">
-            <div class="text-[10px] uppercase tracking-wide text-gray-500">Product</div>
+            <div class="text-xs uppercase tracking-wide text-gray-500">Product</div>
             <select id="product-switcher" data-change="on-product-switch" class="ce-input w-full px-2 py-1 text-xs" title="Switch product">
               <option value="creator">Creators</option>
               <option value="business">Business</option>
@@ -463,7 +528,7 @@
     <button id="auth-submit" data-action="submit-auth" class="ce-btn w-full py-3">Log in</button>
     <button id="auth-forgot-link" data-action="show-forgot-screen" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">Forgot password?</button>
     <button data-action="back-to-home" class="w-full text-xs text-gray-400 hover:text-gray-200 transition">← Back to home</button>
-    <p class="text-[11px] text-gray-500 text-center leading-snug">By continuing you agree to our
+    <p class="text-xs text-gray-500 text-center leading-snug">By continuing you agree to our
       <a href="/terms" class="underline hover:text-gray-300">Terms</a> and
       <a href="/privacy" class="underline hover:text-gray-300">Privacy Policy</a>.</p>
   </div>
@@ -684,7 +749,7 @@
   <aside class="md:w-56 md:flex-none space-y-3">
 
     <div id="shell-brand" class="hidden ce-card p-2">
-      <div class="text-[10px] uppercase tracking-wide px-1 pb-1" style="color:var(--faint)">Brand</div>
+      <div class="text-xs uppercase tracking-wide px-1 pb-1" style="color:var(--faint)">Brand</div>
       <select id="brand-switcher" data-change="on-acct-switch" class="ce-input w-full px-2 py-1.5 text-xs" title="Active brand"></select>
       <button data-action="menu-brands" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs mt-1">Manage brands…</button>
     </div>
@@ -692,7 +757,7 @@
     <nav id="shell-nav" class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
       <button data-section="create" data-action="set-section" data-arg="create" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Generate</button>
       <button data-section="calendar" data-action="set-section" data-arg="calendar" class="creator-only sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Calendar</button>
-      <button data-section="queue" data-action="set-section" data-arg="queue" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left flex items-center gap-2">Queue<span id="queue-count" class="hidden ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style="background:var(--brand-dim);color:var(--brand)"></span></button>
+      <button data-section="queue" data-action="set-section" data-arg="queue" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left flex items-center gap-2">Queue<span id="queue-count" class="hidden ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full" style="background:var(--brand-dim);color:var(--brand)"></span></button>
       <button data-section="results" data-action="set-section" data-arg="results" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Results</button>
       <div class="hidden md:block h-px my-1.5 mx-3" style="background:var(--border)"></div>
       <button data-settings-tab="profiles" data-action="open-settings-tab" data-arg="profiles" class="sec-btn px-3 py-2 rounded-lg text-sm whitespace-nowrap text-left">Brand kit</button>
@@ -705,14 +770,14 @@
          not a subject. The numbers come from the server; the mockup drew "2 / 5"
          and the limit is 2. -->
     <div id="shell-meter" class="hidden ce-card p-3">
-      <div class="flex items-center justify-between text-[10px]" style="color:var(--muted)">
+      <div class="flex items-center justify-between text-xs" style="color:var(--muted)">
         <span>Free posts left</span>
         <span id="shell-meter-count" class="font-semibold" style="color:var(--text)"></span>
       </div>
       <div class="h-1 rounded-full my-2 overflow-hidden" style="background:var(--border)">
         <div id="shell-meter-fill" class="h-full" style="background:var(--brand);width:0%"></div>
       </div>
-      <div id="shell-meter-note" class="text-[10px] leading-snug" style="color:var(--faint)"></div>
+      <div id="shell-meter-note" class="text-xs leading-snug" style="color:var(--faint)"></div>
     </div>
   </aside>
 
@@ -825,8 +890,11 @@
        edits to say the same thing. -->
   <section id="step-1" class="step-section bg-gray-900 rounded-2xl p-6 space-y-5">
     <div>
-      <h2 class="text-lg font-semibold text-purple-300">What should the post be about?</h2>
-      <p class="text-sm mt-1" style="color:var(--muted)">One line is enough — voice, hashtags and slides come from your brand kit.</p>
+      <!-- The screen's one question, at the size a question gets. Every heading
+           in the product used to be text-lg, one step above the body — which is
+           why nothing on any screen was where the eye started. -->
+      <h2 class="text-2xl font-semibold text-purple-300">What should the post be about?</h2>
+      <p class="text-base mt-1" style="color:var(--muted)">One line is enough — voice, hashtags and slides come from your brand kit.</p>
     </div>
 
     <div>
@@ -886,7 +954,7 @@
          instead of pretending to be a choice. -->
     <div>
       <button id="grounding-chip" data-action="toggle-grounding" type="button"
-              class="src-btn" title="Let the model check the live web while it writes"></button>
+              class="ground-chip" title="Let the model check the live web while it writes"></button>
     </div>
 
     <!-- Everything else the composer could ask, folded into one row that says
@@ -1035,7 +1103,7 @@
       <button data-action="apply-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Apply</button>
       <button data-action="save-current-preset" class="ce-btn-ghost px-3 py-1 text-xs">Save current</button>
       <button data-action="delete-selected-preset" class="ce-btn-ghost px-3 py-1 text-xs">Delete</button>
-      <span class="text-[10px] text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
+      <span class="text-xs text-gray-500 w-full">A preset stores these settings, not your topic or photos.</span>
     </div>
 
       </div>
@@ -1045,8 +1113,10 @@
          mean going to the Queue and finding it. Inside the form, not beside it:
          as a sibling of the step sections it stayed on screen over the preview. -->
     <div id="recent-drafts-card" class="hidden ce-card p-5">
-      <div class="text-sm font-semibold">Recent drafts</div>
-      <div id="recent-drafts" class="mt-3 space-y-2"></div>
+      <!-- A rubric rather than a heading: this is a shelf, not a section, and
+           at heading weight it competed with the question above it. -->
+      <div class="text-xs font-semibold uppercase tracking-wide" style="color:var(--faint)">Recent drafts</div>
+      <div id="recent-drafts" class="mt-1"></div>
     </div>
 
     <button id="generate-btn" data-action="generate-post" class="w-full bg-purple-600 hover:bg-purple-500 transition rounded-xl py-3 font-semibold text-white">
@@ -1087,11 +1157,22 @@
          "＋ Adapt" rather than switching, because pressing it spends a caption
          generation on the user's own key — browsing tabs must never cost. -->
     <div id="result-tabs" class="flex gap-1"></div>
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-purple-300">Preview & Edit</h2>
-      <div class="flex items-center gap-2">
-        <button data-action="show-step" data-arg="1" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">← Back</button>
-        <button data-action="generate-post" class="text-sm bg-gray-700 hover:bg-gray-600 rounded-lg px-3 py-1.5 transition">Regenerate</button>
+    <!-- The screen exists to approve something and send it, and offered
+         neither: the two buttons here were "← Back" and "Regenerate", the same
+         grey as each other, while Publish sat 225 lines down the right column —
+         below the fold on the window these mockups were drawn at. The publish
+         button is MOVED, not copied: its id drives its own label and disabled
+         state from four places in app.js, and a second one would look right and
+         quietly stop responding. -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-2xl font-semibold">Ready to post</h2>
+        <div id="editor-subline" class="text-sm mt-0.5" style="color:var(--muted)"></div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button data-action="show-step" data-arg="1" class="text-sm transition" style="color:var(--muted)">← Back</button>
+        <button data-action="generate-post" class="ce-btn-ghost px-4 py-2 text-sm">Regenerate</button>
+        <button id="publish-btn" data-action="publish-post" class="ce-btn px-5 py-2 text-base">📤 Publish now</button>
       </div>
     </div>
 
@@ -1308,13 +1389,11 @@
       </div>
     </div>
 
-    <!-- Output buttons -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-      <button data-action="export-post" class="ce-btn-ghost transition rounded-xl py-4 font-semibold flex items-center justify-center gap-2 text-lg shadow-lg">
+    <!-- Publishing moved to the header, where the decision is made. What is
+         left here is the one thing you go looking for after the fact. -->
+    <div class="pt-2">
+      <button data-action="export-post" class="ce-btn-ghost w-full transition rounded-xl py-3 font-semibold flex items-center justify-center gap-2 text-base">
         📦 Save ZIP to Downloads
-      </button>
-      <button id="publish-btn" data-action="publish-post" class="ce-btn transition rounded-xl py-4 font-semibold flex items-center justify-center gap-2 text-lg shadow-lg">
-        📤 Publish now
       </button>
     </div>
     </div><!-- /picture and what happens to it -->
@@ -1341,7 +1420,7 @@
         <h2 id="cal-title" class="text-lg font-semibold text-purple-300">Calendar</h2>
         <button data-action="cal-shift" data-arg="1" class="bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-1.5 text-sm">Next →</button>
       </div>
-      <div class="grid grid-cols-7 gap-1 text-center text-[11px] text-gray-500">
+      <div class="grid grid-cols-7 gap-1 text-center text-xs text-gray-500">
         <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
       </div>
       <div id="cal-grid" class="grid grid-cols-7 gap-1"></div>
@@ -1459,7 +1538,7 @@
           <div class="text-xs mb-2" style="color:var(--muted)">Live preview</div>
           <img id="brand-preview" alt="How a slide will look" width="216" height="270"
                class="rounded-xl border" style="border-color:var(--border);background:var(--panel2)" />
-          <div class="text-[10px] mt-1" style="color:var(--faint)">Updates when you save.</div>
+          <div class="text-xs mt-1" style="color:var(--faint)">Updates when you save.</div>
         </div>
         <div class="flex-1 min-w-[16rem]">
       <div class="flex flex-wrap gap-6">
@@ -1493,7 +1572,7 @@
         <label class="block text-sm text-gray-300">Brand logo</label>
         <div class="flex items-center gap-3">
           <!-- checkerboard so a transparent PNG reads clearly -->
-          <div id="logo-preview" class="w-16 h-16 rounded-lg border border-gray-700 flex items-center justify-center text-[10px] text-gray-600"
+          <div id="logo-preview" class="w-16 h-16 rounded-lg border border-gray-700 flex items-center justify-center text-xs text-gray-600"
             style="background-image:linear-gradient(45deg,#374151 25%,transparent 25%),linear-gradient(-45deg,#374151 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#374151 75%),linear-gradient(-45deg,transparent 75%,#374151 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;">none</div>
           <label class="ce-btn-ghost px-3 py-1.5 text-sm cursor-pointer">
             Upload logo
@@ -1609,7 +1688,7 @@
         <span>$</span>
         <input id="spend-alert" type="number" min="0" step="1" data-change="save-spend-alert"
                class="ce-input w-20 px-2 py-1 text-xs" />
-        <span class="w-full text-[10px]" style="color:var(--faint)">Colours the badge in the header. Nothing is blocked — your key, your call.</span>
+        <span class="w-full text-xs" style="color:var(--faint)">Colours the badge in the header. Nothing is blocked — your key, your call.</span>
       </div>
     </section>
 
@@ -1790,7 +1869,7 @@
              went out gets counted as one that did. -->
         <div id="feed-tabs" class="flex gap-1 mt-3">
           <button data-feed-tab="published" data-action="set-feed-tab" data-arg="published" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Published</button>
-          <button data-feed-tab="failed" data-action="set-feed-tab" data-arg="failed" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Failed<span id="feed-failed-count" class="hidden ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style="background:var(--danger-bg);color:var(--danger)"></span></button>
+          <button data-feed-tab="failed" data-action="set-feed-tab" data-arg="failed" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Failed<span id="feed-failed-count" class="hidden ml-1 text-xs font-semibold px-1.5 py-0.5 rounded-full" style="background:var(--danger-bg);color:var(--danger)"></span></button>
           <button data-feed-tab="drafts" data-action="set-feed-tab" data-arg="drafts" class="tab-btn px-3 py-1.5 rounded-lg text-sm">Drafts</button>
         </div>
         <div id="analytics-list" class="mt-4 space-y-2 text-sm text-gray-400">Loading…</div>
@@ -1917,7 +1996,7 @@
         <label class="block text-xs text-gray-400 mb-1">Search query</label>
         <input id="edit-search-query" type="text" placeholder="e.g. product photo, city skyline"
           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
-        <p class="text-[10px] text-gray-600 mt-1">Empty = reuse the original query, just pick a different photo.</p>
+        <p class="text-xs text-gray-600 mt-1">Empty = reuse the original query, just pick a different photo.</p>
       </div>
 
       <div id="edit-ai-fields" class="hidden">

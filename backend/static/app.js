@@ -810,12 +810,12 @@ function renderQueueWeek(groups) {
       const t = new Date(Math.min(...g.posts.map(p => +new Date(p.scheduled_at))))
         .toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
       return `<div class="ce-card px-2 py-1.5 cursor-pointer" data-action="open-post" data-arg="${esc(g.primary.id)}">
-        <div class="text-[10px]" style="color:var(--muted)">${queueDot(groupStatus(g.posts))} ${esc(t)} ${netBadges(g.posts)}</div>
+        <div class="text-xs" style="color:var(--muted)">${queueDot(groupStatus(g.posts))} ${esc(t)} ${netBadges(g.posts)}</div>
         <div class="text-xs truncate">${esc(g.primary.topic || 'post')}</div>
       </div>`;
     }).join('');
     return `<div data-weekday="${i}" class="rounded-xl p-2 space-y-1.5" style="background:var(--panel2)">
-      <div class="text-[10px] font-semibold" style="color:var(--muted)">${name} ${day.getDate()}</div>
+      <div class="text-xs font-semibold" style="color:var(--muted)">${name} ${day.getDate()}</div>
       ${items}
     </div>`;
   }).join('');
@@ -1020,7 +1020,7 @@ function renderJournalRow(a) {
 function _saStat(label, val) {
   return `<div class="bg-gray-900 rounded-lg px-2 py-2 text-center">
     <div class="text-base font-semibold">${esc(String(val))}</div>
-    <div class="text-[10px] text-gray-400 uppercase tracking-wide">${esc(label)}</div>
+    <div class="text-xs text-gray-400 uppercase tracking-wide">${esc(label)}</div>
   </div>`;
 }
 
@@ -1052,7 +1052,7 @@ function renderSourceAnalyticsRow(s, i) {
   const worthyPct = Math.min(100, Math.round((s.worthy_rate || 0) * 100));
   const approvePct = Math.min(100, Math.round((s.approve_rate || 0) * 100));
   const last = s.last_lead_at ? new Date(s.last_lead_at).toLocaleDateString() : '—';
-  const cell = (v, l) => `<div><div class="text-sm font-semibold">${esc(String(v || 0))}</div><div class="text-[10px] text-gray-400">${l}</div></div>`;
+  const cell = (v, l) => `<div><div class="text-sm font-semibold">${esc(String(v || 0))}</div><div class="text-xs text-gray-400">${l}</div></div>`;
   const bar = (label, pct, color) => `<div class="mt-1 flex items-center gap-2 text-xs text-gray-400">
       <span class="w-20">${label} ${pct}%</span>
       <div class="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden"><div class="h-full ${color}" style="width:${pct}%"></div></div>
@@ -1061,7 +1061,7 @@ function renderSourceAnalyticsRow(s, i) {
     <div class="flex items-center gap-2 flex-wrap">
       <span class="text-xs text-gray-500">#${i + 1}</span>
       <a href="${safeUrl(s.url)}" target="_blank" rel="noopener noreferrer" class="text-sm underline truncate max-w-[60%]" style="color:var(--accent)">${esc(host)}</a>
-      <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">${esc(s.kind || '')}</span>
+      <span class="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">${esc(s.kind || '')}</span>
       <span class="text-xs text-gray-500 ml-auto">last lead ${esc(last)}</span>
     </div>
     <div class="mt-2 grid grid-cols-5 gap-2 text-center">
@@ -2080,23 +2080,29 @@ function goHome() {
 }
 
 // ===== TOGGLE BUTTON GROUPS =====
+/** Choose-one rows: format, image source, and the four inside Configure.
+ *
+ *  One class, `.seg-active`, toggled on one element. What was here before
+ *  appended six Tailwind utilities to every button at start-up and then swapped
+ *  six more on each click by running a REGULAR EXPRESSION over `className` —
+ *  the same mechanism phase 10 replaced for the landing's tabs, and the note
+ *  beside `.lt-btn` explains the cost: six chances to disagree with the theme,
+ *  in a file whose whole point is that colour lives in one place. The regex was
+ *  a second cost nobody had paid yet: any future class containing the substring
+ *  `bg-gray-800` would have been silently amputated.
+ *
+ *  The selected state is now a solid fill. It was `bg-purple-900`, which this
+ *  file maps to `--accent-dim` — six per cent black on a white panel. */
 function initToggleGroup(selector, stateKey, defaultVal, onChange) {
-  document.querySelectorAll(selector).forEach(btn => {
-    const val = btn.dataset.val;
-    btn.className += ' px-3 py-2 rounded-xl text-sm font-medium border-2 transition ';
-    if (val === defaultVal) btn.classList.add('border-purple-500','bg-purple-900','text-white');
-    else btn.classList.add('border-gray-700','bg-gray-800','text-gray-300');
-
+  const buttons = [...document.querySelectorAll(selector)];
+  buttons.forEach(btn => {
+    btn.classList.add('seg-btn');
+    btn.classList.toggle('seg-active', btn.dataset.val === defaultVal);
     btn.addEventListener('click', () => {
       if (btn.disabled) return;
-      document.querySelectorAll(selector).forEach(b => {
-        b.className = b.className.replace(/border-purple-500|bg-purple-900|text-white|border-gray-700|bg-gray-800|text-gray-300/g,'');
-        b.classList.add('border-gray-700','bg-gray-800','text-gray-300');
-      });
-      btn.className = btn.className.replace(/border-gray-700|bg-gray-800|text-gray-300/g,'');
-      btn.classList.add('border-purple-500','bg-purple-900','text-white');
-      S[stateKey] = val;
-      if (onChange) onChange(val);
+      buttons.forEach(b => b.classList.toggle('seg-active', b === btn));
+      S[stateKey] = btn.dataset.val;
+      if (onChange) onChange(btn.dataset.val);
     });
   });
   S[stateKey] = defaultVal;
@@ -2192,7 +2198,7 @@ function renderOwnPhotos() {
     img.alt = `Photo ${i + 1}`;
     cell.appendChild(img);
     const badge = document.createElement('span');
-    badge.className = 'absolute top-1 left-1 bg-black/70 text-[10px] px-1.5 rounded-full';
+    badge.className = 'absolute top-1 left-1 bg-black/70 text-xs px-1.5 rounded-full';
     badge.textContent = i + 1;
     cell.appendChild(badge);
     const del = document.createElement('button');
@@ -2552,7 +2558,11 @@ function renderPreview(post) {
   container.innerHTML = '';
   post.slides.forEach(slide => {
     const portrait = (slide.height || 1080) > (slide.width || 1080);
-    const imgCls = portrait ? 'slide-img w-56 h-72 object-contain bg-black' : 'slide-img w-64 h-64 object-cover';
+    // Bigger than it was. The slide is what the product makes and what this
+    // screen exists to judge, and it rendered at 224px — smaller than the block
+    // of hashtags beside it. The container scrolls sideways on its own, so a
+    // wider picture cannot push the page out.
+    const imgCls = portrait ? 'slide-img w-72 h-96 object-contain bg-black' : 'slide-img w-80 h-80 object-cover';
     const wrapper = document.createElement('div');
     wrapper.className = 'flex-shrink-0 snap-start space-y-2';
     const isFirst = slide.slide_number === 1;
@@ -2573,27 +2583,27 @@ function renderPreview(post) {
       </div>
       <div class="bg-gray-800 border border-gray-700 rounded-lg p-2 space-y-1 w-56 sm:w-64" data-slide-edit="${slide.slide_number}">
         ${isFirst ? `
-          <label class="block text-[10px] text-gray-500 uppercase tracking-wider">Niche</label>
+          <label class="block text-xs text-gray-500 uppercase tracking-wider">Niche</label>
           <input type="text" data-slide-niche="${slide.slide_number}" value="${nicheVal}"
             class="overlay-input w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
             placeholder="Your niche" ${editable ? '' : 'disabled'} />
         ` : ''}
-        <label class="block text-[10px] text-gray-500 uppercase tracking-wider">Overlay</label>
+        <label class="block text-xs text-gray-500 uppercase tracking-wider">Overlay</label>
         <textarea data-slide-overlay="${slide.slide_number}" rows="2"
           class="overlay-input w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
           placeholder="Short sentence." ${editable ? '' : 'disabled'}>${overlayVal}</textarea>
         <div class="flex gap-1 pt-1">
           <button data-action="apply-overlay" data-arg="${slide.slide_number}" ${editable ? '' : 'disabled'}
-            class="flex-1 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed transition rounded px-2 py-1 text-[11px] font-semibold">
+            class="flex-1 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed transition rounded px-2 py-1 text-xs font-semibold">
             ✓ Apply
           </button>
           <button data-action="reset-overlay" data-arg="${slide.slide_number}" ${editable ? '' : 'disabled'}
             title="Restore to LLM-generated text"
-            class="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition rounded px-2 py-1 text-[11px]">
+            class="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed transition rounded px-2 py-1 text-xs">
             Reset
           </button>
         </div>
-        ${editable ? '' : '<p class="text-[10px] text-gray-600">Replace this slide first to enable in-place editing.</p>'}
+        ${editable ? '' : '<p class="text-xs text-gray-600">Replace this slide first to enable in-place editing.</p>'}
       </div>
     `;
     // Closure, not an attribute. This used to serialise a JSON string into an
@@ -2853,7 +2863,7 @@ function buildEmojiPicker() {
   html += '<summary class="cursor-pointer text-xs text-gray-400 px-3 py-2">😀 Emoji picker (click a field, then a symbol)</summary>';
   html += '<div class="p-2 space-y-1">';
   for (const [cat, list] of Object.entries(EMOJI_POOL)) {
-    html += `<div class="flex flex-wrap gap-1 items-center"><span class="text-[10px] text-gray-500 w-20">${cat}</span>`;
+    html += `<div class="flex flex-wrap gap-1 items-center"><span class="text-xs text-gray-500 w-20">${cat}</span>`;
     for (const e of list) {
       html += `<button type="button" data-keep-focus data-action="insert-emoji" data-arg="${e}"
         class="text-base hover:bg-gray-700 rounded px-1.5 py-0.5 transition" title="${e}">${e}</button>`;
@@ -3033,9 +3043,20 @@ function renderHashtags() {
   c.innerHTML = '';
   S.hashtags.forEach((tag, i) => {
     const chip = document.createElement('span');
-    chip.className = 'inline-flex items-center gap-1 border text-xs px-2 py-1 rounded-full ' +
-      'bg-purple-900 border-purple-700 text-purple-200';
-    chip.innerHTML = `${tag} <button data-action="remove-hashtag" data-arg="${i}" class="hover:text-white ml-1 text-xs opacity-70">×</button>`;
+    // Neutral, and from the theme's own tokens. These were `bg-purple-900
+    // border-purple-700 text-purple-200` — fourteen of them, four rows deep,
+    // the most saturated block on a screen whose subject is the picture. And
+    // `border-purple-700` is one of the few stock purples this file does not
+    // remap, so it answered to neither theme.
+    chip.className = 'inline-flex items-center gap-1 border text-sm px-2.5 py-1 rounded-full';
+    chip.style.background = 'var(--panel2)';
+    chip.style.borderColor = 'var(--border)';
+    chip.style.color = 'var(--muted)';
+    // `esc` for the same reason every neighbouring template uses it: a hashtag
+    // is model output, and the slide renderer's own note spells out where an
+    // injected `<img onerror>` ends up when the session token is in
+    // localStorage. This line was the one that interpolated raw.
+    chip.innerHTML = `${esc(tag)} <button data-action="remove-hashtag" data-arg="${i}" class="ml-1 text-sm opacity-70 hover:opacity-100">×</button>`;
     c.appendChild(chip);
   });
 }
@@ -3243,6 +3264,25 @@ function updatePostEditorChrome() {
   updateCaptionCount();
   updateMakeReelButton();
   updateReelPublishButton();
+  updateEditorSubline();
+}
+
+/** What this post is, in words, under the heading.
+ *
+ *  The heading used to be "Preview & Edit" and said nothing about the thing on
+ *  screen. Everything here is already known to the post — network, tone and how
+ *  many slides — and was otherwise only readable by counting thumbnails. */
+function updateEditorSubline() {
+  const el = document.getElementById('editor-subline');
+  if (!el) return;
+  const post = S.post || {};
+  const slides = (post.slides || []).length;
+  const parts = [
+    postPlatform() === 'x' ? 'X' : 'Instagram',
+    post.tone ? `${post.tone} voice` : '',
+    slides ? `${slides} slide${slides === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  el.textContent = parts.join(' · ');
 }
 
 // "Reel" is Instagram's word. The same render is just a video on X, so the
@@ -3764,7 +3804,7 @@ function netBadges(posts) {
 
 function netBadge(p) {
   const x = (p.platform || 'instagram') === 'x';
-  return `<span title="${x ? 'X' : 'Instagram'}" class="text-[10px]">${x ? '𝕏' : '📸'}</span>`;
+  return `<span title="${x ? 'X' : 'Instagram'}" class="text-xs">${x ? '𝕏' : '📸'}</span>`;
 }
 
 async function renderCalendar() {
@@ -3802,13 +3842,13 @@ async function renderCalendar() {
   for (let day = 1; day <= daysInMonth; day++) {
     const cell = document.createElement('div');
     cell.className = 'min-h-[64px] bg-gray-800 rounded-lg p-1 text-left';
-    let html = `<div class="text-[10px] text-gray-500">${day}</div>`;
+    let html = `<div class="text-xs text-gray-500">${day}</div>`;
     // Grouped WITHIN the day, never across the month: siblings schedule
     // independently, so one idea can legitimately sit on two dates and a
     // group-level date would have to be invented — and be wrong on one of them.
     groupPosts(byDay[day] || []).forEach(g => {
       const st = groupStatus(g.posts);
-      html += `<div data-cal-entry class="text-[10px] truncate cursor-pointer hover:text-purple-300" data-action="open-post" data-arg="${g.primary.id}">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
+      html += `<div data-cal-entry class="text-xs truncate cursor-pointer hover:text-purple-300" data-action="open-post" data-arg="${g.primary.id}">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
     });
     cell.innerHTML = html;
     grid.appendChild(cell);
@@ -3948,8 +3988,8 @@ function renderPlan() {
     el.className = 'flex items-center gap-2 bg-gray-800 rounded-lg px-2 py-1.5';
     const mark = row.status === 'done' ? '✅' : row.status === 'failed' ? '⚠️' : '';
     el.innerHTML = `
-      <span class="text-[10px] text-purple-300 whitespace-nowrap">${esc(row.pillar_label || row.pillar)}</span>
-      <span class="text-[10px] text-gray-500 whitespace-nowrap">${esc(row.date)}</span>
+      <span class="text-xs text-purple-300 whitespace-nowrap">${esc(row.pillar_label || row.pillar)}</span>
+      <span class="text-xs text-gray-500 whitespace-nowrap">${esc(row.date)}</span>
       <input value="${esc(row.topic)}" aria-label="Topic ${i + 1}"
         class="flex-1 bg-transparent text-sm text-white focus:outline-none min-w-0" />
       <span class="text-xs w-4 text-center">${mark}</span>
@@ -4428,9 +4468,9 @@ async function loadInsights() {
     const d = await res.json();
 
     const tile = (label, value, note) => `<div class="ce-card p-3">
-      <div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">${esc(label)}</div>
+      <div class="text-xs uppercase tracking-wide" style="color:var(--muted)">${esc(label)}</div>
       <div class="text-xl font-semibold mt-0.5">${esc(value)}</div>
-      <div class="text-[10px] mt-0.5" style="color:var(--faint)">${note || ''}</div>
+      <div class="text-xs mt-0.5" style="color:var(--faint)">${note || ''}</div>
     </div>`;
     const trend = t => t.delta_pct === null || t.delta_pct === undefined
       ? 'no earlier period to compare with'
@@ -5172,7 +5212,7 @@ function renderGroundingChip() {
   if (!chip) return;
   const ours = onOurKey();
   chip.disabled = ours;
-  chip.classList.toggle('src-active', !ours && S.grounding);
+  chip.classList.toggle('ground-on', !ours && S.grounding);
   chip.textContent = ours
     ? 'Web search — on your own key'
     : (S.grounding ? 'Web search on' : 'Web search off');
@@ -5229,11 +5269,16 @@ async function loadRecentDrafts() {
   card.classList.toggle('hidden', !rows.length);
   if (!rows.length) return;
   box.innerHTML = '';
-  rows.forEach(p => {
+  rows.forEach((p, i) => {
     const row = document.createElement('button');
-    row.className = 'ce-card w-full text-left px-3 py-2 hover:opacity-90';
-    row.innerHTML = `<div class="text-sm font-medium">${esc(p.topic || 'Untitled')}</div>`
-      + `<div class="text-xs mt-0.5" style="color:var(--muted)">${netBadge(p)} · ${esc(p.status || 'draft')}</div>`;
+    // Not a card. This list sat inside the card, which sits inside the form
+    // panel — three frames of the same 1px in the same colour, and a border
+    // that is everywhere separates nothing. Rows are told apart by a rule
+    // between them and by space, and the frame is spent once, on the group.
+    row.className = 'w-full text-left px-1 py-2.5 hover:opacity-70 transition';
+    if (i) { row.style.borderTop = '1px solid var(--border)'; }
+    row.innerHTML = `<div class="text-base font-medium">${esc(p.topic || 'Untitled')}</div>`
+      + `<div class="text-sm mt-0.5" style="color:var(--muted)">${netBadge(p)} · ${esc(p.status || 'draft')}</div>`;
     row.onclick = () => openPost(p.id);
     box.appendChild(row);
   });
@@ -5601,11 +5646,11 @@ function renderSpend(d) {
   const alert = document.getElementById('spend-alert');
   if (alert && !alert.value) alert.value = localStorage.getItem('cost_limit') || '5';
   const head = `<div class="flex flex-wrap gap-5">
-      <div><div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">Today</div>
+      <div><div class="text-xs uppercase tracking-wide" style="color:var(--muted)">Today</div>
         <div class="text-lg font-semibold">$${(d.today?.cost || 0).toFixed(2)}</div></div>
-      <div><div class="text-[10px] uppercase tracking-wide" style="color:var(--muted)">This month</div>
+      <div><div class="text-xs uppercase tracking-wide" style="color:var(--muted)">This month</div>
         <div class="text-lg font-semibold">$${(d.month?.cost || 0).toFixed(2)}</div>
-        <div class="text-[10px]" style="color:var(--faint)">${d.month?.calls || 0} calls</div></div>
+        <div class="text-xs" style="color:var(--faint)">${d.month?.calls || 0} calls</div></div>
     </div>`;
   if (!rows.length) {
     box.innerHTML = head + '<div class="text-xs mt-3" style="color:var(--faint)">'
@@ -5621,7 +5666,7 @@ function renderSpend(d) {
       </div>
       <div class="text-xs font-mono">$${m.cost.toFixed(2)}</div>
     </div>`).join('') + '</div>'
-    + `<div class="text-[10px] mt-2" style="color:var(--faint)">Totals $${total.toFixed(2)} across ${rows.length} model(s). Costs for providers other than OpenRouter are estimates, not vendor invoices.</div>`;
+    + `<div class="text-xs mt-2" style="color:var(--faint)">Totals $${total.toFixed(2)} across ${rows.length} model(s). Costs for providers other than OpenRouter are estimates, not vendor invoices.</div>`;
 }
 
 /** The number that colours the badge. Not a cap — see the note in the markup. */
