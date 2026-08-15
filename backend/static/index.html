@@ -253,7 +253,11 @@
            that as the problem. -->
       <div class="relative">
         <button id="avatar-btn" data-action="toggle-avatar-menu" class="ce-card px-3 py-1 text-xs flex items-center gap-2" title="Account" aria-haspopup="true" aria-expanded="false">
-          <span id="avatar-initial" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold" style="background:var(--accent);color:var(--on-accent)">?</span>
+          <!-- Quieter. Filled with solid ink this was the heaviest painted
+               shape on every screen, and what it marks is "your account" — the
+               one thing nobody is looking for. The fill stays, at the weight
+               the nav families use for "you are here". -->
+          <span id="avatar-initial" class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold" style="background:var(--accent-dim);color:var(--text)">·</span>
           <span id="user-chip" class="hidden sm:inline text-gray-300"></span>
         </button>
         <div id="avatar-menu" class="hidden absolute right-0 mt-2 w-64 ce-card p-2 space-y-1 z-40 shadow-2xl">
@@ -751,7 +755,13 @@
     <div id="shell-brand" class="hidden ce-card p-2">
       <div class="text-xs uppercase tracking-wide px-1 pb-1" style="color:var(--faint)">Brand</div>
       <select id="brand-switcher" data-change="on-acct-switch" class="ce-input w-full px-2 py-1.5 text-xs" title="Active brand"></select>
-      <button data-action="menu-brands" class="ce-btn-ghost w-full text-left px-2 py-1 text-xs mt-1">Manage brands…</button>
+      <!-- A link, not a button. `ce-btn-ghost` full-width made this the loudest
+           thing in the rail — the shape the product uses for a primary action,
+           spent on a route into a settings dialog, directly above the six
+           destinations it competes with. Navigation should be the only thing in
+           this column that looks like navigation. -->
+      <button data-action="menu-brands" class="w-full text-left px-1 pt-1.5 text-sm hover:underline"
+              style="color:var(--muted)">Manage brands…</button>
     </div>
 
     <nav id="shell-nav" class="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
@@ -1183,9 +1193,6 @@
     <div class="grid lg:grid-cols-12 gap-6 items-start">
     <div class="lg:col-span-7 space-y-6">
 
-    <!-- Emoji picker (vertical-stacked above caption — works on any focused text field) -->
-    <div id="emoji-picker-host"></div>
-
     <!-- Thread editor — replaces the single caption box when the post is a thread -->
     <div id="thread-editor" class="hidden">
       <div class="flex items-center justify-between mb-2">
@@ -1209,8 +1216,14 @@
       <!-- Rewriting along an axis, rather than asking for four more of the
            same. Named axes, not a text box: the value reaches our prompt, and
            on the free tier that prompt runs on our key. -->
+      <!-- Under the caption box, not above it. This was the widest thing on the
+           editor's first screen, a full-width bar reading "😀 Emoji picker
+           (click a field, then a symbol)" sitting between the heading and the
+           words — the most prominent slot in the column, given to a helper. -->
+      <div id="emoji-picker-host" class="mt-2"></div>
+
       <div id="rewrite-axes" class="flex flex-wrap gap-2 mt-2">
-        <span id="rewrite-axes-label" class="text-xs self-center" style="color:var(--muted)">Rewrite:</span>
+        <span id="rewrite-axes-label" class="text-sm self-center" style="color:var(--muted)">Rewrite:</span>
         <button data-action="rewrite-caption" data-arg="shorter" class="ce-btn-ghost px-3 py-1 text-xs">Shorter</button>
         <button data-action="rewrite-caption" data-arg="warmer" class="ce-btn-ghost px-3 py-1 text-xs">Warmer</button>
         <button data-action="rewrite-caption" data-arg="less_salesy" class="ce-btn-ghost px-3 py-1 text-xs">Less salesy</button>

@@ -117,6 +117,25 @@ def test_an_account_with_no_allowance_is_not_shown_one(page, signed_in):
     expect(page.locator("#shell-meter")).to_be_hidden()
 
 
+def test_the_avatar_shows_who_is_signed_in(page, signed_in):
+    """Found by looking at the header and then grepping for the id.
+
+    `#avatar-initial` shipped with a hardcoded "?" and no code anywhere wrote to
+    it — so every signed-in account, with its email two centimetres to the
+    right, was shown a question mark inside the most heavily painted shape on
+    the page. It read as a help button. There is no help button.
+    """
+    signed_in()
+
+    initial = page.locator("#avatar-initial")
+    expect(initial).to_be_visible()
+    expect(initial).not_to_have_text("?")
+    # Whatever the fixture's account is, the badge and the chip agree.
+    email = page.locator("#user-chip").inner_text().strip()
+    assert email, "fixture problem: no email on the chip to compare against"
+    assert initial.inner_text().strip().upper() == email[0].upper()
+
+
 # ── the brand preview (UX phase 11.8) ───────────────────────────────────────
 
 def test_the_brand_kit_shows_a_real_slide(page, signed_in):

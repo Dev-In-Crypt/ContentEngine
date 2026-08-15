@@ -1514,8 +1514,17 @@ function renderUserChrome() {
     prod.classList.toggle('hidden', !cloud);
     prod.value = business ? 'business' : 'creator';
   }
-  chip.textContent = cloud ? ('👤 ' + (S.user.email || '')) : '';
+  chip.textContent = cloud ? (S.user.email || '') : '';
   chip.classList.toggle('hidden', !cloud);
+  // The avatar. Nothing in the app had ever written to this element — it was
+  // markup with a hardcoded "?" in it, so a signed-in account with a known
+  // email was shown a permanent question mark, in the heaviest shape on the
+  // page. It read as a help button; there is no help button.
+  const initial = document.getElementById('avatar-initial');
+  if (initial) {
+    const who = (S.user && S.user.email) || '';
+    initial.textContent = cloud && who ? who.trim().charAt(0).toUpperCase() : '·';
+  }
   logout.classList.toggle('hidden', !cloud);
   // API-keys page: cloud only (local desktop uses .env). Backup: admin/local only.
   const keys = document.getElementById('keys-section');
@@ -2860,7 +2869,7 @@ function buildEmojiPicker() {
   if (!host || host.dataset.built === '1') return;
   host.dataset.built = '1';
   let html = '<details class="bg-gray-800 border border-gray-700 rounded-xl">';
-  html += '<summary class="cursor-pointer text-xs text-gray-400 px-3 py-2">😀 Emoji picker (click a field, then a symbol)</summary>';
+  html += '<summary class="cursor-pointer text-sm text-gray-400 px-3 py-2">Add an emoji</summary>';
   html += '<div class="p-2 space-y-1">';
   for (const [cat, list] of Object.entries(EMOJI_POOL)) {
     html += `<div class="flex flex-wrap gap-1 items-center"><span class="text-xs text-gray-500 w-20">${cat}</span>`;
@@ -5278,7 +5287,11 @@ async function loadRecentDrafts() {
     row.className = 'w-full text-left px-1 py-2.5 hover:opacity-70 transition';
     if (i) { row.style.borderTop = '1px solid var(--border)'; }
     row.innerHTML = `<div class="text-base font-medium">${esc(p.topic || 'Untitled')}</div>`
-      + `<div class="text-sm mt-0.5" style="color:var(--muted)">${netBadge(p)} · ${esc(p.status || 'draft')}</div>`;
+      // The network in words. `netBadge` renders a camera or an 𝕏, which is
+      // right in a dense list where the column is the label; here it is a
+      // sentence, and a glyph in a sentence reads as a missing font.
+      + `<div class="text-sm mt-0.5" style="color:var(--muted)">`
+      + `${p.platform === 'x' ? 'X' : 'Instagram'} · ${esc(p.status || 'draft')}</div>`;
     row.onclick = () => openPost(p.id);
     box.appendChild(row);
   });
@@ -6404,13 +6417,16 @@ function updateConfigureSummary() {
   if (!el) return;
   const val = id => (document.getElementById(id) || {}).value || '';
   const tone = document.getElementById('tone');
+  // Words. This read "\u2699 \ud83d\udcf8 Instagram \u00b7 Baking \u00b7 Professional" \u2014 a gear, a
+  // camera and a middle dot doing the work a label should do, which on screen
+  // looks like debug output rather than a summary of your settings.
   const parts = [
-    (S.platform === 'x') ? '\ud835\udd4f X' : '\ud83d\udcf8 Instagram',
+    (S.platform === 'x') ? 'X' : 'Instagram',
     val('niche'),
     val('audience'),
     tone && tone.selectedIndex >= 0 ? tone.options[tone.selectedIndex].text : '',
   ].filter(Boolean);
-  el.textContent = '\u2699 ' + parts.join(' \u00b7 ');
+  el.textContent = 'Settings \u2014 ' + parts.join(' \u00b7 ');
 }
 
 function prefillComposerFromProfile() {
