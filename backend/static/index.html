@@ -351,11 +351,18 @@
            and then cropped to fit, it lost about a fifth of its width off the
            sides, which is exactly where the brand engine puts the headline: live
            on prod the landing read "hy do B2B SaaS demos fail?". -->
-      <img id="hero-image" alt="Generated post" class="hidden w-full sm:w-56 self-start rounded-xl" />
+      <img id="hero-image" alt="Generated post" class="hidden w-full sm:w-72 self-start rounded-xl" />
       <div class="mt-4 sm:mt-0 flex-1">
-        <div id="hero-hook" class="font-semibold"></div>
-        <div id="hero-caption" class="mt-2 text-sm whitespace-pre-line text-gray-300"></div>
+        <div id="hero-hook" class="text-lg font-semibold"></div>
+        <div id="hero-caption" class="mt-2 text-base whitespace-pre-line text-gray-300"></div>
         <div id="hero-hashtags" class="mt-2 text-sm" style="color:var(--accent)"></div>
+        <!-- What just came back, counted. Competitors fill this part of the page
+             with a customer count and a star rating; we have neither, and the
+             thing we do have — a finished post, made for a stranger, before any
+             account — was sitting here unlabelled and reading as decoration.
+             Every number in this line is in the response or in the engine, so
+             it stays true without anybody maintaining it. -->
+        <div id="hero-facts" class="hidden mt-3 text-sm" style="color:var(--faint)"></div>
         <div class="mt-4 flex flex-wrap gap-2">
           <button id="hero-download" data-action="download-hero-image" class="ce-btn-ghost text-sm">Download the picture</button>
           <button data-action="reset-hero" class="ce-btn-ghost text-sm">Try another</button>

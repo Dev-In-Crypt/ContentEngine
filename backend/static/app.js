@@ -341,7 +341,29 @@ function renderHeroPost(post) {
     img.classList.add('hidden');
   }
   document.getElementById('hero-download').classList.toggle('hidden', !img.src);
+  renderHeroFacts(post, !!img.src);
   document.getElementById('hero-result').classList.remove('hidden');
+}
+
+/** What came back, counted rather than praised.
+ *
+ *  Read off the response, not written by hand: the hashtag count is the array's
+ *  length and the size is what the brand engine renders at, so neither can drift
+ *  into a claim. Nothing here is about anybody else — the four competitors fill
+ *  this spot with a user count and a rating, and this product has no customers
+ *  to count. See tests/e2e/test_landing_honesty_e2e.py. */
+function renderHeroFacts(post, hasImage) {
+  const el = document.getElementById('hero-facts');
+  if (!el) return;
+  const tags = (post.hashtags || []).length;
+  const parts = [
+    hasImage ? 'a 1080×1350 slide in your colours' : null,
+    tags ? `${tags} hashtag${tags === 1 ? '' : 's'}` : null,
+    'a caption and a hook',
+  ].filter(Boolean);
+  el.textContent = 'Just made for you, by this page: ' + parts.join(' · ')
+    + '. No account, no key.';
+  el.classList.remove('hidden');
 }
 
 //: Where the last landing post waits for an account. The server keeps nothing,

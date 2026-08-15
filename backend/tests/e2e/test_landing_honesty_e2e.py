@@ -88,6 +88,37 @@ def test_the_landing_claims_no_customers_it_does_not_have(page, live_server):
         "\n".join(f"  {frag!r} — {why}" for frag, why in found)
 
 
+def test_the_result_says_what_it_is(page, live_server):
+    """The page's one real advantage, made legible.
+
+    Every competitor shows a screenshot of their own interface. This page hands
+    a stranger a finished post — and said nothing about it, so the strongest
+    thing on the site read as a decorative preview. The line under it counts
+    what actually came back: no adjectives, nothing about other people, only
+    what is in the response and therefore checkable.
+
+    It must not be there before a run. A page that says "14 hashtags, 1080×1350"
+    over an empty box is describing something that has not happened.
+    """
+    from tests.e2e import test_landing_e2e as L
+
+    page.route("**/api/demo/post", lambda r: r.fulfill(
+        status=200, content_type="text/event-stream",
+        body=L._sse({"type": "complete", "post": L._post(
+            hashtags=["#a", "#b", "#c", "#d", "#e"])})))
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+    expect(page.locator("#hero-facts")).to_be_hidden()
+
+    page.locator("#hero-input").fill("Sourdough starters")
+    page.locator("#hero-run").click()
+
+    facts = page.locator("#hero-facts")
+    expect(facts).to_be_visible()
+    expect(facts).to_contain_text("5")          # the hashtags actually returned
+    expect(facts).to_contain_text("1080")       # the size the engine renders at
+
+
 def test_the_landing_fits_a_phone(page, live_server):
     """The signed-in shell is measured at 390px by test_narrow_e2e; the landing
     is the half of the product a stranger sees first and had no such guard. A
