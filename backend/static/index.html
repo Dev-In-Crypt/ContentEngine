@@ -774,6 +774,23 @@
     </div>
   </section>
 
+  <!-- The other door, offered rather than hidden behind a tab nobody scrolls
+       back up to. It switches the tab in place — there is no /business page and
+       inventing a link to one would be the same broken promise the footer
+       already refuses to make. Kept to two sentences: this is a signpost for
+       the minority who came to the wrong half of the page, not a second pitch
+       competing with the one above it. -->
+  <section class="mk-wrap py-12">
+    <div class="rounded-2xl p-8 md:flex md:items-center md:justify-between gap-8" style="background:var(--panel);border:1px solid var(--border)">
+      <div class="mk-copy">
+        <div class="text-xl font-semibold">Posting for a company, not yourself?</div>
+        <p class="mt-2 text-base" style="color:var(--muted)">There is a second half of this product that watches public sources you name, drafts from what they publish, and holds every draft for a person to approve.</p>
+      </div>
+      <button data-action="set-landing-tab" data-arg="business"
+              class="ce-btn-ghost text-base px-6 py-3 mt-5 md:mt-0 shrink-0">See the business side</button>
+    </div>
+  </section>
+
   <!-- CTA -->
   <section class="max-w-5xl mx-auto px-6 py-16 text-center">
     <h2 class="text-2xl sm:text-3xl font-bold">Start creating in minutes.</h2>
@@ -953,36 +970,36 @@
        LinkedIn is listed where it belongs. The product generates for it and
        refuses to publish to it — a gate in posts.py that answers twice, at
        publish and at schedule — so it is not in the publish row. -->
-  <section class="max-w-5xl mx-auto px-6 py-12">
+  <section class="mk-wrap py-16">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WORKS WITH</div>
     <div class="mt-8 grid sm:grid-cols-3 gap-8 text-sm">
       <div>
         <div class="font-semibold mb-2">Publishes to</div>
-        <div class="flex flex-wrap gap-2">
-          <span data-compat="publish" class="ce-card px-3 py-1.5">instagram</span>
-          <span data-compat="publish" class="ce-card px-3 py-1.5">x</span>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <span data-compat="publish" class="text-base">instagram</span>
+          <span data-compat="publish" class="text-base">x</span>
         </div>
         <div class="text-gray-400 mt-2">LinkedIn can be written for, but not published to — export or copy it.</div>
       </div>
       <div>
         <div class="font-semibold mb-2">Runs on your key from</div>
-        <div class="flex flex-wrap gap-2">
-          <span data-compat="model" class="ce-card px-3 py-1.5">OpenRouter</span>
-          <span data-compat="model" class="ce-card px-3 py-1.5">OpenAI</span>
-          <span data-compat="model" class="ce-card px-3 py-1.5">Anthropic</span>
-          <span data-compat="model" class="ce-card px-3 py-1.5">Google Gemini</span>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <span data-compat="model" class="text-base">OpenRouter</span>
+          <span data-compat="model" class="text-base">OpenAI</span>
+          <span data-compat="model" class="text-base">Anthropic</span>
+          <span data-compat="model" class="text-base">Google Gemini</span>
         </div>
         <div class="text-gray-400 mt-2">One of them is enough. Anthropic writes but does not draw.</div>
       </div>
       <div>
         <div class="font-semibold mb-2">And, if you want them</div>
-        <div class="flex flex-wrap gap-2">
-          <span class="ce-card px-3 py-1.5">Unsplash</span>
-          <span class="ce-card px-3 py-1.5">Pexels</span>
-          <span class="ce-card px-3 py-1.5">ElevenLabs</span>
-          <span class="ce-card px-3 py-1.5">Kling</span>
-          <span class="ce-card px-3 py-1.5">Canva</span>
-          <span class="ce-card px-3 py-1.5">imgbb</span>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <span class="text-base">Unsplash</span>
+          <span class="text-base">Pexels</span>
+          <span class="text-base">ElevenLabs</span>
+          <span class="text-base">Kling</span>
+          <span class="text-base">Canva</span>
+          <span class="text-base">imgbb</span>
         </div>
         <div class="text-gray-400 mt-2">Stock photos, voice-over, generated video, templates, and image hosting for Instagram. All optional.</div>
       </div>
@@ -1001,12 +1018,18 @@
        are reseller figures that drift and must be re-verified "before this
        ships anywhere a user makes a spending decision from it". A home page is
        that place; there is a test for it. -->
-  <section class="max-w-5xl mx-auto px-6 py-14">
+  <section class="mk-wrap py-16">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT THIS COSTS</div>
     <div class="mt-8 grid md:grid-cols-3 gap-8 text-sm">
       <div>
-        <div class="text-base font-semibold mb-1">Nothing, to us</div>
-        <p class="text-gray-400">There is no plan and no checkout in this product — not hidden, not later. Two posts run on our key before you are asked for anything.</p>
+        <!-- "Not later" used to be in this sentence and had to go. Paid plans
+             are on the roadmap, and the most memorable line on the page must
+             not be the one taken back from exactly the people it brought here.
+             What is said instead is what is true and will stay true: there is
+             nothing to pay today, and running on your own key remains a way to
+             use this rather than a stage you graduate out of. -->
+        <div class="text-base font-semibold mb-1">Nothing, to us, today</div>
+        <p class="text-gray-400">There is no plan and no checkout in this product: two posts run on our key, and after that it runs on yours. Should paid plans arrive, bringing your own key stays one of the ways to use it — the product is built that way, not persuaded into it.</p>
       </div>
       <div>
         <div class="text-base font-semibold mb-1">You pay the model vendor</div>
@@ -1026,9 +1049,10 @@
        ending on a table rather than on an offer. This is the ask, once, at the
        actual bottom; the door-specific ones stay where they are because each
        makes its own promise in its own words. -->
-  <section class="max-w-5xl mx-auto px-6 pb-16 text-center">
-    <p class="text-base" style="color:var(--muted)">Two posts before you are asked for anything.</p>
-    <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-sm mt-4">Start free →</button>
+  <section class="mk-wrap pb-20 text-center">
+    <h2 class="mk-h2 font-semibold">Turn one idea into a week of content.</h2>
+    <p class="mt-4 text-lg" style="color:var(--muted)">Two posts before you are asked for anything.</p>
+    <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-base px-7 py-3 mt-6">Start free →</button>
   </section>
 
   <!-- Footer -->

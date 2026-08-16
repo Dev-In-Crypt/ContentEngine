@@ -126,3 +126,47 @@ def test_a_narrow_screen_stacks_them_instead(page, live_server):
     overflow = page.evaluate(
         "() => document.documentElement.scrollWidth - window.innerWidth")
     assert overflow <= 1, f"the page scrolls {overflow}px sideways on a phone"
+
+
+# ── the other door, offered rather than hidden ──────────────────────────────
+
+
+def test_the_creator_door_points_at_the_business_one(page, live_server):
+    """Somebody posting for a company lands on the creator half, because that is
+    the tab the page opens on. The two doors are a switch at the very top, and a
+    visitor eight screens down does not scroll back to look for it.
+
+    The offer switches the tab in place. There is no /business page in this
+    product — main.py serves exactly two routes beside the app — so a link to
+    one would be the broken promise the footer already refuses to make."""
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(live_server)
+    expect(page.locator("#landing-creator")).to_be_visible()
+
+    offer = page.locator("#landing-creator [data-action='set-landing-tab'][data-arg='business']")
+    expect(offer).to_have_count(1)
+    offer.click()
+
+    expect(page.locator("#landing-business")).to_be_visible()
+    expect(page.locator("#landing-creator")).to_be_hidden()
+
+
+def test_the_page_does_not_promise_prices_will_never_exist(page, live_server):
+    """A promise the owner has already decided to break is worse than silence.
+
+    Paid plans are planned. The money section may say what is true today —
+    nothing to pay, two free posts, then your own key — and may say that using
+    your own key remains supported. It may not say the words that turn that
+    into forever, because the people who would remember them are exactly the
+    people the sentence was written to attract."""
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+
+    for door in ("creator", "business"):
+        page.locator(f"#ltab-{door}").click()
+        text = page.locator("#landing-screen").inner_text().lower()
+        for forever in ("not later", "never pay", "free forever",
+                        "always be free", "no subscription, ever"):
+            assert forever not in text, (
+                f"the {door} door promises {forever!r} — paid plans are on the "
+                "roadmap, and this is the sentence that would be taken back")

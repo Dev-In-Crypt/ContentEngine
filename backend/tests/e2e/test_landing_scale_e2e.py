@@ -19,7 +19,13 @@ pytestmark = pytest.mark.e2e
 
 #: What the page carries right now. Lower it as compositions replace card rows;
 #: raising it is the thing this test exists to make somebody argue for.
-CARD_CEILING = 19
+#:
+#: 31 at the start of this phase, then 19, now 7. The last drop was not tidying:
+#: adding one panel to the creator door pushed it over 19 and the honest way out
+#: was to find a row of boxes that should not have been boxes. It was the twelve
+#: compatibility chips — a name is not something you compare side by side, it is
+#: a name — and they are now a line of names.
+CARD_CEILING = 7
 
 #: A marketing headline, not an app heading. The scale tops out at 36px for the
 #: product; the home page gets its own steps above that.
