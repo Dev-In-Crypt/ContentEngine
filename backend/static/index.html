@@ -910,6 +910,40 @@
     </section>
   </div><!-- /landing-business -->
 
+  <!-- What comes out.
+       The page's only photographs, and they are not photographs: five slides
+       rendered by scripts/render_gallery.py through the same
+       PillowBrandEngine.create_branded_card that draws a slide inside a post,
+       at the same 1080x1350, with no model and no network involved.
+
+       Two limits, and the caption says both rather than hoping nobody asks.
+       The words are written, because a gallery of model output is one lucky
+       roll of the dice displayed as an average — and the temptation to reroll
+       until it flatters is exactly how that average stops being true. The
+       grounds are drawn, because in a real post that space holds the visitor's
+       own photo, their stock account's, or the image model's, and none of
+       those are ours to ship. -->
+  <section id="gallery" class="mk-wrap py-16">
+    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT COMES OUT</div>
+    <h2 class="mk-h2 font-semibold text-center mt-6">Your colour, your niche, your headline</h2>
+    <div class="mt-10 grid sm:grid-cols-3 gap-5">
+      <img src="/static/img/gallery/gallery-coffee.jpg" width="1080" height="1350" loading="lazy"
+           alt="A slide labelled COFFEE reading: Three habits for better coffee"
+           class="w-full rounded-xl" style="border:1px solid var(--border)" />
+      <img src="/static/img/gallery/gallery-saas.jpg" width="1080" height="1350" loading="lazy"
+           alt="A slide labelled SAAS reading: Why your demo loses people at minute two"
+           class="w-full rounded-xl" style="border:1px solid var(--border)" />
+      <img src="/static/img/gallery/gallery-travel.jpg" width="1080" height="1350" loading="lazy"
+           alt="A slide labelled TRAVEL reading: Two days in Lisbon, planned by nobody"
+           class="w-full rounded-xl" style="border:1px solid var(--border)" />
+    </div>
+    <p class="mk-copy mx-auto mt-8 text-center text-base" style="color:var(--muted)">
+      Drawn by the same engine that renders your slides, at the size Instagram wants.
+      The words on them are written rather than generated, and the backgrounds are
+      drawn rather than photographed — in your posts that space holds your own picture.
+    </p>
+  </section>
+
   <!-- What it works with. Buffer carries nine of these in its hero; the
        difference is that ours are marked up by role, so "publishes to" and
        "runs on" are separately checkable against the code. Names, not logos:
