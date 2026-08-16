@@ -80,6 +80,13 @@ InstaContentEngine.zip
 # ── Internal product/planning docs (local only, not shipped) ────────────────
 content-engine-business-sources.md
 content-engine-business-implementation.md
+# The rest of the same material, by folder. Two of its files were already
+# ignored by name above; the folder covers the others without a third line
+# every time one is added.
+Idea/
+
+# ── One-off exports kept beside the project, not part of it ─────────────────
+Content Engine (standalone).html
 
 # Stray alembic default DB (env.py fallback URL)
 backend/alembic_local.db
