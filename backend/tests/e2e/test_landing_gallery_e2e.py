@@ -97,3 +97,33 @@ def test_the_gallery_does_not_pass_written_words_off_as_generated(page, live_ser
     assert "drawn" in text, (
         "the gallery no longer says its backgrounds are drawn rather than "
         "photographed")
+
+
+def test_a_phone_still_gets_a_slide_to_look_at(page, live_server):
+    """Three full-width portraits is about 1400 points of scrolling for a
+    sample, so two of them step aside below 640 — but exactly two. Hiding the
+    row entirely would make "what comes out" a section that shows nothing on
+    the device most people arrive on."""
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(live_server)
+    expect(page.locator("#gallery")).to_be_visible()
+
+    shown = page.evaluate(
+        """() => [...document.querySelectorAll('#gallery img')]
+             .filter(i => i.getClientRects().length).length"""
+    )
+    assert shown == 1, f"a phone shows {shown} of the gallery slides, not 1"
+
+
+def test_a_wide_screen_gets_all_three(page, live_server):
+    """The other half of the pair above: a rule that hides two on a phone and
+    forgets to bring them back is the same bug wearing a different width."""
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(live_server)
+    expect(page.locator("#gallery")).to_be_visible()
+
+    shown = page.evaluate(
+        """() => [...document.querySelectorAll('#gallery img')]
+             .filter(i => i.getClientRects().length).length"""
+    )
+    assert shown == EXPECTED, f"a wide screen shows {shown} slides, not {EXPECTED}"
