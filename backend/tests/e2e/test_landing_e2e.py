@@ -249,7 +249,9 @@ def test_the_first_step_is_not_a_key(page, live_server):
     it teaches them the product is — and it was teaching the wrong one."""
     _land(page, live_server)
 
-    first = page.locator("#how-it-works .ce-card").first
+    # The step is a list item since phase 15 turned four equal cards into one
+    # line of movement; what it must say is unchanged.
+    first = page.locator("#how-it-works ol > li").first
     expect(first).to_contain_text("topic")
     expect(first).not_to_contain_text("key")
 
@@ -262,12 +264,21 @@ def test_the_creator_page_makes_one_promise(page, live_server):
 
 
 def test_the_feature_grid_has_no_hole_in_it(page, live_server):
-    """Five cards in a three-column grid leave a gap in the second row, which
-    reads as a card that failed to load. The fix is the count, not a rule about
-    the count — four cards fill both a two- and a four-column row exactly."""
+    """Once five cards in a three-column grid, which left a hole in the second
+    row reading as a card that failed to load; then four, which filled the row.
+    Phase 15 removed the row altogether: naming parts of the machine — copy,
+    slides, reels, scheduler — is what the redesign brief called reading like
+    documentation, and the section now states three outcomes at heading size.
+
+    So the guard moves rather than goes. A hole in a grid cannot appear in a
+    section with no grid of boxes, and the thing to hold now is that it stays
+    that way: three things, no cards.
+    """
     _land(page, live_server)
 
-    assert page.locator("#features .ce-card").count() == 4
+    assert page.locator("#features .ce-card").count() == 0, \
+        "the outcomes section has gone back to being a row of cards"
+    assert page.locator("#features h3").count() == 3
 
 
 def test_no_card_holds_space_for_an_icon_that_is_not_there(page, live_server):
@@ -277,14 +288,17 @@ def test_no_card_holds_space_for_an_icon_that_is_not_there(page, live_server):
 
     The count assertion is not decoration: written without it this test passed
     against the broken page, because `#features` did not exist yet and "no empty
-    boxes among no cards" is true.
+    boxes among no cards" is true. Phase 15 replaced the cards with a plain
+    composition, so the guard now watches the two sections that carry the page's
+    explanation — and still refuses to pass against nothing.
     """
     _land(page, live_server)
 
-    assert page.locator("#features .ce-card").count() > 0
-    empty = page.locator("#features .ce-card div").evaluate_all(
-        "els => els.filter(el => !el.textContent.trim() && !el.children.length).length")
-    assert empty == 0
+    for where in ("#features", "#how-it-works"):
+        assert page.locator(f"{where} *").count() > 0, f"{where} is empty"
+        empty = page.locator(f"{where} div, {where} span").evaluate_all(
+            "els => els.filter(el => !el.textContent.trim() && !el.children.length).length")
+        assert empty == 0, f"{where} holds a box with nothing in it"
 
 
 def test_the_chosen_field_mode_looks_chosen(page, live_server):
@@ -783,3 +797,97 @@ def test_tabbing_around_the_landing_never_reaches_the_app_behind_it(page, live_s
             escaped.append(where)
 
     assert not escaped, f"Tab reached {len(escaped)} controls behind the overlay: {escaped[:6]}"
+
+
+# ── what happens next, and the ask ──────────────────────────────────────────
+#
+# The post is finished and the visitor has spent nothing. Two things were
+# missing at that moment: any statement of what the product does beyond the
+# words on screen, and any invitation to keep it. Both are added *below* the
+# post and neither closes over it — the rule from phase 7 is that the ask takes
+# nothing away, and Download is the thing it would take.
+
+
+def test_nothing_is_offered_before_there_is_a_post(page, live_server):
+    """The strip and the invitation describe something that happened. Before it
+    happens they are claims about nothing."""
+    _land(page, live_server)
+
+    expect(page.locator("#hero-flow")).to_be_hidden()
+    expect(page.locator("#hero-bridge")).to_be_hidden()
+
+
+def test_the_result_says_where_the_post_is_in_the_workflow(page, live_server):
+    """Five steps, three of them behind the visitor because they watched them
+    run. The last two are what an account is for.
+
+    The count of ticks is asserted, not the presence of the words: a strip that
+    marked Schedule and Published done would be claiming the post went out."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+
+    flow = page.locator("#hero-flow")
+    expect(flow).to_be_visible()
+
+    text = flow.inner_text()
+    for step in ("Idea", "Caption", "Visual", "Schedule", "Published"):
+        assert step in text, f"the workflow strip does not name {step}: {text!r}"
+
+    assert text.count("✓") == 3, (
+        f"three of the five steps have actually happened; the strip marks "
+        f"{text.count('✓')}: {text!r}")
+
+
+def test_the_invitation_takes_nothing_away(page, live_server):
+    """The whole position of phase 7, asserted rather than remembered: the ask
+    appears, and the post — caption, picture and the download that hands over
+    the file — is still there and still working without an account."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+
+    expect(page.locator("#hero-bridge")).to_be_visible()
+
+    expect(page.locator("#hero-caption")).to_be_visible()
+    expect(page.locator("#hero-image")).to_be_visible()
+    download = page.locator("#hero-download")
+    expect(download).to_be_visible()
+    expect(download).to_be_enabled()
+
+
+def test_the_invitation_goes_to_the_sign_up(page, live_server):
+    """A button that says "create an account" and does not is worse than no
+    button: it spends the one moment the visitor was willing."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+
+    page.locator("#hero-bridge button").click()
+    expect(page.locator("#auth-screen")).to_be_visible()
+
+
+def test_the_gate_replaces_the_invitation_rather_than_joining_it(page, live_server):
+    """When the free tries run out, the gate below asks for an account and says
+    why. The soft invitation is the same request without the reason, and two
+    of them stacked is one of them out of date.
+
+    Written against the gate and not against reset, because reset hides the
+    whole result and would pass whether this file cleared anything or not — the
+    first version of this test did exactly that and proved nothing."""
+    _serve(page, {"type": "complete", "post": _post()})
+    _land(page, live_server)
+    _run(page)
+    expect(page.locator("#hero-bridge")).to_be_visible()
+
+    page.unroute("**/api/demo/post")
+    page.route("**/api/demo/post", lambda r: r.fulfill(
+        status=402, content_type="application/json",
+        body=json.dumps({"detail": "out of free posts"})))
+    _run(page)
+
+    expect(page.locator("#hero-gate")).to_be_visible()
+    expect(page.locator("#hero-bridge")).to_be_hidden()
+    # And the post it was under is still there, download and all.
+    expect(page.locator("#hero-download")).to_be_visible()
+    expect(page.locator("#hero-flow")).to_be_visible()

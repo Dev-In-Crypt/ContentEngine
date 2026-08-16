@@ -203,6 +203,11 @@ S.heroRunning = false;
 //: right. The landing learns it is out by being told, on a 402.
 function showHeroGate() {
   document.getElementById('hero-gate').classList.remove('hidden');
+  // The gate asks for an account too, and it is the more specific of the two —
+  // it names why. Leaving the soft invitation under it would put the same
+  // request on screen twice, one of them out of date. The post, the picture and
+  // the workflow strip all stay: they describe something that did happen.
+  document.getElementById('hero-bridge').classList.add('hidden');
 }
 
 const HERO_PLACEHOLDER = {
@@ -343,6 +348,9 @@ function renderHeroPost(post) {
   document.getElementById('hero-download').classList.toggle('hidden', !img.src);
   renderHeroFacts(post, !!img.src);
   document.getElementById('hero-result').classList.remove('hidden');
+  // The workflow strip needs no line here — it lives inside the result. Only
+  // the invitation has a state of its own, because the gate takes it away.
+  document.getElementById('hero-bridge').classList.remove('hidden');
 }
 
 /** What came back, counted rather than praised.

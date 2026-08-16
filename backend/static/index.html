@@ -416,6 +416,41 @@
         </div>
       </div>
       </div>
+
+      <!-- What just happened, and what the product does that a text generator
+           does not. Three of these five are behind the visitor already — they
+           watched them run — and the last two are the answer to "so it writes
+           posts, like everything else". Marked done rather than animated: the
+           claim is which steps have actually occurred, and an arrow that lights
+           up on a timer would be saying something else. -->
+      <!-- No `hidden` and nothing in JS toggles it: this lives inside the
+           result, so it appears and disappears with the post it describes.
+           A second switch over the same state is a second thing to forget. -->
+      <div id="hero-flow" class="mt-6">
+        <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm">
+        <span class="flex items-center gap-1.5" style="color:var(--brand)"><span aria-hidden="true">✓</span>Idea</span>
+        <span aria-hidden="true" style="color:var(--faint)">→</span>
+        <span class="flex items-center gap-1.5" style="color:var(--brand)"><span aria-hidden="true">✓</span>Caption</span>
+        <span aria-hidden="true" style="color:var(--faint)">→</span>
+        <span class="flex items-center gap-1.5" style="color:var(--brand)"><span aria-hidden="true">✓</span>Visual</span>
+        <span aria-hidden="true" style="color:var(--faint)">→</span>
+        <span style="color:var(--muted)">Schedule</span>
+        <span aria-hidden="true" style="color:var(--faint)">→</span>
+        <span style="color:var(--muted)">Published</span>
+        </div>
+      </div>
+
+      <!-- The bridge, which unlike the strip does need its own switch: when the
+           free tries run out the gate below asks the same thing and says why,
+           and this one has to get out of the way. It takes nothing away: the
+           post stays on screen and Download keeps working without an account, which is the position
+           phase 7 settled and the brief repeats. What an account buys is the
+           two steps above that have not happened yet. -->
+      <div id="hero-bridge" class="hidden mt-5 text-center">
+        <p class="text-lg"><span class="font-semibold">You made the post.</span>
+          <span style="color:var(--muted)">An account is what makes it go out on its own.</span></p>
+        <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-base px-7 py-3 mt-4">Create a free account</button>
+      </div>
     </div>
     </div><!-- /demo measure -->
   </section>
@@ -452,14 +487,36 @@
        open with "Connect your keys" — true when nothing ran without one, and a
        lie for every month since the free tier landed. A key is asked for once
        the free posts are gone, and that is where this now says so. -->
-  <section id="how-it-works" class="max-w-5xl mx-auto px-6 py-12">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">HOW IT WORKS</div>
-    <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">1</div><div class="font-semibold mb-1">Give it a topic</div><div class="text-sm text-gray-400">One line is enough. No niche form, no tone picker — those have answers already.</div></div>
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">2</div><div class="font-semibold mb-1">AI writes &amp; designs</div><div class="text-sm text-gray-400">Copy, hashtags and branded slides in your colours and your logo.</div></div>
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">3</div><div class="font-semibold mb-1">Read it and change it</div><div class="text-sm text-gray-400">Every word and every slide is yours to edit before anything leaves.</div></div>
-      <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">4</div><div class="font-semibold mb-1">Publish or schedule</div><div class="text-sm text-gray-400">Post now or queue it — the server publishes 24/7. Your own key takes over once the free posts run out.</div></div>
-    </div>
+  <!-- A line, not four boxes. These are five moments of one movement, and four
+       equal cards say the opposite — that they are four separate things you
+       must learn. The rule between them carries the sequence; the numbers do
+       the counting. Wraps to a column on a phone, where a horizontal line of
+       five is just five cards again. -->
+  <section id="how-it-works" class="mk-wrap py-20">
+    <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">HOW IT WORKS</div>
+    <h2 class="mk-h2 font-semibold text-center mt-4 mk-copy mx-auto">Idea in, published post out.</h2>
+    <ol class="mt-12 flex flex-col md:flex-row md:items-start gap-8 md:gap-0 list-none p-0">
+      <li class="flex-1 md:px-6 md:border-l md:first:border-l-0" style="border-color:var(--border)">
+        <div class="text-sm font-semibold" style="color:var(--brand)">01</div>
+        <div class="text-xl font-semibold mt-2">Give it a topic</div>
+        <p class="text-base mt-2" style="color:var(--muted)">One line. No niche form, no tone picker — those have answers already.</p>
+      </li>
+      <li class="flex-1 md:px-6 md:border-l" style="border-color:var(--border)">
+        <div class="text-sm font-semibold" style="color:var(--brand)">02</div>
+        <div class="text-xl font-semibold mt-2">It writes and designs</div>
+        <p class="text-base mt-2" style="color:var(--muted)">Words, hashtags and branded slides in your colours and your logo.</p>
+      </li>
+      <li class="flex-1 md:px-6 md:border-l" style="border-color:var(--border)">
+        <div class="text-sm font-semibold" style="color:var(--brand)">03</div>
+        <div class="text-xl font-semibold mt-2">You change anything</div>
+        <p class="text-base mt-2" style="color:var(--muted)">Every word and every slide is yours before a thing leaves.</p>
+      </li>
+      <li class="flex-1 md:px-6 md:border-l" style="border-color:var(--border)">
+        <div class="text-sm font-semibold" style="color:var(--brand)">04</div>
+        <div class="text-xl font-semibold mt-2">It goes out on time</div>
+        <p class="text-base mt-2" style="color:var(--muted)">Post now or queue it. The server publishes with your laptop shut.</p>
+      </li>
+    </ol>
   </section>
 
   <!-- Showcases -->
@@ -593,13 +650,25 @@
        row that reads as a card which failed to load. Four fills both a two- and
        a four-column row exactly. No icon slots — the glyphs were removed from
        four of the five cards and left their empty two-line boxes behind. -->
-  <section id="features" class="max-w-5xl mx-auto px-6 py-12">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">EVERYTHING YOU NEED</div>
-    <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="ce-card p-5"><div class="font-semibold mb-1">AI copywriting</div><div class="text-sm text-gray-400">Hook, caption, hashtags and SEO keywords, tuned to your tone.</div></div>
-      <div class="ce-card p-5"><div class="font-semibold mb-1">Branded slides</div><div class="text-sm text-gray-400">Carousels in your template — niche plate, title plate, logo.</div></div>
-      <div class="ce-card p-5"><div class="font-semibold mb-1">Reels video</div><div class="text-sm text-gray-400">Turn a post into a short vertical video, voiced and subtitled.</div></div>
-      <div class="ce-card p-5"><div class="font-semibold mb-1">24/7 scheduler</div><div class="text-sm text-gray-400">Publishes from the server even when your computer is off.</div></div>
+  <!-- Three outcomes, not four features. The old row named parts of the machine
+       — copywriting, slides, reels, scheduler — which is what the brief called
+       reading like documentation. What a person is buying is time, a brand that
+       survives contact with a deadline, and not having to be at the keyboard. -->
+  <section id="features" class="mk-wrap py-20">
+    <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">WHAT YOU GET</div>
+    <div class="mt-12 grid md:grid-cols-3 gap-12">
+      <div>
+        <h3 class="text-2xl font-semibold">Create faster</h3>
+        <p class="text-base mt-3" style="color:var(--muted)">One idea becomes the words, the hashtags, the slides and a short vertical video — in one pass, not four tools.</p>
+      </div>
+      <div>
+        <h3 class="text-2xl font-semibold">Stay yours</h3>
+        <p class="text-base mt-3" style="color:var(--muted)">Your voice, your colours, your logo on every slide. And nothing is published that you have not read.</p>
+      </div>
+      <div>
+        <h3 class="text-2xl font-semibold">Post without being there</h3>
+        <p class="text-base mt-3" style="color:var(--muted)">Queue a week and shut the laptop. Publishing happens on the server, at the time you chose.</p>
+      </div>
     </div>
   </section>
 
@@ -620,14 +689,25 @@
     </div>
   </section>
 
-  <!-- Built for -->
-  <section class="max-w-5xl mx-auto px-6 py-12 text-center">
-    <div class="text-sm text-gray-400 mb-4">Built for</div>
-    <div class="flex flex-wrap justify-center gap-3 text-sm">
-      <span class="ce-card px-4 py-2">SMM specialists</span>
-      <span class="ce-card px-4 py-2">Brands</span>
-      <span class="ce-card px-4 py-2">Bloggers</span>
-      <span class="ce-card px-4 py-2">Small business</span>
+  <!-- Three situations instead of four labels. "SMM specialists · Brands ·
+       Bloggers · Small business" named audiences and said nothing about any of
+       them — a reader recognises their own week faster than their own job
+       title. -->
+  <section class="mk-wrap py-20">
+    <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">WHO IT IS FOR</div>
+    <div class="mt-12 grid md:grid-cols-3 gap-10">
+      <div>
+        <h3 class="text-xl font-semibold">Creators</h3>
+        <p class="text-base mt-2" style="color:var(--muted)">Never open an empty calendar on a Monday again. One idea fills the week.</p>
+      </div>
+      <div>
+        <h3 class="text-xl font-semibold">Small businesses</h3>
+        <p class="text-base mt-2" style="color:var(--muted)">Stay visible without hiring for it. The posting happens whether or not you remembered.</p>
+      </div>
+      <div>
+        <h3 class="text-xl font-semibold">Social media managers</h3>
+        <p class="text-base mt-2" style="color:var(--muted)">More accounts, fewer tabs. Write, brand, schedule and publish in one place.</p>
+      </div>
     </div>
   </section>
 
@@ -689,15 +769,35 @@
       </div>
     </section>
 
-    <!-- Business flow -->
-    <section class="max-w-5xl mx-auto px-6 py-12">
-      <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">HOW IT WORKS</div>
-      <div class="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">1</div><div class="font-semibold mb-1">Connect sources</div><div class="text-sm text-gray-400">Paste public links — release notes, changelogs, a blog feed. No logins to your internal systems.</div></div>
-        <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">2</div><div class="font-semibold mb-1">Spot the news</div><div class="text-sm text-gray-400">Explainable rules surface what actually matters to customers — price, limits, results.</div></div>
-        <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">3</div><div class="font-semibold mb-1">Draft in your voice</div><div class="text-sm text-gray-400">Ready-to-edit drafts grounded only in the source — nothing invented.</div></div>
-        <div class="ce-card p-5"><div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-3" style="background:var(--accent-dim);color:var(--accent)">4</div><div class="font-semibold mb-1">Approve &amp; publish</div><div class="text-sm text-gray-400">A person signs off before anything goes out. Every post is logged in an audit journal.</div></div>
-      </div>
+    <!-- Business flow — the same line as the creator door, for the same reason.
+         A pipeline drawn as four equal boxes reads as four separate products;
+         drawn as one line with a rule between the stages it reads as the thing
+         it is. Both doors now say "this is a movement" in the same shape. -->
+    <section class="mk-wrap py-20">
+      <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">HOW IT WORKS</div>
+      <h2 class="mk-h2 font-semibold text-center mt-4 mk-copy mx-auto">From your changelog to a post someone signed off.</h2>
+      <ol class="mt-12 flex flex-col md:flex-row md:items-start gap-8 md:gap-0 list-none p-0">
+        <li class="flex-1 md:px-6 md:border-l md:first:border-l-0" style="border-color:var(--border)">
+          <div class="text-sm font-semibold" style="color:var(--brand)">01</div>
+          <div class="text-xl font-semibold mt-2">Connect sources</div>
+          <p class="text-base mt-2" style="color:var(--muted)">Public links only — release notes, a changelog, a blog feed. No logins to anything of yours.</p>
+        </li>
+        <li class="flex-1 md:px-6 md:border-l" style="border-color:var(--border)">
+          <div class="text-sm font-semibold" style="color:var(--brand)">02</div>
+          <div class="text-xl font-semibold mt-2">Spot the news</div>
+          <p class="text-base mt-2" style="color:var(--muted)">Explainable rules surface what affects customers — price, limits, results — and quote the sentence they read it in.</p>
+        </li>
+        <li class="flex-1 md:px-6 md:border-l" style="border-color:var(--border)">
+          <div class="text-sm font-semibold" style="color:var(--brand)">03</div>
+          <div class="text-xl font-semibold mt-2">Draft in your voice</div>
+          <p class="text-base mt-2" style="color:var(--muted)">Written from the source and nothing else, ready to edit.</p>
+        </li>
+        <li class="flex-1 md:px-6 md:border-l" style="border-color:var(--border)">
+          <div class="text-sm font-semibold" style="color:var(--brand)">04</div>
+          <div class="text-xl font-semibold mt-2">Approve and publish</div>
+          <p class="text-base mt-2" style="color:var(--muted)">A person signs off before anything goes out, and the journal keeps who and when.</p>
+        </li>
+      </ol>
     </section>
 
     <!-- The business door's showcase. Same construction and same rule as the
