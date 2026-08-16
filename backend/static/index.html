@@ -434,7 +434,9 @@
 
     <div data-showcase="editor">
       <h3 class="text-xl font-semibold">Read it, then change anything</h3>
-      <p class="mt-1 text-sm text-gray-400">The words on the left, the slide on the right, and four ways to push the text without writing a prompt.</p>
+      <!-- Not "left and right": on a phone they stack, and a sentence that
+           describes a layout is wrong at half the widths it is read at. -->
+      <p class="mt-1 text-sm text-gray-400">The words and the slide side by side, and four ways to push the text without writing a prompt.</p>
       <div class="mt-4 ce-card p-4 grid sm:grid-cols-12 gap-4 items-start">
         <div class="sm:col-span-7 space-y-2">
           <div class="text-xs font-semibold uppercase tracking-wide" style="color:var(--faint)">Caption</div>
@@ -473,18 +475,41 @@
     <div data-showcase="week">
       <h3 class="text-xl font-semibold">A week you can see at once</h3>
       <p class="mt-1 text-sm text-gray-400">Everything made and not yet gone out, on the day it is going.</p>
-      <div class="mt-4 ce-card p-4">
+      <!-- Scrolls inside its own card on a narrow screen. Seven columns of 390
+           leaves 41px a day, and "settings" is wider than that at 13px — the
+           word runs out past its own tint into the next column. Measured, after
+           a screenshot made it look like a vertical overflow it was not.
+           The container scrolls, so the page still cannot; a track that has to
+           be pushed sideways is a poorer week than one that fits, and a week
+           squeezed until the words break is not a week at all. -->
+      <div class="mt-4 ce-card p-4 overflow-x-auto">
+        <div class="min-w-[30rem]">
         <div class="grid grid-cols-7 gap-1 text-center text-xs" style="color:var(--muted)">
           <div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div><div>SUN</div>
         </div>
+        <!-- Time above, title truncated below — the shape `renderQueueWeek`
+             actually draws, `truncate` included. The facsimile borrows the real
+             answer to a long title instead of inventing a tidier one: at this
+             width "Water temperature" ran out past its own tint, and clipping
+             with an ellipsis is what the product does about that. -->
         <div class="mt-2 grid grid-cols-7 gap-1">
-          <div class="rounded-lg p-1.5 text-xs" style="background:var(--panel2);min-height:3.5rem">Grinder settings</div>
+          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:3.5rem">
+            <div class="text-xs" style="color:var(--muted)">09:00</div>
+            <div class="text-xs truncate">Grinder settings</div>
+          </div>
           <div class="rounded-lg" style="min-height:3.5rem"></div>
-          <div class="rounded-lg p-1.5 text-xs" style="background:var(--panel2);min-height:3.5rem">Cold brew ratios</div>
+          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:3.5rem">
+            <div class="text-xs" style="color:var(--muted)">18:30</div>
+            <div class="text-xs truncate">Cold brew ratios</div>
+          </div>
           <div class="rounded-lg" style="min-height:3.5rem"></div>
-          <div class="rounded-lg p-1.5 text-xs" style="background:var(--panel2);min-height:3.5rem">Water temperature</div>
+          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:3.5rem">
+            <div class="text-xs" style="color:var(--muted)">09:00</div>
+            <div class="text-xs truncate">Water temperature</div>
+          </div>
           <div class="rounded-lg" style="min-height:3.5rem"></div>
           <div class="rounded-lg" style="min-height:3.5rem"></div>
+        </div>
         </div>
       </div>
     </div>
