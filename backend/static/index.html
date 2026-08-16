@@ -118,6 +118,50 @@
               padding-left:1.5rem; padding-right:1.5rem; }
     .mk-copy{ max-width:65ch; }
 
+    /* Bands.
+       The home page was one flat colour from the headline to the footer, so
+       twelve sections read as one long scroll with nothing telling the eye
+       where an argument ended. These are the only structure added: existing
+       tokens, no gradients, and every one of them defined in both themes by
+       the token rather than by a literal — a band written as #fff would be a
+       white stripe across the dark theme.
+
+       `.mk-band` is a full-bleed background, so it wraps a section rather than
+       replacing `.mk-wrap` on it: the colour runs to the window edge and the
+       content stays in the page's column. */
+    .mk-band{ background:var(--panel); }
+    .mk-band-tint{ background:var(--brand-dim); }
+
+    /* The closing band, and the one place the page inverts.
+       Deliberately the same near-black in both themes — a final call to action
+       that changes colour with the theme stops being the page's full stop. Its
+       own text colours are set here rather than inherited, because --text and
+       --muted are dark in the light theme and would vanish into it. */
+    .mk-band-dark{ background:#141416; color:#f4f4f5; }
+    .mk-band-dark .mk-quiet{ color:rgba(244,244,245,.72); }
+    /* And the button with it. `.ce-btn` fills with --accent, which is
+       near-black in the light theme — on this band that is a black button on a
+       black ground, which is how a call to action becomes invisible in exactly
+       one of the two themes. */
+    .mk-band-dark .ce-btn{ background:#f4f4f5; color:#141416; }
+    .mk-band-dark .ce-btn:hover{ background:#ffffff; }
+
+    /* Movement, and the setting that turns it off.
+       A section rises a little as it arrives. It is applied by app.js only
+       after the observer has seen the element, so a page with JS disabled
+       shows everything rather than nothing — the failure mode of reveal
+       animations is a blank page, and that is worse than no animation.
+
+       The media query is not decoration: `prefers-reduced-motion` is set by
+       people for whom movement causes actual symptoms, and there is a test
+       that this block still answers it. */
+    .mk-rise{ opacity:0; transform:translateY(14px); }
+    .mk-rise.mk-in{ opacity:1; transform:none;
+                    transition:opacity .5s ease-out, transform .5s ease-out; }
+    @media (prefers-reduced-motion: reduce){
+      .mk-rise, .mk-rise.mk-in{ opacity:1; transform:none; transition:none; }
+    }
+
     /* backgrounds + borders → theme vars */
     .bg-gray-950{ background-color:var(--bg) !important; }
     .bg-gray-900{ background-color:var(--panel) !important; }
@@ -940,7 +984,8 @@
        grounds are drawn, because in a real post that space holds the visitor's
        own photo, their stock account's, or the image model's, and none of
        those are ours to ship. -->
-  <section id="gallery" class="mk-wrap py-16">
+  <section class="mk-band">
+    <div id="gallery" class="mk-wrap py-16">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT COMES OUT</div>
     <h2 class="mk-h2 font-semibold text-center mt-6">Your colour, your niche, your headline</h2>
     <div class="mt-10 grid sm:grid-cols-3 gap-5">
@@ -959,6 +1004,7 @@
       The words on them are written rather than generated, and the backgrounds are
       drawn rather than photographed — in your posts that space holds your own picture.
     </p>
+    </div>
   </section>
 
   <!-- What it works with. Buffer carries nine of these in its hero; the
@@ -1018,7 +1064,8 @@
        are reseller figures that drift and must be re-verified "before this
        ships anywhere a user makes a spending decision from it". A home page is
        that place; there is a test for it. -->
-  <section class="mk-wrap py-16">
+  <section class="mk-band-tint">
+    <div class="mk-wrap py-16">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT THIS COSTS</div>
     <div class="mt-8 grid md:grid-cols-3 gap-8 text-sm">
       <div>
@@ -1040,6 +1087,7 @@
         <p class="text-gray-400">Today and this month, broken down by model. On OpenRouter that is the vendor's own figure; for other providers it is our estimate from a price table, not an invoice.</p>
       </div>
     </div>
+    </div>
   </section>
 
   <!-- The last word, shared by both doors.
@@ -1049,20 +1097,57 @@
        ending on a table rather than on an offer. This is the ask, once, at the
        actual bottom; the door-specific ones stay where they are because each
        makes its own promise in its own words. -->
-  <section class="mk-wrap pb-20 text-center">
+  <section class="mk-band-dark">
+    <div class="mk-wrap py-20 text-center">
     <h2 class="mk-h2 font-semibold">Turn one idea into a week of content.</h2>
-    <p class="mt-4 text-lg" style="color:var(--muted)">Two posts before you are asked for anything.</p>
+    <p class="mt-4 text-lg mk-quiet">Two posts before you are asked for anything.</p>
     <button data-action="show-auth-screen" data-arg="register" class="ce-btn text-base px-7 py-3 mt-6">Start free →</button>
+    </div>
   </section>
 
   <!-- Footer -->
+  <!-- Everything here goes somewhere that exists, and that is the whole design
+       constraint. main.py serves exactly two pages beside the app — /terms and
+       /privacy — and the SPA catches the rest, so a tidy-looking "Docs" or
+       "GitHub" column would be four links to the home page wearing other
+       names. What is left is what is real: anchors into this page, the two
+       legal pages, the two ways into the account, and an address that answers.
+       A test walks every one of them. -->
   <footer class="border-t" style="border-color:var(--border)">
-    <div class="max-w-6xl mx-auto px-6 py-6 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-      <span>© 2026 Content Engine</span>
-      <div class="ml-auto flex flex-wrap gap-5">
-        <a href="/terms" class="hover:text-gray-300">Terms</a>
-        <a href="/privacy" class="hover:text-gray-300">Privacy</a>
-        <a href="mailto:cryptodevonblock@gmail.com" class="hover:text-gray-300">Contact</a>
+    <div class="mk-wrap py-10 text-sm">
+      <div class="grid sm:grid-cols-4 gap-8">
+        <div>
+          <div class="font-semibold mb-3">Product</div>
+          <div class="flex flex-col gap-2" style="color:var(--muted)">
+            <a href="#hero-field" class="hover:underline">Try it</a>
+            <a href="#showcases" class="hover:underline">What you get</a>
+            <a href="#gallery" class="hover:underline">What comes out</a>
+            <button data-action="set-landing-tab" data-arg="business" class="text-left hover:underline">For business</button>
+          </div>
+        </div>
+        <div>
+          <div class="font-semibold mb-3">Account</div>
+          <div class="flex flex-col gap-2" style="color:var(--muted)">
+            <button data-action="show-auth-screen" data-arg="register" class="text-left hover:underline">Start free</button>
+            <button data-action="show-auth-screen" data-arg="login" class="text-left hover:underline">Log in</button>
+          </div>
+        </div>
+        <div>
+          <div class="font-semibold mb-3">Legal</div>
+          <div class="flex flex-col gap-2" style="color:var(--muted)">
+            <a href="/terms" class="hover:underline">Terms</a>
+            <a href="/privacy" class="hover:underline">Privacy</a>
+          </div>
+        </div>
+        <div>
+          <div class="font-semibold mb-3">Contact</div>
+          <div class="flex flex-col gap-2" style="color:var(--muted)">
+            <a href="mailto:cryptodevonblock@gmail.com" class="hover:underline">Email us</a>
+          </div>
+        </div>
+      </div>
+      <div class="mt-10 pt-6 border-t" style="border-color:var(--border);color:var(--faint)">
+        © 2026 Content Engine
       </div>
     </div>
   </footer>

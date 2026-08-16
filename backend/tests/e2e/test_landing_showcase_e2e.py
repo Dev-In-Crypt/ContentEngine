@@ -170,3 +170,156 @@ def test_the_page_does_not_promise_prices_will_never_exist(page, live_server):
             assert forever not in text, (
                 f"the {door} door promises {forever!r} — paid plans are on the "
                 "roadmap, and this is the sentence that would be taken back")
+
+
+# ── bands and movement ──────────────────────────────────────────────────────
+
+
+def test_the_page_is_not_one_flat_colour(page, live_server):
+    """Twelve sections in one ground read as one long scroll with nothing
+    telling the eye where an argument ends. Counted as distinct painted
+    backgrounds rather than by class name, because the class is the mechanism
+    and the bands are the point."""
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+
+    grounds = page.evaluate(
+        """() => [...new Set([...document.querySelectorAll('#landing-screen section')]
+             .filter(el => el.getClientRects().length)
+             .map(el => getComputedStyle(el).backgroundColor)
+             .filter(c => c && c !== 'rgba(0, 0, 0, 0)'))]"""
+    )
+    assert len(grounds) >= 3, (
+        f"the landing paints {len(grounds)} background(s): {grounds}")
+
+
+def test_the_closing_call_is_readable_on_its_dark_band(page, live_server):
+    """The one band that does not follow the theme, so it is the one place a
+    token can be the wrong colour by construction. The light theme's ink is
+    near-black and its button fills with near-black; either of them left alone
+    here is invisible on this ground.
+
+    Measured in the light theme on purpose — in the dark theme the mistake
+    cannot happen, which is exactly why nobody would notice it."""
+    page.goto(live_server)
+    page.evaluate("() => { localStorage.setItem('theme', 'light'); applyTheme('light'); }")
+    page.wait_for_timeout(100)
+
+    band = page.locator(".mk-band-dark")
+    expect(band).to_have_count(1)
+    band.scroll_into_view_if_needed()
+
+    ink = page.evaluate(
+        r"""() => {
+            const b = document.querySelector('.mk-band-dark');
+            const btn = b.querySelector('.ce-btn');
+            const lum = c => { const [r, g, bl] = c.match(/\d+/g).map(Number);
+                               return (0.2126*r + 0.7152*g + 0.0722*bl) / 255; };
+            return {band: lum(getComputedStyle(b).backgroundColor),
+                    heading: lum(getComputedStyle(b.querySelector('h2')).color),
+                    button: lum(getComputedStyle(btn).backgroundColor)};
+        }"""
+    )
+    assert ink["band"] < 0.25, f"the closing band is not dark: {ink}"
+    assert ink["heading"] > 0.6, (
+        f"the heading is {ink['heading']:.2f} bright on a {ink['band']:.2f} "
+        "ground — dark ink left on the one band that does not follow the theme")
+    assert ink["button"] > 0.6, (
+        f"the button fills at {ink['button']:.2f} on a {ink['band']:.2f} ground "
+        "— a black button on a black band")
+
+
+def test_movement_respects_the_setting(page, browser, live_server):
+    """`prefers-reduced-motion` is set by people for whom movement causes real
+    symptoms. The reveal must be off for them, and the content must still be
+    there — an animation that hides its element and then declines to show it is
+    the worst of both."""
+    ctx = browser.new_context(reduced_motion="reduce")
+    p = ctx.new_page()
+    try:
+        p.goto(live_server)
+        expect(p.locator("#landing-screen")).to_be_visible()
+        state = p.evaluate(
+            """() => {
+                const el = document.querySelector('#landing-screen section');
+                const s = getComputedStyle(el);
+                return {opacity: parseFloat(s.opacity), transition: s.transitionDuration};
+            }"""
+        )
+        assert state["opacity"] == 1, (
+            f"a section sits at opacity {state['opacity']} with reduced motion on")
+        assert state["transition"] in ("0s", "0s, 0s"), (
+            f"movement is still timed at {state['transition']} with reduced motion on")
+    finally:
+        ctx.close()
+
+
+def test_the_page_still_shows_up_without_the_reveal(page, live_server):
+    """The starting state lives in app.js, not the markup, so a page whose
+    script never ran shows everything rather than nothing. Asserted by reading
+    the HTML the server sends, because that is the only version a broken script
+    leaves behind."""
+    import re
+    import urllib.request
+    with urllib.request.urlopen(live_server) as r:      # noqa: S310 — local fixture
+        html = r.read().decode()
+    # Class attributes only. The name appears in the stylesheet by definition,
+    # and matching that instead would be a test that can never pass.
+    wearing = [c for c in re.findall(r'class="([^"]*)"', html)
+               if "mk-rise" in c.split()]
+    assert not wearing, (
+        f"{len(wearing)} element(s) ship the hidden state in the markup; if "
+        "app.js fails to run, the home page is blank")
+
+
+def test_the_first_sections_arrive_immediately(page, live_server):
+    """The reveal must not be a delay. Anything already on screen intersects at
+    once, so the top of the page is never waiting on a scroll that a visitor
+    who came to read the headline has not made yet."""
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+
+    # Waited for, not slept on. A fixed 300ms pause landed in the middle of the
+    # half-second transition and reported 0.84 as a failure — the trap this
+    # repository's own notes describe as reading a computed style once.
+    page.wait_for_function(
+        """() => {
+            const el = document.querySelector('#landing-screen section');
+            return el && parseFloat(getComputedStyle(el).opacity) === 1;
+        }""", timeout=4000)
+
+
+def test_every_footer_link_goes_somewhere(page, live_server):
+    """The footer is where invented links go to hide.
+
+    This product serves two pages beside the app; a "Docs" or "GitHub" column
+    would look tidy and lead four different names to the same home page. So
+    every href is checked against what exists: the two real routes, an address,
+    or an anchor that is actually on the page."""
+    page.goto(live_server)
+    expect(page.locator("footer")).to_be_visible()
+
+    hrefs = page.eval_on_selector_all("footer a", "els => els.map(e => e.getAttribute('href'))")
+    assert hrefs, "the footer has no links at all"
+
+    real_routes = {"/terms", "/privacy"}
+    for href in hrefs:
+        if href.startswith("mailto:"):
+            assert "@" in href, f"{href!r} is not an address"
+        elif href.startswith("#"):
+            found = page.locator(href).count()
+            assert found == 1, (
+                f"the footer points at {href!r} and the page has {found} of them")
+        else:
+            assert href in real_routes, (
+                f"the footer links to {href!r}, which this product does not "
+                "serve — main.py has /terms and /privacy and nothing else")
+
+
+def test_the_two_legal_pages_actually_answer(page, live_server):
+    """Following them, not reading the attribute. These are the links a person
+    clicks when they are already suspicious."""
+    for path in ("/terms", "/privacy"):
+        res = page.goto(live_server + path)
+        assert res.status == 200, f"{path} answered {res.status}"

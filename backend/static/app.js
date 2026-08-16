@@ -161,6 +161,7 @@ function showLanding() {
   document.getElementById('forgot-screen').classList.add('hidden');
   document.getElementById('reset-screen').classList.add('hidden');
   document.getElementById('landing-screen').classList.remove('hidden');
+  revealSections();
   startHeroFromLink();
 }
 function hideLanding() {
@@ -181,6 +182,39 @@ function setLandingTab(tab) {
     const b = document.getElementById(id);
     if (b) b.classList.toggle('lt-active', on);
   }
+  revealSections();
+}
+
+/** Let each section arrive as it is scrolled to.
+ *
+ *  The starting state is applied HERE and not in the markup, which is the
+ *  whole design of it: `.mk-rise` is opacity zero, so a page that shipped it
+ *  in the HTML and then failed to run this file would be a blank home page.
+ *  Written this way the failure mode is "no animation", which is a thing
+ *  nobody notices, rather than "no page", which is the only thing they would.
+ *
+ *  The observer is not disconnected and the class is not removed on the way
+ *  out: this is an arrival, not a curtain that closes behind you. Sections
+ *  already on screen intersect immediately, so nothing above the fold waits.
+ *
+ *  Reduced motion is answered in the stylesheet rather than here, so it holds
+ *  for anyone who turns it on after the page has loaded. */
+function revealSections() {
+  if (!('IntersectionObserver' in window)) return;
+  const sections = document.querySelectorAll(
+    '#landing-screen section:not(.mk-seen)');
+  if (!sections.length) return;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('mk-in');
+      io.unobserve(e.target);
+    }
+  }, { rootMargin: '0px 0px -8% 0px' });
+  sections.forEach(el => {
+    el.classList.add('mk-seen', 'mk-rise');
+    io.observe(el);
+  });
 }
 function backToHome() {
   hideAuthScreen();
