@@ -86,6 +86,37 @@
     .text-xl   { font-size:24px !important; line-height:1.3  !important; }
     .text-2xl  { font-size:30px !important; line-height:1.2  !important; }
     .text-3xl  { font-size:36px !important; line-height:1.15 !important; }
+    /* Three more steps, for the marketing page only.
+       The scale above was cut for the app, where 36px is already a shout. A
+       home page is read at arm's length by somebody deciding whether to care,
+       and an app-sized headline there reads as documentation — which is the
+       word the brief used. These are the sizes a marketing headline is set at;
+       nothing inside the product uses them. */
+    .text-4xl  { font-size:44px !important; line-height:1.1  !important; }
+    .text-5xl  { font-size:56px !important; line-height:1.05 !important; }
+    .text-6xl  { font-size:68px !important; line-height:1.02 !important; letter-spacing:-.02em; }
+
+    /* A trap the scale above creates, found the first time a headline needed
+       two sizes: `sm:text-5xl` is a DIFFERENT selector from `.text-5xl`, and
+       Tailwind emits it without !important — so the base rule above wins at
+       every width and every responsive size class in the project is silently
+       inert. Rather than re-declare each breakpoint variant by hand, the two
+       marketing headings size themselves fluidly: one rule, no breakpoints, and
+       nothing for a later reader to discover the hard way. */
+    .mk-h1{ font-size:clamp(34px, 6.2vw, 68px) !important; line-height:1.03 !important;
+            letter-spacing:-.02em; }
+    .mk-h2{ font-size:clamp(28px, 3.6vw, 48px) !important; line-height:1.1 !important;
+            letter-spacing:-.015em; }
+
+    /* The marketing column.
+       Sections were split between max-w-3xl and max-w-5xl (768 and 1024), so on
+       a 1600px screen the page sat in a narrow strip with emptiness either
+       side — half of what read as "empty". This is the page's own width;
+       running text inside it still gets `.mk-copy`, because a 1200px paragraph
+       is unreadable however handsome the layout. */
+    .mk-wrap{ max-width:1200px; margin-left:auto; margin-right:auto;
+              padding-left:1.5rem; padding-right:1.5rem; }
+    .mk-copy{ max-width:65ch; }
 
     /* backgrounds + borders → theme vars */
     .bg-gray-950{ background-color:var(--bg) !important; }
@@ -297,11 +328,21 @@
   <!-- The working field. First thing on the page for everybody: the landing's
        argument is "here is what it does", and until UX phase 7.2 the only thing
        it could show a visitor was a sign-up form. -->
-  <section id="hero-field" class="max-w-3xl mx-auto px-6 pt-12 text-center">
-    <h1 class="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
-      See it write a post. Right now.
+  <!-- The headline says what you get, not what runs underneath. "See it write a
+       post" is a good sentence and keeps its job — but as the label on the demo
+       it introduces, one line lower. A stranger deciding whether to care is
+       answering "what do I end up with", and "AI writes posts" is an ingredient,
+       not an answer. -->
+  <section id="hero-field" class="mk-wrap pt-16 sm:pt-20 text-center">
+    <h1 class="mk-h1 font-bold mk-copy mx-auto">
+      Turn one idea into a week of content.
     </h1>
-    <p class="mt-3 text-gray-400">No account, no API key. One topic or one link.</p>
+    <p class="mt-5 text-lg sm:text-xl mk-copy mx-auto" style="color:var(--muted)">
+      It writes the words, designs the slides and publishes on your schedule — and you approve every one.
+    </p>
+
+    <div class="mt-12 text-xs font-semibold tracking-[0.2em]" style="color:var(--faint)">SEE IT WRITE A POST. RIGHT NOW.</div>
+    <p class="mt-2 text-base" style="color:var(--muted)">No account, no API key. One topic or one link.</p>
 
     <div class="mt-6 flex gap-2 justify-center text-sm">
       <button data-hero-mode="topic" data-action="set-hero-mode" data-arg="topic"
@@ -310,11 +351,17 @@
               class="hero-mode-btn lt-btn px-4 py-1.5">A link</button>
     </div>
 
-    <div class="mt-4 flex flex-col sm:flex-row gap-2">
-      <input id="hero-input" type="text" class="ce-input flex-1 px-4 py-3"
+    <!-- The demo has its own width. The section is the page's 1200 now, and a
+         single-line field stretched that far stops reading as something you
+         type one sentence into. Everything from here down to the result shares
+         this measure so the field, the examples and the answer line up as one
+         object rather than three. -->
+    <div class="mx-auto" style="max-width:920px">
+    <div class="mt-5 flex flex-col sm:flex-row gap-3">
+      <input id="hero-input" type="text" class="ce-input flex-1 px-5 py-4 text-lg"
              placeholder="Sourdough starters for beginners"
              />
-      <button id="hero-run" data-action="run-hero-post" class="ce-btn text-sm">Write it</button>
+      <button id="hero-run" data-action="run-hero-post" class="ce-btn text-base px-8 py-4">Write it</button>
     </div>
 
     <!-- Three of them, because the hardest part of an empty field is the first
@@ -370,10 +417,11 @@
       </div>
       </div>
     </div>
+    </div><!-- /demo measure -->
   </section>
 
   <!-- Two doors, one engine: Creators vs Business -->
-  <div class="max-w-3xl mx-auto px-6 pt-16">
+  <div class="mk-wrap pt-20">
     <div class="flex gap-2 justify-center text-sm">
       <button id="ltab-creator" data-action="set-landing-tab" data-arg="creator" class="lt-btn lt-active px-5 py-2">For Creators</button>
       <button id="ltab-business" data-action="set-landing-tab" data-arg="business" class="lt-btn px-5 py-2">For Business</button>
