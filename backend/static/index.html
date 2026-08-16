@@ -534,15 +534,29 @@
        which is why each one may only show something the product really does.
        No metrics anywhere: a reach number here would be a claim about results
        nobody has had yet. -->
-  <section id="showcases" class="max-w-5xl mx-auto px-6 py-12 space-y-10">
+  <section id="showcases" class="mk-wrap py-20 space-y-24">
     <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT YOU GET</div>
 
-    <div data-showcase="editor">
-      <h3 class="text-xl font-semibold">Read it, then change anything</h3>
-      <!-- Not "left and right": on a phone they stack, and a sentence that
-           describes a layout is wrong at half the widths it is read at. -->
-      <p class="mt-1 text-sm text-gray-400">The words and the slide side by side, and four ways to push the text without writing a prompt.</p>
-      <div class="mt-4 ce-card p-4 grid sm:grid-cols-12 gap-4 items-start">
+    <!-- Three compositions, not three rows. Each one is half prose and half
+         product, and consecutive blocks swap sides — a page that puts the
+         picture on the right three times running is read as a list, and a list
+         is what the brief asked to stop making. The order is set with utilities
+         rather than by moving the markup, so on a phone the words still come
+         first in every one of them: whoever is reading on 390 points wants to
+         know what they are looking at before they look at it. -->
+    <div data-showcase="editor" class="grid md:grid-cols-12 gap-x-12 gap-y-8 items-center">
+      <div data-showcase-copy class="mk-copy md:col-span-5">
+        <h3 class="mk-h2 font-semibold">Read it, then change anything</h3>
+        <!-- Not "left and right": on a phone they stack, and a sentence that
+             describes a layout is wrong at half the widths it is read at. -->
+        <p class="text-lg mt-4" style="color:var(--muted)">The words and the slide together, and four ways to push the text without writing a prompt.</p>
+        <ul class="mt-6 space-y-3 text-base">
+          <li>Rewrite by axis — shorter, warmer, less salesy, better hook.</li>
+          <li>Edit the words on the slide, not just the caption under it.</li>
+          <li>Regenerate one field and keep the rest.</li>
+        </ul>
+      </div>
+      <div class="ce-card p-5 md:col-span-7 grid sm:grid-cols-12 gap-4 items-start">
         <div class="sm:col-span-7 space-y-2">
           <div class="text-xs font-semibold uppercase tracking-wide" style="color:var(--faint)">Caption</div>
           <div class="ce-input p-3 text-sm leading-relaxed">Make your morning coffee taste better with three small habits. Grind just before brewing, keep the kit clean, and use filtered water at a steady temperature.</div>
@@ -577,9 +591,16 @@
       </div>
     </div>
 
-    <div data-showcase="week">
-      <h3 class="text-xl font-semibold">A week you can see at once</h3>
-      <p class="mt-1 text-sm text-gray-400">Everything made and not yet gone out, on the day it is going.</p>
+    <div data-showcase="week" class="grid md:grid-cols-12 gap-x-12 gap-y-8 items-center">
+      <div data-showcase-copy class="mk-copy md:col-span-5 md:order-2">
+        <h3 class="mk-h2 font-semibold">A week you can see at once</h3>
+        <p class="text-lg mt-4" style="color:var(--muted)">Everything made and not yet gone out, on the day it is going.</p>
+        <ul class="mt-6 space-y-3 text-base">
+          <li>One idea can sit on two networks and two days.</li>
+          <li>Move a post to another slot without opening it.</li>
+          <li>The month view is still there for anything further out.</li>
+        </ul>
+      </div>
       <!-- Scrolls inside its own card on a narrow screen. Seven columns of 390
            leaves 41px a day, and "settings" is wider than that at 13px — the
            word runs out past its own tint into the next column. Measured, after
@@ -587,7 +608,7 @@
            The container scrolls, so the page still cannot; a track that has to
            be pushed sideways is a poorer week than one that fits, and a week
            squeezed until the words break is not a week at all. -->
-      <div class="mt-4 ce-card p-4 overflow-x-auto">
+      <div class="ce-card p-5 overflow-x-auto md:col-span-7 md:order-1">
         <div class="min-w-[30rem]">
         <div class="grid grid-cols-7 gap-1 text-center text-xs" style="color:var(--muted)">
           <div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div><div>SUN</div>
@@ -598,43 +619,50 @@
              width "Water temperature" ran out past its own tint, and clipping
              with an ellipsis is what the product does about that. -->
         <div class="mt-2 grid grid-cols-7 gap-1">
-          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:3.5rem">
+          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:4.5rem">
             <div class="text-xs" style="color:var(--muted)">09:00</div>
             <div class="text-xs truncate">Grinder settings</div>
           </div>
-          <div class="rounded-lg" style="min-height:3.5rem"></div>
-          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:3.5rem">
+          <div class="rounded-lg" style="min-height:4.5rem"></div>
+          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:4.5rem">
             <div class="text-xs" style="color:var(--muted)">18:30</div>
             <div class="text-xs truncate">Cold brew ratios</div>
           </div>
-          <div class="rounded-lg" style="min-height:3.5rem"></div>
-          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:3.5rem">
+          <div class="rounded-lg" style="min-height:4.5rem"></div>
+          <div class="rounded-lg p-1.5" style="background:var(--panel2);min-height:4.5rem">
             <div class="text-xs" style="color:var(--muted)">09:00</div>
             <div class="text-xs truncate">Water temperature</div>
           </div>
-          <div class="rounded-lg" style="min-height:3.5rem"></div>
-          <div class="rounded-lg" style="min-height:3.5rem"></div>
+          <div class="rounded-lg" style="min-height:4.5rem"></div>
+          <div class="rounded-lg" style="min-height:4.5rem"></div>
         </div>
         </div>
       </div>
     </div>
 
-    <div data-showcase="publishing">
-      <h3 class="text-xl font-semibold">It goes out without you</h3>
-      <p class="mt-1 text-sm text-gray-400">Queue it and close the laptop — the server publishes on time, and tells you plainly when a network refuses.</p>
-      <div class="mt-4 ce-card p-4 space-y-3">
+    <div data-showcase="publishing" class="grid md:grid-cols-12 gap-x-12 gap-y-8 items-center">
+      <div data-showcase-copy class="mk-copy md:col-span-5">
+        <h3 class="mk-h2 font-semibold">It goes out without you</h3>
+        <p class="text-lg mt-4" style="color:var(--muted)">Queue it and close the laptop — the server publishes on time, and tells you plainly when a network refuses.</p>
+        <ul class="mt-6 space-y-3 text-base">
+          <li>Instagram and X, from the same queue.</li>
+          <li>A refusal is named, not hidden in a log.</li>
+          <li>Nothing goes out that you have not seen.</li>
+        </ul>
+      </div>
+      <div class="ce-card p-5 md:col-span-7 space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="text-sm">Grinder settings that actually matter</div>
+          <div class="text-base">Grinder settings that actually matter</div>
           <span class="text-xs px-2 py-0.5 rounded-full" style="background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border)">Published · Instagram</span>
         </div>
         <div class="h-px" style="background:var(--border)"></div>
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="text-sm">Cold brew ratios</div>
+          <div class="text-base">Cold brew ratios</div>
           <span class="text-xs px-2 py-0.5 rounded-full" style="background:var(--accent-dim);color:var(--text)">Scheduled · Friday 09:00</span>
         </div>
         <div class="h-px" style="background:var(--border)"></div>
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="text-sm">Water temperature myths</div>
+          <div class="text-base">Water temperature myths</div>
           <!-- "Failed" is the product's own word for this state, in the Feed's
                tab and in the banner. The facsimile borrows the vocabulary
                rather than inventing a friendlier one it would then have to be
