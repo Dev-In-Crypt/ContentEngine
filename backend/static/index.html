@@ -118,6 +118,15 @@
               padding-left:1.5rem; padding-right:1.5rem; }
     .mk-copy{ max-width:65ch; }
 
+    /* Section labels.
+       Eleven of these existed in three spellings — two colour tokens and a
+       stock Tailwind grey — and the two --faint ones measured 2.50:1 on the
+       light theme's page background, against the 4.5 this product holds every
+       other piece of text to. --faint is for marks beside text, not for text.
+       One class now, so the next label cannot be a fourth spelling. */
+    .mk-eyebrow{ font-size:13px !important; font-weight:600; letter-spacing:.2em;
+                 color:var(--muted); }
+
     /* Bands.
        The home page was one flat colour from the headline to the footer, so
        twelve sections read as one long scroll with nothing telling the eye
@@ -385,7 +394,7 @@
       It writes the words, designs the slides and publishes on your schedule — and you approve every one.
     </p>
 
-    <div class="mt-12 text-xs font-semibold tracking-[0.2em]" style="color:var(--faint)">SEE IT WRITE A POST. RIGHT NOW.</div>
+    <div class="mt-12 mk-eyebrow">SEE IT WRITE A POST. RIGHT NOW.</div>
     <p class="mt-2 text-base" style="color:var(--muted)">No account, no API key. One topic or one link.</p>
 
     <div class="mt-6 flex gap-2 justify-center text-sm">
@@ -537,7 +546,7 @@
        the counting. Wraps to a column on a phone, where a horizontal line of
        five is just five cards again. -->
   <section id="how-it-works" class="mk-wrap py-20">
-    <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">HOW IT WORKS</div>
+    <div class="mk-eyebrow text-center">HOW IT WORKS</div>
     <h2 class="mk-h2 font-semibold text-center mt-4 mk-copy mx-auto">Idea in, published post out.</h2>
     <ol class="mt-12 flex flex-col md:flex-row md:items-start gap-8 md:gap-0 list-none p-0">
       <li class="flex-1 md:px-6 md:border-l md:first:border-l-0" style="border-color:var(--border)">
@@ -579,7 +588,7 @@
        No metrics anywhere: a reach number here would be a claim about results
        nobody has had yet. -->
   <section id="showcases" class="mk-wrap py-20 space-y-24">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT YOU GET</div>
+    <div class="mk-eyebrow text-center">WHAT YOU GET</div>
 
     <!-- Three compositions, not three rows. Each one is half prose and half
          product, and consecutive blocks swap sides — a page that puts the
@@ -727,7 +736,7 @@
        reading like documentation. What a person is buying is time, a brand that
        survives contact with a deadline, and not having to be at the keyboard. -->
   <section id="features" class="mk-wrap py-20">
-    <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">WHAT YOU GET</div>
+    <div class="mk-eyebrow text-center">WHAT YOU GET</div>
     <div class="mt-12 grid md:grid-cols-3 gap-12">
       <div>
         <h3 class="text-2xl font-semibold">Create faster</h3>
@@ -766,7 +775,7 @@
        them — a reader recognises their own week faster than their own job
        title. -->
   <section class="mk-wrap py-20">
-    <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">WHO IT IS FOR</div>
+    <div class="mk-eyebrow text-center">WHO IT IS FOR</div>
     <div class="mt-12 grid md:grid-cols-3 gap-10">
       <div>
         <h3 class="text-xl font-semibold">Creators</h3>
@@ -789,7 +798,7 @@
        checkable in the code; where the product's behaviour is a deployment
        setting rather than a promise, the answer says so instead of rounding up. -->
   <section class="max-w-3xl mx-auto px-6 py-12">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">QUESTIONS</div>
+    <div class="mk-eyebrow text-center">QUESTIONS</div>
     <div class="mt-8 ce-card divide-y" style="border-color:var(--border)">
       <details class="p-4">
         <summary class="cursor-pointer font-semibold">Do I need an API key to start?</summary>
@@ -863,7 +872,7 @@
          drawn as one line with a rule between the stages it reads as the thing
          it is. Both doors now say "this is a movement" in the same shape. -->
     <section class="mk-wrap py-20">
-      <div class="text-xs font-semibold tracking-[0.2em] text-center" style="color:var(--faint)">HOW IT WORKS</div>
+      <div class="mk-eyebrow text-center">HOW IT WORKS</div>
       <h2 class="mk-h2 font-semibold text-center mt-4 mk-copy mx-auto">From your changelog to a post someone signed off.</h2>
       <ol class="mt-12 flex flex-col md:flex-row md:items-start gap-8 md:gap-0 list-none p-0">
         <li class="flex-1 md:px-6 md:border-l md:first:border-l-0" style="border-color:var(--border)">
@@ -934,7 +943,7 @@
          does it cost me" but "what does it read, who signs it off, and what can
          I show an auditor". Same rule — every answer checkable in the code. -->
     <section class="max-w-3xl mx-auto px-6 py-12">
-      <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">QUESTIONS</div>
+      <div class="mk-eyebrow text-center">QUESTIONS</div>
       <div class="mt-8 ce-card divide-y" style="border-color:var(--border)">
         <details class="p-4">
           <summary class="cursor-pointer font-semibold">What can it read?</summary>
@@ -986,7 +995,7 @@
        those are ours to ship. -->
   <section class="mk-band">
     <div id="gallery" class="mk-wrap py-16">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT COMES OUT</div>
+    <div class="mk-eyebrow text-center">WHAT COMES OUT</div>
     <h2 class="mk-h2 font-semibold text-center mt-6">Your colour, your niche, your headline</h2>
     <div class="mt-10 grid sm:grid-cols-3 gap-5">
       <img src="/static/img/gallery/gallery-coffee.jpg" width="1080" height="1350" loading="lazy"
@@ -1019,7 +1028,7 @@
        refuses to publish to it — a gate in posts.py that answers twice, at
        publish and at schedule — so it is not in the publish row. -->
   <section class="mk-wrap py-16">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WORKS WITH</div>
+    <div class="mk-eyebrow text-center">WORKS WITH</div>
     <div class="mt-8 grid sm:grid-cols-3 gap-8 text-sm">
       <div>
         <div class="font-semibold mb-2">Publishes to</div>
@@ -1068,7 +1077,7 @@
        that place; there is a test for it. -->
   <section class="mk-band-tint">
     <div class="mk-wrap py-16">
-    <div class="text-xs font-semibold tracking-[0.2em] text-gray-500 text-center">WHAT THIS COSTS</div>
+    <div class="mk-eyebrow text-center">WHAT THIS COSTS</div>
     <div class="mt-8 grid md:grid-cols-3 gap-8 text-sm">
       <div>
         <!-- "Not later" used to be in this sentence and had to go. Paid plans
@@ -1148,7 +1157,11 @@
           </div>
         </div>
       </div>
-      <div class="mt-10 pt-6 border-t" style="border-color:var(--border);color:var(--faint)">
+      <!-- --muted, not --faint. The faint token measures 2.5:1 on the light
+           theme's page background, which is below the readable floor this
+           product holds itself to everywhere else; it exists for marks beside
+           text, not for text. -->
+      <div class="mt-10 pt-6 border-t" style="border-color:var(--border);color:var(--muted)">
         © 2026 Content Engine
       </div>
     </div>
