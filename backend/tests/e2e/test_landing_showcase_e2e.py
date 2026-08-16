@@ -323,3 +323,25 @@ def test_the_two_legal_pages_actually_answer(page, live_server):
     for path in ("/terms", "/privacy"):
         res = page.goto(live_server + path)
         assert res.status == 200, f"{path} answered {res.status}"
+
+
+def test_no_two_sections_wear_the_same_label(page, live_server):
+    """Section labels are how a reader knows they have moved on.
+
+    Two consecutive sections under one label read as a single section that lost
+    its place — which is what "WHAT YOU GET" over both the showcases and the
+    outcomes did, and what nobody noticed until the whole page was seen at once
+    rather than a screen at a time. Counted per door, because the two doors are
+    allowed to reuse a label; a visitor sees only one of them."""
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+
+    for door in ("creator", "business"):
+        page.locator(f"#ltab-{door}").click()
+        labels = page.evaluate(
+            """() => [...document.querySelectorAll('#landing-screen .mk-eyebrow')]
+                 .filter(el => el.getClientRects().length)
+                 .map(el => el.innerText.trim())"""
+        )
+        dupes = {t for t in labels if labels.count(t) > 1}
+        assert not dupes, f"the {door} door labels two sections {dupes} each"
