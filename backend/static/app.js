@@ -2597,15 +2597,21 @@ function renderPreview(post) {
     const wrapper = document.createElement('div');
     wrapper.className = 'flex-shrink-0 snap-start space-y-2';
     const isFirst = slide.slide_number === 1;
-    const overlayVal = (slide.overlay_text || '').replace(/"/g, '&quot;');
-    const nicheVal = (slide.niche_text || '').replace(/"/g, '&quot;');
+    // Full escaping, not just the quote. These went in with `"` replaced and
+    // nothing else, so a `</textarea>` in the overlay closed the element early
+    // and the rest of the string was parsed as markup — with an `onerror`
+    // attribute the browser reported a script-src-attr violation, which is the
+    // policy catching what the escaping should have. Both fields start as model
+    // output, are edited by hand, and are stored, so this was the stored kind.
+    const overlayVal = esc(slide.overlay_text || '');
+    const nicheVal = esc(slide.niche_text || '');
     const editable = slide.has_raw_image;     // only enabled if raw is stored
     wrapper.innerHTML = `
       <div class="relative group">
         <img data-slide-num="${slide.slide_number}" src="${API}${slide.image_url}" alt="Slide ${slide.slide_number}"
           class="${imgCls} rounded-xl border border-gray-700 shadow-lg" />
         <span class="absolute top-2 left-2 bg-black/60 text-xs text-white px-2 py-0.5 rounded-full">${slide.slide_number}/${post.slides.length}</span>
-        <span class="absolute bottom-2 left-2 bg-black/60 text-xs text-gray-300 px-2 py-0.5 rounded-full">${slide.image_source}</span>
+        <span class="absolute bottom-2 left-2 bg-black/60 text-xs text-gray-300 px-2 py-0.5 rounded-full">${esc(slide.image_source)}</span>
         <button data-act="replace-image"
           class="absolute top-2 right-2 bg-black/70 hover:bg-purple-700 transition text-white text-xs rounded-full px-2 py-1"
           title="Replace this image">
@@ -3879,7 +3885,11 @@ async function renderCalendar() {
     // group-level date would have to be invented — and be wrong on one of them.
     groupPosts(byDay[day] || []).forEach(g => {
       const st = groupStatus(g.posts);
-      html += `<div data-cal-entry class="text-xs truncate cursor-pointer hover:text-purple-300" data-action="open-post" data-arg="${g.primary.id}">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
+      // esc() on the id too, for consistency with renderQueueWeek rather than
+      // because a uuid4 could carry a quote. Two sibling renderers disagreeing
+      // about whether an id needs escaping is how the next one picks the wrong
+      // sibling to copy.
+      html += `<div data-cal-entry class="text-xs truncate cursor-pointer hover:text-purple-300" data-action="open-post" data-arg="${esc(g.primary.id)}">${dot[st] || '⚪'}${netBadges(g.posts)} ${esc(g.primary.topic.slice(0,14))}</div>`;
     });
     cell.innerHTML = html;
     grid.appendChild(cell);

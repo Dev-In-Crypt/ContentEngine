@@ -941,6 +941,36 @@ def test_a_hashtag_cannot_carry_markup(page, signed_in, keyed):
     expect(box).to_contain_text("onerror")     # shown as text, which is correct
 
 
+def test_slide_text_cannot_close_the_box_it_is_printed_in(page, signed_in, keyed):
+    """The other half of the escaping hole, found by reviewing the neighbours of
+    the hashtag fix rather than by any test.
+
+    The overlay and niche values were interpolated into a `<textarea>` body and
+    an attribute after replacing only `"` — so a `</textarea>` in the text ends
+    the element early and everything after it is parsed as markup. Both fields
+    are model output to begin with and user-editable afterwards, and they make a
+    round trip through the server, so this is the stored kind rather than the
+    reflected one.
+
+    `script-src 'self'` means injected markup cannot execute today, which is why
+    this was not urgent — and is also exactly the argument that stops being true
+    the day somebody relaxes the policy. The escape is the fix; the policy is the
+    net under it.
+    """
+    signed_in()
+    payload = '</textarea><img src=x onerror=alert(1)>'
+    _reach_step4(page, slides=[SlidePreview(
+        slide_number=1, image_url="/api/posts/e2e-post-1/slides/1/image",
+        image_source="stock", width=1080, height=1350,
+        overlay_text=payload, niche_text='" onmouseover=alert(2) x="',
+        has_raw_image=True).model_dump(mode="json")])
+
+    box = page.locator("#slides-container")
+    assert box.locator("img[src='x']").count() == 0, "slide text built an element"
+    # And it is still the text the user typed, not a mangled version of it.
+    expect(page.locator('[data-slide-overlay="1"]')).to_have_value(payload)
+
+
 def test_the_hashtags_are_not_the_loudest_thing_on_the_screen(page, signed_in, keyed):
     """Fourteen pills in brand violet, four rows of them, for the least
     important content on the page — while the slide being published rendered
