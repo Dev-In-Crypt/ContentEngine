@@ -229,7 +229,7 @@ def test_the_closing_call_is_readable_on_its_dark_band(page, live_server):
         "— a black button on a black band")
 
 
-def test_movement_respects_the_setting(page, browser, live_server):
+def test_motion_respects_the_setting(page, browser, live_server):
     """`prefers-reduced-motion` is set by people for whom movement causes real
     symptoms. The reveal must be off for them, and the content must still be
     there — an animation that hides its element and then declines to show it is
@@ -290,7 +290,7 @@ def test_the_first_sections_arrive_immediately(page, live_server):
         }""", timeout=4000)
 
 
-def test_every_footer_link_goes_somewhere(page, live_server):
+def test_the_footer_links_go_somewhere(page, live_server):
     """The footer is where invented links go to hide.
 
     This product serves two pages beside the app; a "Docs" or "GitHub" column

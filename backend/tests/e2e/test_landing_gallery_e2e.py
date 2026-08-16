@@ -35,7 +35,7 @@ def test_the_gallery_shows_three_slides(page, live_server):
     expect(_images(page)).to_have_count(EXPECTED)
 
 
-def test_every_slide_actually_decodes(page, live_server):
+def test_the_gallery_images_decode(page, live_server):
     """naturalWidth, not the src attribute. A broken path still has a src, and
     a page of broken pictures is worse than a page of none — this repository
     has made that exact mistake before, in the brand preview that could not
