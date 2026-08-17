@@ -1,0 +1,74 @@
+/* Terms and Privacy — the two pages this product serves beside the app.
+ *
+ * They were written before the light theme existed and never revisited: their
+ * own palette hard-coded in each file (#161826 on a product whose dark ground
+ * is #141416), `color-scheme: dark` forced regardless of what the visitor
+ * chose, a different type family, a different violet. Somebody who clicks
+ * "Terms" from a light page landed on what looked like a different company's
+ * site — on the page they clicked BECAUSE they were being careful.
+ *
+ * So the tokens are the product's, both themes are honoured, and the file is
+ * shared rather than copied twice: two legal pages that drift apart are how
+ * this happened the first time.
+ *
+ * What deliberately does NOT match the home page is the column. That page is
+ * 1200 wide because it holds compositions; this is running text, and a legal
+ * document at 1200 is unreadable. 70 characters is the point of it.
+ *
+ * The token values are duplicated from index.html's <style> rather than
+ * imported, because that block is inline and there is no build step to share
+ * it with. The duplication is small and one-way: if the palette moves, this
+ * file is the one other place to look, and a contrast test covers both.
+ */
+
+/* The same vendored faces the app uses. Without these the pages ask for Barlow,
+   do not get it, and fall back to the system font — which is most of what made
+   them look like somebody else's site even after the colours matched. */
+@font-face { font-family:'Barlow'; font-weight:400; font-display:swap; src:url('/static/vendor/barlow-400.woff2') format('woff2'); }
+@font-face { font-family:'Barlow'; font-weight:600; font-display:swap; src:url('/static/vendor/barlow-600.woff2') format('woff2'); }
+@font-face { font-family:'Barlow'; font-weight:700; font-display:swap; src:url('/static/vendor/barlow-700.woff2') format('woff2'); }
+
+:root{
+  --bg:#f2f2f3; --panel:#ffffff; --border:#dcdce0;
+  --text:#18181a; --muted:#5f5f66;
+  --brand:#6C5CD3; --brand-dim:rgba(108,92,211,.10);
+}
+:root[data-theme="dark"]{
+  --bg:#141416; --panel:#1d1d20; --border:#34343a;
+  --text:#f2f2f3; --muted:#a2a2aa;
+  --brand:#9184D9; --brand-dim:rgba(145,132,217,.14);
+}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font:16px/1.65 'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+
+.wrap{ max-width:760px; margin:0 auto; padding:48px 24px 80px; }
+
+a{ color:var(--brand); }
+
+h1{ font-size:2rem; line-height:1.15; margin:0 0 6px; letter-spacing:-.015em; }
+h2{ font-size:1.2rem; margin:36px 0 8px; }
+
+/* --muted, not a fainter grey: 15px on the light theme's ground has to clear
+   the same 4.5:1 the rest of the product holds, and the old #9a9aa5 did not. */
+.muted{ color:var(--muted); font-size:.94rem; }
+
+.note{
+  background:var(--brand-dim);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px 18px;
+  font-size:.94rem;
+  margin:24px 0;
+}
+
+.brand{ display:flex; align-items:center; gap:8px; font-weight:700; margin-bottom:28px; }
+.brand span{ color:var(--brand); font-size:1.3rem; }
+
+ul{ padding-left:20px; }
+
+.back{ margin-top:40px; padding-top:24px; border-top:1px solid var(--border); }

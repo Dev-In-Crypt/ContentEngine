@@ -186,7 +186,8 @@ def test_in_the_cloud_that_path_is_the_app_and_keeps_its_policy():
 
 # ── the bundle that is about to exist ───────────────────────────────────────
 
-@pytest.mark.parametrize("path", ["/static/app.js", "/static/theme.js"])
+@pytest.mark.parametrize("path", ["/static/app.js", "/static/theme.js",
+                                 "/static/legal.css"])
 def test_the_app_bundle_revalidates(client, path):
     """A new class of bug arrives with phase 2. StaticFiles sends an ETag and no
     Cache-Control, so a browser applies heuristic freshness — and a 271 KB

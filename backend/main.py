@@ -301,7 +301,11 @@ CSP_DIRECTIVES: dict[str, str] = {
 #: Files served with `Cache-Control: no-cache` — revalidate, not "do not store".
 #: StaticFiles sends an ETag and no freshness, so a browser falls back to
 #: heuristic caching and can keep serving a stale bundle for days after a deploy.
-REVALIDATE_PATHS = frozenset({"/static/app.js", "/static/theme.js"})
+#: legal.css joins them for the same reason: it is the whole appearance of
+#: /terms and /privacy, and a stale copy repaints those pages in last month's
+#: palette while the rest of the site has moved.
+REVALIDATE_PATHS = frozenset({"/static/app.js", "/static/theme.js",
+                              "/static/legal.css"})
 
 #: …and every HTML document, which the path set above cannot express.
 #:
