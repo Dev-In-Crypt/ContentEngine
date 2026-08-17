@@ -160,7 +160,12 @@ def sentry_options(settings: Settings) -> Optional[dict]:
     options: dict = {
         "dsn": settings.sentry_dsn,
         "environment": settings.app_mode,
-        "traces_sample_rate": 0.1,
+        # Errors only. The project is created with tracing switched off — the
+        # free plan is 5,000 errors a month and that is the signal worth having;
+        # sampled traces from a project that does not accept them are volume
+        # nobody reads. Turn this up the day somebody is actually chasing a slow
+        # request, not before.
+        "traces_sample_rate": 0.0,
         "send_default_pii": False,
     }
     release = os.getenv("APP_RELEASE", "").strip()

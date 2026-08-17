@@ -73,3 +73,10 @@ def test_monitoring_is_configured_the_same_way_everywhere(monkeypatch, mode):
     """Desktop crashes are the ones nobody reports. If monitoring is ever turned
     on there it must not quietly send more than the server does."""
     assert sentry_options(_settings(app_mode=mode))["send_default_pii"] is False
+
+
+def test_tracing_is_off_until_somebody_asks_for_it():
+    """The plan gives 5,000 errors a month and the project was created with
+    tracing switched off. A sample rate above zero would ship spans nobody
+    accepts and nobody reads — and would be discovered, if ever, as a bill."""
+    assert sentry_options(_settings())["traces_sample_rate"] == 0.0
