@@ -349,3 +349,41 @@ def test_a_refused_third_post_costs_nothing(env, sm):
     _post(env)
 
     assert len(env.engine.calls) == before
+
+
+def test_a_burst_takes_its_hour_and_not_the_day(env, sm):
+    """The refusal a visitor actually meets after a script has been at the
+    button.
+
+    Spending an hour's share — a sixth of the day's budget — closes the door,
+    and the sentence says "shortly" rather than "tomorrow": the day is still
+    five sixths unspent, and the next hour opens by itself. Telling somebody to
+    come back tomorrow when the door reopens in minutes is the same class of
+    mistake as the two 503s this file already separates.
+    """
+    async def _spend():
+        openrouter.record_usage("m", {"total_tokens": 1,
+                                      "cost": 10.0 / app_spend.BURST_HOURS})
+        async with sm() as db:
+            await app_spend.flush_usage(db)
+    asyncio.run(_spend())
+
+    r = _post(env)
+    assert r.status_code == 503
+    assert "shortly" in r.json()["detail"].lower()
+    assert "tomorrow" not in r.json()["detail"].lower()
+    assert env.engine.calls == [], "the model was called for a refused request"
+
+
+def test_an_hour_that_is_only_half_spent_still_generates(env, sm):
+    """The other half of the pair: a ceiling that refuses when it should not is
+    a ceiling that closes the product for nobody's benefit."""
+    async def _spend():
+        openrouter.record_usage("m", {"total_tokens": 1,
+                                      "cost": 10.0 / app_spend.BURST_HOURS / 2})
+        async with sm() as db:
+            await app_spend.flush_usage(db)
+    asyncio.run(_spend())
+
+    assert _post(env).status_code == 200
+    assert env.engine.calls, "a request inside every ceiling was refused anyway"

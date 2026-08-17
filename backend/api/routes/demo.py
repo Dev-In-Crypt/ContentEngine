@@ -250,10 +250,23 @@ async def landing_post(
     # Our ceiling, before the model rather than after it. A visitor pays with
     # nothing — not even an email address — so this is the only thing standing
     # between a public text field and our invoice.
-    if await app_spend.flush_and_total(db) >= settings.app_daily_spend_usd:
+    # Two ceilings out of one budget. The day bounds the money; the hour keeps a
+    # burst from taking all of it before breakfast and leaving every honest
+    # visitor with a closed door until midnight. Different sentences on purpose:
+    # "tomorrow" and "in a few minutes" are not the same promise, and this file
+    # already learned once what it costs to print the wrong one.
+    day, hour = await app_spend.flush_and_totals(db)
+    hit = app_spend.ceilings_hit(day=day, hour=hour,
+                                 daily_cap=settings.app_daily_spend_usd)
+    if hit == "day":
         raise HTTPException(
             status_code=503,
             detail="The free demo is resting until tomorrow. Sign up to keep going.")
+    if hit == "hour":
+        raise HTTPException(
+            status_code=503,
+            detail="The free demo is busy right now — try again shortly, "
+                   "or sign up to keep going.")
 
     # Two per address, counted server-side. The browser used to count this, and
     # the code called it what it was — a polite request that clearing the storage

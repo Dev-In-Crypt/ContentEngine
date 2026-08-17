@@ -217,11 +217,19 @@ async def claim_generation_credentials(
     # 4. Our own daily ceiling. Deliberately after the per-account check and
     #    before the reservation: a day we have capped must not quietly eat
     #    somebody's remaining free post. This refusal is about us, and says so.
-    if await app_spend.flush_and_total(db) >= base.app_daily_spend_usd:
+    day, hour = await app_spend.flush_and_totals(db)
+    hit = app_spend.ceilings_hit(day=day, hour=hour,
+                                 daily_cap=base.app_daily_spend_usd)
+    if hit == "day":
         raise HTTPException(
             status_code=503,
             detail=("Free generations are paused until tomorrow. Adding your own "
                     "AI key in Account → AI models works right now."))
+    if hit == "hour":
+        raise HTTPException(
+            status_code=503,
+            detail=("Free generations are busy right now — try again shortly. "
+                    "Adding your own AI key in Account → AI models works now."))
 
     # 5. Claim it. A False here is the race the counter exists for: two requests
     #    passed the check above at the same time and only one may proceed.

@@ -424,3 +424,34 @@ def test_nothing_is_substituted_when_we_cannot_generate_either(sm):
     creds = _claim(sm, uid, base=no_images)
 
     assert image_source_for(ImageSource.STOCK, no_images, on_our_key=creds.on_our_key) == ImageSource.STOCK
+
+
+def test_a_burst_hour_pauses_the_free_tier_without_spending_the_allowance(sm):
+    """The same rule as the landing, on the signed-in path.
+
+    An hour's share of the budget is gone, the day's is not. The account is
+    told to come back shortly rather than tomorrow, and — the part that matters
+    — its free posts are still all there: a ceiling of ours must never quietly
+    consume something of theirs.
+    """
+    uid = _user(sm)
+    asyncio.run(_spend(sm, 10.0 / app_spend.BURST_HOURS))
+
+    with pytest.raises(HTTPException) as refusal:
+        _claim(sm, uid)
+
+    assert refusal.value.status_code == 503
+    detail = refusal.value.detail.lower()
+    assert "shortly" in detail and "tomorrow" not in detail
+    assert _used(sm, uid) == 0
+
+
+def test_half_an_hour_of_budget_still_lets_them_generate(sm):
+    """The other half of the pair, so the ceiling cannot be tightened into a
+    permanent closure by accident."""
+    uid = _user(sm)
+    asyncio.run(_spend(sm, 10.0 / app_spend.BURST_HOURS / 2))
+
+    creds = _claim(sm, uid)
+    assert creds.on_our_key
+    assert _used(sm, uid) == 1

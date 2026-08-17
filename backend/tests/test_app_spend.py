@@ -85,16 +85,16 @@ def test_the_cap_sees_spend_that_is_still_buffered(sm):
                             {"prompt_tokens": 10, "completion_tokens": 20,
                              "total_tokens": 30, "cost": 0.42})
 
-    assert _run(sm, app_spend.flush_and_total) == pytest.approx(0.42)
+    assert _run(sm, app_spend.flush_and_totals)[0] == pytest.approx(0.42)
 
 
 def test_a_flush_writes_the_buffered_call_exactly_once(sm):
     """Draining is what makes a second read safe: the buffer is emptied by the
     write, so polling the ceiling cannot inflate it."""
     openrouter.record_usage("m", {"total_tokens": 1, "cost": 0.10})
-    _run(sm, app_spend.flush_and_total)
+    _run(sm, app_spend.flush_and_totals)
 
-    assert _run(sm, app_spend.flush_and_total) == pytest.approx(0.10)
+    assert _run(sm, app_spend.flush_and_totals)[0] == pytest.approx(0.10)
     rows = _run(sm, lambda db: db.execute(select(LLMUsage)))
     assert len(rows.scalars().all()) == 1
 
@@ -206,8 +206,70 @@ def test_the_user_row_is_left_alone_by_the_flush(sm):
         openrouter.record_usage("m", {"total_tokens": 1, "cost": 0.07})
     finally:
         openrouter.current_user_id.set(None)
-    _run(sm, app_spend.flush_and_total)
+    _run(sm, app_spend.flush_and_totals)
 
     rows = _run(sm, lambda db: db.execute(select(LLMUsage)))
     assert [r.user_id for r in rows.scalars().all()] == [uid]
     assert _run(sm, app_spend.app_spend_today) == 0.0
+
+
+# ── the day's budget, spread so one bad hour cannot take it all ─────────────
+#
+# The daily ceiling bounds the money and nothing else: a script can reach it in
+# ten minutes, and then the landing — the page's whole argument — answers every
+# honest visitor with "come back tomorrow" for the rest of the day. The failure
+# is not the spend, it is that the door closes and stays closed.
+#
+# So the same budget also has an hourly share. A burst takes its hour and stops;
+# the next hour opens by itself. There is still exactly ONE number to set —
+# `app_daily_spend_usd` — because two settings that can disagree are a bug
+# waiting for the day one of them is right.
+
+
+def test_an_hour_is_a_share_of_the_day_not_a_second_setting(sm):
+    """The divisor is a constant with a name, and the daily figure stays the
+    only thing anybody configures."""
+    assert app_spend.hourly_ceiling(12.0) == pytest.approx(12.0 / app_spend.BURST_HOURS)
+    assert app_spend.BURST_HOURS > 1, "an hour cannot be allowed the whole day"
+    assert app_spend.BURST_HOURS < 24, (
+        "spreading the budget evenly over 24 hours refuses a genuinely busy "
+        "hour while the day's budget sits untouched")
+
+
+def test_spending_an_hour_ago_does_not_count_against_this_hour(sm):
+    """The window has to move, or the first busy hour of the day closes every
+    hour after it."""
+    now = datetime.now(timezone.utc)
+    _row(sm, cost=5.0, at=now - timedelta(hours=2))
+    _row(sm, cost=0.10, at=now)
+
+    day, hour = _run(sm, app_spend.flush_and_totals)
+    assert day == pytest.approx(5.10)
+    assert hour == pytest.approx(0.10)
+
+
+def test_a_users_own_spend_does_not_close_the_hour_either(sm):
+    """Same rule as the day: their key, their bill, our ceiling untouched."""
+    _row(sm, cost=99.0, user_id="a-real-user-id")
+
+    _day, hour = _run(sm, app_spend.flush_and_totals)
+    assert hour == pytest.approx(0.0)
+
+
+def test_the_hourly_read_flushes_like_the_daily_one(sm):
+    """A ceiling that cannot see money still in memory is the bug this whole
+    module was written for; the hour must not reintroduce it."""
+    openrouter.record_usage("m", {"total_tokens": 1, "cost": 0.31})
+
+    _day, hour = _run(sm, app_spend.flush_and_totals)
+    assert hour == pytest.approx(0.31)
+
+
+def test_the_day_is_still_the_hard_stop(sm):
+    """The hour spreads the budget; it does not enlarge it. Twelve busy hours
+    must not spend twelve times the daily figure."""
+    caps = app_spend.ceilings_hit(day=10.0, hour=0.0, daily_cap=10.0)
+    assert caps == "day"
+    assert app_spend.ceilings_hit(day=1.0, hour=app_spend.hourly_ceiling(10.0),
+                                  daily_cap=10.0) == "hour"
+    assert app_spend.ceilings_hit(day=1.0, hour=0.0, daily_cap=10.0) is None
