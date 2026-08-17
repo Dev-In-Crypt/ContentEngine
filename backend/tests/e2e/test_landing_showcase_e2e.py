@@ -345,3 +345,36 @@ def test_no_two_sections_wear_the_same_label(page, live_server):
         )
         dupes = {t for t in labels if labels.count(t) > 1}
         assert not dupes, f"the {door} door labels two sections {dupes} each"
+
+
+def test_every_section_is_the_same_width(page, live_server):
+    """One column, not five.
+
+    The page was assembled over four phases and carried four container widths —
+    1200 for the new sections, 1024, 768 and 672 for older ones. Nobody reads
+    that as variety; it reads as edges that do not line up, which is what the
+    owner saw. Measured on the content container rather than on the section,
+    because the banded sections are full-bleed by design and hold their column
+    in a child.
+    """
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.goto(live_server)
+    expect(page.locator("#landing-screen")).to_be_visible()
+
+    for door in ("creator", "business"):
+        page.locator(f"#ltab-{door}").click()
+        widths = page.evaluate(
+            """() => [...document.querySelectorAll('#landing-screen section')]
+                 .filter(e => e.getClientRects().length)
+                 .map(e => {
+                     const inner = e.classList.contains('mk-wrap')
+                         ? e : e.querySelector(':scope > .mk-wrap') || e;
+                     return {w: Math.round(inner.getBoundingClientRect().width),
+                             text: (e.innerText || '').trim().slice(0, 30)};
+                 })"""
+        )
+        odd = [x for x in widths if x["w"] != widths[0]["w"]]
+        assert not odd, (
+            f"on the {door} door these sections are a different width from the "
+            f"rest ({widths[0]['w']}px): "
+            + "; ".join(f"{x['w']}px {x['text']!r}" for x in odd))
